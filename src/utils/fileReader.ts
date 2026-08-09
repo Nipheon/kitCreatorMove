@@ -15,7 +15,7 @@ export async function getFilesFromDataTransfer(items: DataTransferItemList): Pro
           const currentEntry = queue.shift();
           if (currentEntry.isFile) {
             const file = await new Promise<File>((resolve) => currentEntry.file(resolve));
-            if (file.name.match(/\.(wav|mp3|aif|aiff|flac)$/i)) {
+            if (file.name.match(/\.wav$/i)) {
               files.push(file);
             }
           } else if (currentEntry.isDirectory) {
@@ -45,12 +45,13 @@ export async function getFilesFromDataTransfer(items: DataTransferItemList): Pro
 }
 
 export function categorizeSample(name: string): Category {
-  const lowerName = name.toLowerCase();
+  const lowerName = name.toLowerCase().replace(/_/g, ' ');
   if (lowerName.match(/kick|bd|bassdrum/)) return 'Kick';
   if (lowerName.match(/snare|sd|rim/)) return 'Snare';
   if (lowerName.match(/clap|cp/)) return 'Clap';
-  if (lowerName.match(/c_hat|chh|hat.*c|closed.*hat|ch\b/)) return 'CHH';
-  if (lowerName.match(/o_hat|ohh|hat.*o|open.*hat|oh\b/)) return 'OHH';
+  if (lowerName.match(/c hat|chh|hat.*c|closed.*hat| ch /)) return 'CHH';
+  if (lowerName.match(/o hat|ohh|hat.*o|open.*hat| oh /)) return 'OHH';
+  if (lowerName.match(/hi hat|hihat| hh |hat/)) return 'Hat';
   if (lowerName.match(/perc|tom|bongo|conga|shaker|tamb|cowbell|wood|block/)) return 'Perc';
   return 'Other';
 }

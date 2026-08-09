@@ -12,7 +12,7 @@ export function generateRandomKit(samples: Sample[]): (Sample | null)[] {
   
   // Create a pool for each category
   const pools: Record<Category, Sample[]> = {
-    Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Perc: [], Other: []
+    Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Hat: [], Perc: [], Other: []
   };
   
   samples.forEach(s => pools[s.category].push(s));
@@ -28,9 +28,17 @@ export function generateRandomKit(samples: Sample[]): (Sample | null)[] {
       return pools[preferred].pop()!;
     }
     // Fallbacks
-    const fallbackOrder: Category[] = ['Perc', 'Other', 'Clap', 'Snare', 'CHH', 'OHH', 'Kick'];
+    let fallbackOrder: Category[] = [];
+    if (preferred === 'CHH') {
+      fallbackOrder = ['Hat', 'OHH', 'Perc', 'Other', 'Clap', 'Snare', 'Kick'];
+    } else if (preferred === 'OHH') {
+      fallbackOrder = ['Hat', 'CHH', 'Perc', 'Other', 'Clap', 'Snare', 'Kick'];
+    } else {
+      fallbackOrder = ['Perc', 'Other', 'Clap', 'Snare', 'Hat', 'CHH', 'OHH', 'Kick'];
+    }
+    
     for (const cat of fallbackOrder) {
-      if (pools[cat].length > 0) {
+      if (pools[cat] && pools[cat].length > 0) {
         return pools[cat].pop()!;
       }
     }

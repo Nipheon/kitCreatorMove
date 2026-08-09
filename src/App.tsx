@@ -35,28 +35,36 @@ export default function App() {
     setIsLoading(true);
     try {
       const folderData = await getFilesFromDataTransfer(items);
-      const newFolders: SourceFolder[] = folderData.map(folder => {
-        const folderSamples: Sample[] = folder.files.map(file => ({
-          file,
-          name: file.name,
-          category: categorizeSample(file.name),
-          url: URL.createObjectURL(file)
-        }));
-        return {
-          id: Math.random().toString(36).substring(7),
-          name: folder.name || 'Dropped Files',
-          samples: folderSamples
-        };
-      });
       
-      setSourceFolders(prev => {
-        const updated = [...prev, ...newFolders];
-        const allSamples = updated.flatMap(f => f.samples);
-        if (allSamples.length > 0) {
-          setKit(generateRandomKit(allSamples));
+      const newFolders: SourceFolder[] = [];
+
+      for (const folder of folderData) {
+        const wavFiles = folder.files.filter(f => f.name.toLowerCase().endsWith('.wav'));
+        if (wavFiles.length > 0) {
+          const folderSamples: Sample[] = wavFiles.map(file => ({
+            file,
+            name: file.name,
+            category: categorizeSample(file.name),
+            url: URL.createObjectURL(file)
+          }));
+          newFolders.push({
+            id: Math.random().toString(36).substring(7),
+            name: folder.name || 'Dropped Files',
+            samples: folderSamples
+          });
         }
-        return updated;
-      });
+      }
+      
+      if (newFolders.length > 0) {
+        setSourceFolders(prev => {
+          const updated = [...prev, ...newFolders];
+          const allSamples = updated.flatMap(f => f.samples);
+          if (allSamples.length > 0) {
+            setKit(generateRandomKit(allSamples));
+          }
+          return updated;
+        });
+      }
     } catch (error) {
       console.error('Failed to process files:', error);
       alert('Error processing files. Please try again.');
@@ -179,14 +187,20 @@ export default function App() {
 
         <section className='flex-1 bg-[#090909] flex flex-col items-center justify-center p-8 overflow-y-auto'>
           <div className='grid grid-cols-4 gap-3 mb-8'>
-            {displayIndices.map((index) => (
-              <Pad 
-                key={index}
-                index={index}
-                sample={kit[index]}
-                expectedCategory={EXPECTED_CATEGORIES[index]}
-              />
-            ))}
+            {displayIndices.map((index) => {
+              const chokeGroup = (index === 2 || index === 3) ? 1 :
+                                 (index === 6 || index === 7) ? 2 :
+                                 (index === 10 || index === 11) ? 3 : undefined;
+              return (
+                <Pad 
+                  key={index}
+                  index={index}
+                  sample={kit[index]}
+                  expectedCategory={EXPECTED_CATEGORIES[index]}
+                  chokeGroup={chokeGroup}
+                />
+              );
+            })}
           </div>
           <div className='flex gap-4'>
             <button 

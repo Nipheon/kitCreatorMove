@@ -1,4 +1,4 @@
-export type Category = 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Perc' | 'Other';
+export type Category = 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Hat' | 'Perc' | 'Other';
 
 export interface Sample {
   file: File;
