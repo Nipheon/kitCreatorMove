@@ -1,0 +1,6 @@
+{
+  "name": "Ableton Move Kit Creator",
+  "description": "Auto-generates 16-pad drum kits compatible with Ableton Move by dragging folders of samples. Preview, randomize, and export as organized zips.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

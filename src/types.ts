@@ -1,0 +1,14 @@
+export type Category = 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Perc' | 'Other';
+
+export interface Sample {
+  file: File;
+  name: string;
+  category: Category;
+  url: string; // Object URL for preview
+}
+
+export interface SourceFolder {
+  id: string;
+  name: string;
+  samples: Sample[];
+}
