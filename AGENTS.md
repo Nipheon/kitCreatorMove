@@ -33,6 +33,35 @@ change wrote a correct fix into `app/applet/src/utils/fileReader.ts`, which noth
 imports and Vite does not build, so the bug stayed live while appearing fixed. If you
 are writing a path with more than three segments, you are in the wrong place.
 
+## Maintaining this file
+
+**A change is not finished until this file still describes the code.** Update it in the
+same change, not "later" — it has gone stale three times, each within a few commits of a
+feature landing, and a confident file that is out of date is worse than no file.
+
+Update it when you:
+
+- add, remove or rename anything under `src/` — the layout block lists every module
+- add or change user-visible behaviour: a new control, a new option, a new failure
+  message, a changed default
+- pick a constant, threshold or ordering for a reason that is not obvious from reading
+  it — record the reason, not just the value. `0.001` looks timid until you know it
+  protects percussion decays; effect declaration order looks arbitrary until you know
+  reordering breaks the audition
+- reverse a decision written here — edit the entry, do not leave both versions standing
+- verify something on hardware or in a browser — move it into **Verified** or
+  **Confirmed by hand, not by the suite**, and say which
+- add a test that pins behaviour previously only described here — say so, so the next
+  reader knows which guarantees are enforced and which rely on someone clicking
+
+**Never delete a section because it looks stale.** Check whether the code still does
+what it describes. The Preset naming section was dropped in `9828101` while
+`kitNaming.ts` and every rule in it were untouched.
+
+**Check claims against the source before writing them.** Every entry here was verified
+against the code at the time. An entry that is merely plausible is the failure mode this
+file exists to prevent.
+
 ## Before you report success
 
 ```
