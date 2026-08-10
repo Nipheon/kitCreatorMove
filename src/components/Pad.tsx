@@ -159,16 +159,16 @@ export const Pad: React.FC<PadProps> = ({
     >
       <div className='flex w-full justify-between items-start'>
         <div className='flex items-center gap-1.5 sm:gap-2 flex-wrap'>
-          <span className='text-xs sm:text-sm font-bold text-accent-yellow'>
+          <span className='text-sm font-bold text-accent-yellow'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
-            <span className='text-[10px] sm:text-xs font-mono text-[#888] bg-[#111] px-1.5 py-0.5 rounded border border-[#333] shrink-0' title={`Keyboard key [${hotkey}]`}>
+            <span className='text-sm font-mono text-[#888] bg-[#111] px-1.5 py-0.5 rounded border border-[#333] shrink-0' title={`Keyboard key [${hotkey}]`}>
               {hotkey}
             </span>
           )}
           {chokeGroup && (
-            <span className='text-[8px] sm:text-[9px] uppercase tracking-widest text-accent-yellow/80 border border-accent-yellow/40 px-1.5 py-0.5 rounded-sm shrink-0'>
+            <span className='text-sm uppercase tracking-widest text-accent-yellow/80 border border-accent-yellow/40 px-1.5 py-0.5 rounded-sm shrink-0'>
               Choke {chokeGroup}
             </span>
           )}
@@ -177,11 +177,11 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       <div className='w-full mt-auto mb-8 sm:mb-9'>
-        <div className='w-full text-[10px] sm:text-xs uppercase tracking-wider text-[#666] font-medium mb-0.5'>
+        <div className='w-full text-sm uppercase tracking-wider text-[#666] font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
-          <div className='text-xs sm:text-sm truncate font-medium text-[#E0E0E0] pr-1'>
+          <div className='text-sm truncate font-medium text-[#E0E0E0] pr-1'>
             {sample ? sample.name : 'Empty'}
           </div>
           <div className='flex items-center gap-1 shrink-0'>
@@ -196,7 +196,7 @@ export const Pad: React.FC<PadProps> = ({
                 title='Exclude sample'
                 aria-label={`Exclude ${sample.name}`}
               >
-                <Ban size={13} className='sm:w-3.5 sm:h-3.5' />
+                <Ban size={14} />
               </button>
             )}
           </div>
@@ -204,7 +204,7 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       {/* Split Bottom Bar: 50% Lock + 50% Shuffle */}
-      <div className='absolute bottom-0 left-0 right-0 h-7 sm:h-8 flex items-stretch border-t border-[#2A2A2A] bg-[#111] z-10'>
+      <div className='absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-[#2A2A2A] bg-[#111] z-10'>
         <button
           type='button'
           disabled={!sample}
@@ -222,8 +222,8 @@ export const Pad: React.FC<PadProps> = ({
                 : 'text-[#555] hover:text-[#CCC] hover:bg-[#1C1C1C] cursor-pointer'
           }`}
         >
-          {isLocked ? <Lock size={13} /> : <Unlock size={13} />}
-          <span className='text-[10px] uppercase tracking-wider font-semibold'>
+          {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+          <span className='text-sm uppercase tracking-wider font-semibold'>
             {isLocked ? 'Locked' : 'Lock'}
           </span>
         </button>
@@ -243,8 +243,8 @@ export const Pad: React.FC<PadProps> = ({
           title='Shuffle sample on this pad'
           aria-label={`Shuffle sample on pad ${index + 1}`}
         >
-          <RefreshCw size={12} />
-          <span className='text-[10px] uppercase tracking-wider font-semibold'>
+          <RefreshCw size={14} />
+          <span className='text-sm uppercase tracking-wider font-semibold'>
             Shuffle
           </span>
         </button>

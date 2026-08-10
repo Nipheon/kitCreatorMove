@@ -251,8 +251,8 @@ removed. Do not add a second provider.
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px`
   (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain
   aspect ratio and avoid pad overlap.
-- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with
-  enlarged readable text (`text-sm sm:text-base`).
+- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`).
+- **Minimum Font Size:** All text elements across the entire UI are styled at `14px` (`text-sm`) minimum to ensure legibility without breaking grid or panel layouts.
 - **The UI must not state things the app does not know.** Hardcoded device status, firmware
   version, bit depth and sample rate were all removed because none of them were ever read from anything.
   The panel reports only what the app actually knows: filled pads, source audio size, the active layout,
