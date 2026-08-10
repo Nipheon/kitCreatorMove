@@ -257,6 +257,11 @@ nothing will catch a regression except testing on hardware again:
 
 - Drag-and-drop and the directory walk (`getFilesFromDataTransfer`) — needs a browser.
 - Audio preview.
+- **Audition scoping.** Verified in a browser: pressing a pad's Shuffle plays that pad,
+  and generating a full kit afterwards stays silent. This is the invariant the old
+  `shouldPlayOnNextSample` ref broke — it could leave pads armed, so a later generate
+  fired several at once. `Pad` is a component and the runner is Node-only, so only a
+  browser can catch a regression here.
 - The decode half of trimming — `OfflineAudioContext` does not exist in Node. Only
   `encodeWav` is unit-tested.
 - Whether a bundle still imports on the device at all.
