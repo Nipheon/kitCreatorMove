@@ -15,7 +15,7 @@ export async function getFilesFromDataTransfer(items: DataTransferItemList): Pro
           const currentEntry = queue.shift();
           if (currentEntry.isFile) {
             const file = await new Promise<File>((resolve) => currentEntry.file(resolve));
-            if (file.name.match(/\.wav$/i)) {
+            if (file.name.match(/\.wav$/i) && !file.name.toLowerCase().includes('loop') && file.size <= 600 * 1024) {
               files.push(file);
             }
           } else if (currentEntry.isDirectory) {

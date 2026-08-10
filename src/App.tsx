@@ -1,10 +1,29 @@
-import { FolderUp, RefreshCw, Download, Music, X } from 'lucide-react';
+import { FolderUp, RefreshCw, Download, Music, X, Eye, EyeOff } from 'lucide-react';
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Pad } from './components/Pad';
 import { Category, Sample, SourceFolder } from './types';
-import { exportKitZip } from './utils/exporter';
+import { exportKitZip, exportBatchKits } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer } from './utils/fileReader';
 import { generateRandomKit } from './utils/kitGenerator';
+
+const generateKitName = (folderName: string) => {
+  const shortWords = ["Zap", "Boom", "Fuzz", "Grit", "Hype", "Vibe", "Flow", "Snap", "Drop", "Drip", "Flip", "Jump", "Nova", "Pulse", "Wave", "Echo", "Zen", "Void"];
+  const words = folderName.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
+  let prefix = "";
+  if (words.length >= 4) {
+    prefix = words[0][0] + words[1][0] + words[2][0] + words[3][0];
+  } else if (words.length === 3) {
+    prefix = words[0].substring(0, 2) + words[1][0] + words[2][0];
+  } else if (words.length === 2) {
+    prefix = words[0].substring(0, 2) + words[1].substring(0, 2);
+  } else if (words.length === 1) {
+    prefix = words[0].substring(0, 4);
+  }
+  
+  prefix = (prefix + "KITX").substring(0, 4).toUpperCase();
+  const suffix = shortWords[Math.floor(Math.random() * shortWords.length)];
+  return { prefix, suffix };
+};
 
 const EXPECTED_CATEGORIES = [
   'Kick', 'Snare', 'CHH', 'OHH',
@@ -17,9 +36,13 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [sourceFolders, setSourceFolders] = useState<SourceFolder[]>([]);
   const [kit, setKit] = useState<(Sample | null)[]>(new Array(16).fill(null));
+  const [lockedPads, setLockedPads] = useState<boolean[]>(new Array(16).fill(false));
   const [isLoading, setIsLoading] = useState(false);
+  const [kitPrefix, setKitPrefix] = useState('MOVE');
+  const [kitSuffix, setKitSuffix] = useState('KIT');
+  const [batchSize, setBatchSize] = useState(1);
 
-  const samples = useMemo(() => sourceFolders.flatMap(f => f.samples), [sourceFolders]);
+  const samples = useMemo(() => sourceFolders.filter(f => f.isEnabled !== false).flatMap(f => f.samples), [sourceFolders]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -42,6 +65,7 @@ export default function App() {
         const wavFiles = folder.files.filter(f => f.name.toLowerCase().endsWith('.wav'));
         if (wavFiles.length > 0) {
           const folderSamples: Sample[] = wavFiles.map(file => ({
+            id: Math.random().toString(36).substring(2, 9),
             file,
             name: file.name,
             category: categorizeSample(file.name),
@@ -50,20 +74,26 @@ export default function App() {
           newFolders.push({
             id: Math.random().toString(36).substring(7),
             name: folder.name || 'Dropped Files',
-            samples: folderSamples
+            samples: folderSamples,
+            isEnabled: true
           });
         }
       }
       
       if (newFolders.length > 0) {
-        setSourceFolders(prev => {
-          const updated = [...prev, ...newFolders];
-          const allSamples = updated.flatMap(f => f.samples);
-          if (allSamples.length > 0) {
-            setKit(generateRandomKit(allSamples));
-          }
-          return updated;
-        });
+        setSourceFolders(prev => [...prev, ...newFolders]);
+        const allSamples = [...sourceFolders, ...newFolders].filter(f => f.isEnabled !== false).flatMap(f => f.samples);
+        if (allSamples.length > 0) {
+          setKit(prevKit => {
+            const lockedSamples = lockedPads.map((locked, idx) => locked ? prevKit[idx] : null);
+            return generateRandomKit(allSamples, lockedSamples);
+          });
+        }
+        if (sourceFolders.length === 0) {
+          const { prefix, suffix } = generateKitName(newFolders[0].name);
+          setKitPrefix(prefix);
+          setKitSuffix(suffix);
+        }
       }
     } catch (error) {
       console.error('Failed to process files:', error);
@@ -84,28 +114,130 @@ export default function App() {
 
   const removeFolder = (id: string) => {
     setSourceFolders(prev => {
+      const folderToRemove = prev.find(f => f.id === id);
       const updated = prev.filter(f => f.id !== id);
-      const remainingSamples = updated.flatMap(f => f.samples);
-      if (remainingSamples.length > 0) {
-        setKit(generateRandomKit(remainingSamples));
-      } else {
-        setKit(new Array(16).fill(null));
-      }
+      const remainingSamples = updated.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
+      
+      setKit(prevKit => {
+        const removedSampleIds = new Set(folderToRemove?.samples.map(s => s.id) || []);
+        if (remainingSamples.length > 0) {
+          const lockedSamples = prevKit.map((sample, idx) => {
+            if (lockedPads[idx]) return sample;
+            if (sample && !removedSampleIds.has(sample.id)) return sample;
+            return null;
+          });
+          return generateRandomKit(remainingSamples, lockedSamples);
+        } else {
+          return prevKit.map((sample, idx) => (lockedPads[idx] && sample && !removedSampleIds.has(sample.id)) ? sample : null);
+        }
+      });
+      return updated;
+    });
+  };
+
+  const toggleFolder = (id: string) => {
+    setSourceFolders(prev => {
+      const folderToToggle = prev.find(f => f.id === id);
+      const isNowDisabled = folderToToggle?.isEnabled !== false;
+      const updated = prev.map(f => f.id === id ? { ...f, isEnabled: !isNowDisabled } : f);
+      const remainingSamples = updated.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
+      
+      setKit(prevKit => {
+        const toggledSampleIds = new Set(folderToToggle?.samples.map(s => s.id) || []);
+        if (remainingSamples.length > 0) {
+          const lockedSamples = prevKit.map((sample, idx) => {
+            if (lockedPads[idx]) return sample;
+            if (isNowDisabled && sample && toggledSampleIds.has(sample.id)) return null; // Needs replacement
+            if (sample) return sample; // Keep it
+            return null;
+          });
+          return generateRandomKit(remainingSamples, lockedSamples);
+        } else {
+          return prevKit.map((sample, idx) => (lockedPads[idx] && sample && (!isNowDisabled || !toggledSampleIds.has(sample.id))) ? sample : null);
+        }
+      });
+      return updated;
+    });
+  };
+
+  const handleExcludeSample = (sampleId: string) => {
+    setSourceFolders(prev => {
+      const updated = prev.map(f => ({
+        ...f,
+        samples: f.samples.map(s => s.id === sampleId ? { ...s, isExcluded: true } : s)
+      }));
+      // Regenerate the kit synchronously for the ones that match this sample id
+      setKit(prevKit => {
+        const remainingSamples = updated.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
+        if (remainingSamples.length > 0) {
+          const lockedSamples = prevKit.map(sample => (sample?.id !== sampleId) ? sample : null);
+          return generateRandomKit(remainingSamples, lockedSamples);
+        } else {
+          return prevKit.map(sample => (sample?.id !== sampleId) ? sample : null);
+        }
+      });
       return updated;
     });
   };
 
   const randomizeKit = () => {
     if (samples.length > 0) {
-      setKit(generateRandomKit(samples));
+      setKit(prevKit => {
+        const lockedSamples = lockedPads.map((locked, idx) => locked ? prevKit[idx] : null);
+        return generateRandomKit(samples, lockedSamples);
+      });
     }
   };
 
-  const [kitName, setKitName] = useState('Move_Generated_Kit');
+  const toggleLock = (index: number) => {
+    setLockedPads(prev => {
+      const next = [...prev];
+      next[index] = !next[index];
+      return next;
+    });
+  };
 
-  const exportKit = () => {
+  const exportKit = async () => {
     if (kit.some(s => s !== null)) {
-      exportKitZip(kit, kitName);
+      setIsLoading(true);
+      try {
+        if (batchSize > 1) {
+          const kitsToExport = [];
+          const enabledFolders = sourceFolders.filter(f => f.isEnabled !== false);
+          const baseName = enabledFolders.length > 0 ? enabledFolders[0].name : 'KIT';
+          const currentKitName = `${kitPrefix}-${kitSuffix}`;
+          const usedNames = new Set<string>();
+          usedNames.add(currentKitName);
+          // First kit is the current one
+          kitsToExport.push({ kit: [...kit], name: currentKitName });
+          // Generate the rest
+          for (let i = 1; i < batchSize; i++) {
+            const lockedSamples = lockedPads.map((locked, idx) => locked ? kit[idx] : null);
+            const nextKit = generateRandomKit(samples, lockedSamples);
+            let newSuffix = generateKitName("").suffix;
+            let newName = `${kitPrefix}-${newSuffix}`;
+            let attempts = 0;
+            while (usedNames.has(newName)) {
+              newSuffix = generateKitName("").suffix;
+              newName = `${kitPrefix}-${newSuffix}`;
+              attempts++;
+              if (attempts > 10) {
+                newName = `${newName}-${i}`;
+              }
+            }
+            usedNames.add(newName);
+            kitsToExport.push({ kit: nextKit, name: newName });
+          }
+          await exportBatchKits(kitsToExport, kitPrefix);
+        } else {
+          await exportKitZip(kit, `${kitPrefix}-${kitSuffix}`);
+        }
+      } catch (err) {
+        console.error("Export failed:", err);
+        alert("Failed to export kit. See console for details.");
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -161,10 +293,20 @@ export default function App() {
               <p className='text-[11px] text-[#888]'>Drag sample folders here</p>
             </div>
             {sourceFolders.map(folder => (
-              <div key={folder.id} className='space-y-2 mt-2'>
+              <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
                 <div className='bg-[#1A1A1A] px-3 py-2 rounded flex items-center justify-between group'>
-                  <span className='text-xs truncate text-[#E0E0E0]'>{folder.name} <span className="text-[#888]">({folder.samples.length})</span></span>
-                  <button onClick={() => removeFolder(folder.id)} className='text-[10px] text-[#555] group-hover:text-red-400'>✕</button>
+                  <div className='flex items-center gap-2 overflow-hidden flex-1'>
+                    <button 
+                      onClick={() => toggleFolder(folder.id)}
+                      className='text-[#555] hover:text-[#E0E0E0] transition-colors shrink-0'
+                      title={folder.isEnabled === false ? "Enable folder" : "Disable folder"}
+                    >
+                      {folder.isEnabled === false ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <span className='text-xs truncate text-[#E0E0E0] flex-1'>{folder.name}</span>
+                    <span className="text-[10px] text-[#888] shrink-0 font-medium bg-[#111] px-1.5 py-0.5 rounded">{folder.samples.length}</span>
+                  </div>
+                  <button onClick={() => removeFolder(folder.id)} className='text-[10px] text-[#555] group-hover:text-red-400 ml-2'>✕</button>
                 </div>
               </div>
             ))}
@@ -188,9 +330,9 @@ export default function App() {
         <section className='flex-1 bg-[#090909] flex flex-col items-center justify-center p-8 overflow-y-auto'>
           <div className='grid grid-cols-4 gap-3 mb-8'>
             {displayIndices.map((index) => {
-              const chokeGroup = (index === 2 || index === 3) ? 1 :
-                                 (index === 6 || index === 7) ? 2 :
-                                 (index === 10 || index === 11) ? 3 : undefined;
+              const sample = kit[index];
+              const isHat = sample ? (sample.category === 'CHH' || sample.category === 'OHH' || sample.category === 'Hat') : false;
+              const chokeGroup = isHat ? 1 : undefined;
               return (
                 <Pad 
                   key={index}
@@ -198,6 +340,9 @@ export default function App() {
                   sample={kit[index]}
                   expectedCategory={EXPECTED_CATEGORIES[index]}
                   chokeGroup={chokeGroup}
+                  isLocked={lockedPads[index]}
+                  onToggleLock={() => toggleLock(index)}
+                  onExclude={handleExcludeSample}
                 />
               );
             })}
@@ -217,14 +362,57 @@ export default function App() {
           <h2 className='text-[10px] uppercase tracking-[0.2em] text-[#666] mb-6'>Preset Settings</h2>
           <div className='space-y-6'>
             <div className='space-y-2'>
-              <label className='text-[10px] text-[#888] uppercase'>Preset Name</label>
-              <input 
-                type='text' 
-                value={kitName}
-                onChange={(e) => setKitName(e.target.value)}
-                className='w-full bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-[#00FFFC] outline-none text-[#E0E0E0]'
-              />
+              <div className='flex justify-between items-center'>
+                <label className='text-[10px] text-[#888] uppercase'>Preset Name</label>
+                <button 
+                  onClick={() => {
+                    const { suffix } = generateKitName('');
+                    setKitSuffix(suffix);
+                  }}
+                  className='text-[10px] text-[#00FFFC] hover:text-white transition-colors flex items-center gap-1'
+                >
+                  <RefreshCw size={10} /> Randomize Suffix
+                </button>
+              </div>
+              <div className='flex gap-2 items-center'>
+                <input 
+                  type='text' 
+                  value={kitPrefix}
+                  onChange={(e) => setKitPrefix(e.target.value)}
+                  className='w-1/2 bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-[#00FFFC] outline-none text-[#E0E0E0] uppercase'
+                  placeholder='PREFIX'
+                  maxLength={12}
+                />
+                <span className='text-[#555]'>-</span>
+                <input 
+                  type='text' 
+                  value={kitSuffix}
+                  onChange={(e) => setKitSuffix(e.target.value)}
+                  className='w-1/2 bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-[#00FFFC] outline-none text-[#E0E0E0]'
+                  placeholder='SUFFIX'
+                  maxLength={12}
+                />
+              </div>
             </div>
+            
+            <div className='space-y-2'>
+              <div className='flex justify-between items-center'>
+                <label className='text-[10px] text-[#888] uppercase'>Batch Export Amount</label>
+                <span className='text-[10px] text-[#00FFFC] font-bold'>{batchSize} Kit{batchSize !== 1 ? 's' : ''}</span>
+              </div>
+              <input 
+                type="range" 
+                min="1" 
+                max="10" 
+                value={batchSize} 
+                onChange={(e) => setBatchSize(parseInt(e.target.value))}
+                className="w-full accent-[#00FFFC]"
+              />
+              <p className="text-[9px] text-[#555]">
+                Export multiple random kits in one zip. Locked pads remain the same across all.
+              </p>
+            </div>
+
             <div className='space-y-2'>
               <label className='text-[10px] text-[#888] uppercase'>Kit Template</label>
               <select className='w-full bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm appearance-none outline-none text-[#E0E0E0]'>

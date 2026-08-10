@@ -1,4 +1,4 @@
-import { Play, Square } from 'lucide-react';
+import { Play, Square, Lock, Unlock, Ban } from 'lucide-react';
 import React, { useRef, useState, useEffect } from 'react';
 import { Sample } from '../types';
 
@@ -7,9 +7,12 @@ interface PadProps {
   sample: Sample | null;
   expectedCategory: string;
   chokeGroup?: number;
+  isLocked: boolean;
+  onToggleLock: () => void;
+  onExclude?: (id: string) => void;
 }
 
-export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, chokeGroup }) => {
+export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -77,7 +80,7 @@ export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, choke
     <button
       onClick={handlePlay}
       disabled={!sample}
-      className={`w-32 h-32 bg-[#1A1A1A] border rounded-md p-2 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
+      className={`relative overflow-hidden w-32 h-32 bg-[#1A1A1A] border rounded-md p-2 flex flex-col transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'border-[#00FFFC] shadow-[0_0_15px_rgba(0,255,252,0.3)] scale-[0.98]'
@@ -98,11 +101,42 @@ export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, choke
         </div>
         <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-[#00FFFC]' : 'border border-[#444]'}`}></div>
       </div>
-      <div className='w-full text-[9px] uppercase tracking-tighter text-[#666]'>
-        {sample ? sample.category : expectedCategory}
+      
+      <div className='w-full mt-auto mb-6'>
+        <div className='w-full text-[9px] uppercase tracking-tighter text-[#666]'>
+          {sample ? sample.category : expectedCategory}
+        </div>
+        <div className='w-full flex items-center justify-between'>
+          <div className='text-[10px] truncate font-medium text-[#E0E0E0] pr-1'>
+            {sample ? sample.name : 'Empty'}
+          </div>
+          {sample && onExclude && (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExclude(sample.id);
+              }}
+              className="text-[#555] hover:text-red-400 transition-colors shrink-0"
+              title="Exclude sample"
+            >
+              <Ban size={10} />
+            </div>
+          )}
+        </div>
       </div>
-      <div className='w-full text-[10px] truncate font-medium text-[#E0E0E0]'>
-        {sample ? sample.name : 'Empty'}
+
+      <div 
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleLock();
+        }}
+        className={`absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center transition-colors cursor-pointer ${isLocked ? 'bg-[#00FFFC]/20 text-[#00FFFC]' : 'bg-[#111] text-[#444] hover:text-[#888]'}`}
+      >
+        {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
       </div>
     </button>
   );

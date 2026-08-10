@@ -1,5 +1,23 @@
-export function generateAblPreset(kitName: string, samples: (string | null)[], chokeGroups: (number | null)[]) {
+export function generateAblPreset(kitName: string, samples: (string | null)[], chokeGroups: (number | null)[], categories: (string | null)[]) {
   const chains = samples.map((sampleUri, index) => {
+    const category = categories[index];
+    
+    let effectOn = true;
+    let effectType = "Stretch";
+    let punchAmount = 0.0;
+    let subOscAmount = 0.0;
+    let noiseAmount = 0.0;
+
+    if (category) {
+      if (category === 'Kick') {
+        effectType = "Punch";
+      } else if (category === 'Other' && sampleUri?.toLowerCase().includes('808')) { 
+        effectType = "Sub Osc";
+      } else if (category === 'Snare' || category === 'Clap' || category === 'CHH' || category === 'OHH' || category === 'Hat') {
+        effectType = "Noise";
+      }
+    }
+
     return {
       "name": "",
       "color": 5,
@@ -15,27 +33,27 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
             "Effect_FmFrequency": 999.9998168945313,
             "Effect_LoopLength": 0.30000001192092896,
             "Effect_LoopOffset": 0.019999997690320015,
-            "Effect_NoiseAmount": 0.0,
+            "Effect_NoiseAmount": noiseAmount,
             "Effect_NoiseFrequency": 10000.0009765625,
-            "Effect_On": true,
+            "Effect_On": effectOn,
             "Effect_PitchEnvelopeAmount": 0.0,
             "Effect_PitchEnvelopeDecay": 0.29999998211860657,
-            "Effect_PunchAmount": 0.0,
+            "Effect_PunchAmount": punchAmount,
             "Effect_PunchTime": 0.12015999853610992,
             "Effect_RingModAmount": 0.0,
             "Effect_RingModFrequency": 999.9998168945313,
             "Effect_StretchFactor": 1.0,
             "Effect_StretchGrainSize": 0.09999999403953552,
-            "Effect_SubOscAmount": 0.0,
+            "Effect_SubOscAmount": subOscAmount,
             "Effect_SubOscFrequency": 59.9999885559082,
-            "Effect_Type": "Stretch",
+            "Effect_Type": effectType,
             "Enabled": true,
             "NotePitchBend": true,
             "Pan": 0.0,
             "Voice_Detune": 0.0,
             "Voice_Envelope_Attack": 0.00009999999747378752,
-            "Voice_Envelope_Decay": 1.0,
-            "Voice_Envelope_Hold": 0.3000001013278961,
+            "Voice_Envelope_Decay": 60.0,
+            "Voice_Envelope_Hold": 0.0,
             "Voice_Envelope_Mode": "A-H-D",
             "Voice_Filter_Frequency": 21999.990234375,
             "Voice_Filter_On": true,
@@ -130,38 +148,38 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
                     "kind": "reverb",
                     "name": "Swap for other Move/Note-compatible FX",
                     "parameters": {
-                      "AllPassGain": 0.6000000238418579,
-                      "AllPassSize": 0.4000000059604645,
-                      "BandFreq": 829.999755859375,
+                      "AllPassGain": 0.6,
+                      "AllPassSize": 0.4,
+                      "BandFreq": 5000.0,
                       "BandHighOn": false,
                       "BandLowOn": true,
-                      "BandWidth": 5.849999904632568,
+                      "BandWidth": 2.0,
                       "ChorusOn": true,
                       "CutOn": true,
-                      "DecayTime": 1200.000244140625,
-                      "DiffuseDelay": 0.5,
-                      "EarlyReflectModDepth": 17.499998092651367,
-                      "EarlyReflectModFreq": 0.29770004749298096,
+                      "DecayTime": 2000.0,
+                      "DiffuseDelay": 0.8,
+                      "EarlyReflectModDepth": 20.0,
+                      "EarlyReflectModFreq": 0.35,
                       "Enabled": true,
                       "FlatOn": true,
                       "FreezeOn": false,
                       "HighFilterType": "Shelf",
                       "MixDiffuse": 1.0,
-                      "MixDirect": 0.550000011920929,
+                      "MixDirect": 0.8,
                       "MixReflect": 1.0,
-                      "PreDelay": 2.500000238418579,
-                      "RoomSize": 99.99998474121094,
+                      "PreDelay": 10.0,
+                      "RoomSize": 20.0,
                       "RoomType": "SuperEco",
-                      "ShelfHiFreq": 4500.00146484375,
-                      "ShelfHiGain": 0.699999988079071,
+                      "ShelfHiFreq": 5000.0,
+                      "ShelfHiGain": 0.5,
                       "ShelfHighOn": true,
-                      "ShelfLoFreq": 90.0,
-                      "ShelfLoGain": 1.0,
+                      "ShelfLoFreq": 200.0,
+                      "ShelfLoGain": 0.35,
                       "ShelfLowOn": true,
-                      "SizeModDepth": 0.019999999552965164,
-                      "SizeModFreq": 0.020000003278255463,
+                      "SizeModDepth": 0.5,
+                      "SizeModFreq": 0.5,
                       "SizeSmoothing": "Fast",
-                      "SpinOn": true,
+                      "SpinOn": false,
                       "StereoSeparation": 100.0
                     },
                     "deviceData": {}
@@ -190,10 +208,10 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
               "BaseDrive": 0.0,
               "BassShaperThreshold": -50.0,
               "ColorDepth": 0.0,
-              "ColorFrequency": 999.9998168945313,
+              "ColorFrequency": 999.9998779296876,
               "ColorOn": true,
-              "ColorWidth": 0.30000001192092896,
-              "DryWet": 1.0,
+              "ColorWidth": 0.3,
+              "DryWet": 0.0,
               "Enabled": true,
               "Oversampling": false,
               "PostClip": "off",
@@ -201,7 +219,7 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
               "PreDcFilter": false,
               "PreDrive": 0.0,
               "Type": "Analog Clip",
-              "WsCurve": 0.05000000074505806,
+              "WsCurve": 0.05,
               "WsDamp": 0.0,
               "WsDepth": 0.0,
               "WsDrive": 1.0,
