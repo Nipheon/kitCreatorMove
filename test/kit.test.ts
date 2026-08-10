@@ -175,10 +175,10 @@ await test('generic hat filenames are not mistaken for open or closed hats', () 
 });
 
 await test('explicit open and closed qualifiers still win', () => {
-  for (const name of ['closed hat.wav', 'Hat_Closed.wav', 'CHH_1.wav', 'CH_hat.wav']) {
+  for (const name of ['closed hat.wav', 'Hat_Closed.wav', 'CHH_1.wav', 'CH_hat.wav', 'hihat_c.wav']) {
     assert.equal(categorizeSample(name), 'CHH', name);
   }
-  for (const name of ['Hat_Open.wav', 'Open Hat 3.wav', 'OHH_1.wav', 'OH_hat.wav']) {
+  for (const name of ['Hat_Open.wav', 'Open Hat 3.wav', 'OHH_1.wav', 'OH_hat.wav', 'hihat_o.wav']) {
     assert.equal(categorizeSample(name), 'OHH', name);
   }
 });
@@ -475,8 +475,29 @@ await test('one closed hat is enough to keep the split layout', () => {
 });
 
 await test('no hats at all keeps the split layout', () => {
-  const noHats = [makeSample('kick.wav', 'Kick'), makeSample('snare.wav', 'Snare')];
+  const noHats = [makeSample('kick.wav', 'Kick'), makeSample('snare.wav', 'Snare'), makeSample('clap.wav', 'Clap')];
   assert.equal(generateRandomKit(noHats).layout.id, 'split-hats');
+});
+
+await test('if no claps are found, claps are replaced by snares', () => {
+  const genericPool: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    // No claps here
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc'))
+  ];
+
+  const { layout, kit } = generateRandomKit(genericPool);
+  // It should be generic-hat layout since we only have generic hats.
+  assert.equal(layout.id, 'generic-hats');
+  // Claps in generic-hat layout are at index 2, 6, 10
+  assert.equal(layout.roles[2], 'Snare');
+  assert.equal(layout.roles[6], 'Snare');
+  assert.equal(layout.roles[10], 'Snare');
+  assert.equal(kit[2]?.category, 'Snare');
+  assert.equal(kit[6]?.category, 'Snare');
+  assert.equal(kit[10]?.category, 'Snare');
 });
 
 await test('excluded hats do not influence the layout choice', () => {
@@ -732,3 +753,11 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log('\nall tests passed');
+
+await test('BBT Bossa C Hat and O Hat', () => {
+  assert.equal(categorizeSample('BBT_Bossa_C_Hat.wav'), 'CHH');
+  assert.equal(categorizeSample('BBT_Bossa_O_Hat.wav'), 'OHH');
+  // Just in case they are CHat / OHat
+  // assert.equal(categorizeSample('BBT_Bossa_CHat.wav'), 'CHH');
+  // assert.equal(categorizeSample('BBT_Bossa_OHat.wav'), 'OHH');
+});

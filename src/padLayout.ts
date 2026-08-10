@@ -79,15 +79,32 @@ export function chooseLayout(samples: Sample[]): PadLayout {
   let closed = 0;
   let open = 0;
   let generic = 0;
+  let claps = 0;
 
   for (const sample of samples) {
     if (sample.isExcluded) continue;
     if (sample.category === 'CHH') closed++;
     else if (sample.category === 'OHH') open++;
     else if (sample.category === 'Hat') generic++;
+    else if (sample.category === 'Clap') claps++;
   }
 
-  return closed === 0 && open === 0 && generic > 0 ? GENERIC_HAT_LAYOUT : SPLIT_HAT_LAYOUT;
+  const baseLayout = closed === 0 && open === 0 && generic > 0 ? GENERIC_HAT_LAYOUT : SPLIT_HAT_LAYOUT;
+
+  if (claps === 0) {
+    return {
+      ...baseLayout,
+      roles: baseLayout.roles.map(role => (role === 'Clap' ? 'Snare' : role)),
+      preferences: baseLayout.preferences.map(prefs => {
+        if (prefs[0] === 'Clap') {
+          return ['Snare', ...prefs.slice(1).filter(p => p !== 'Snare')];
+        }
+        return prefs;
+      })
+    };
+  }
+
+  return baseLayout;
 }
 
 const HAT_CATEGORIES: Category[] = ['CHH', 'OHH', 'Hat'];

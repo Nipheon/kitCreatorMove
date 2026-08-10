@@ -124,9 +124,9 @@ const PERC = [
   'hc', 'mc', 'lc'
 ];
 
-const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh'];
-const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl'];
-const OPEN = ['ohh', 'oh', 'open', 'opn'];
+const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'chat', 'ohat'];
+const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c', 'chat'];
+const OPEN = ['ohh', 'oh', 'open', 'opn', 'o', 'ohat'];
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
