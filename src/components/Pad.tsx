@@ -23,14 +23,20 @@ interface PadProps {
   onToggleLock: () => void;
   onExclude?: (id: string) => void;
   onReroll?: (index: number) => void;
+  /**
+   * Bumped by App when this pad's Shuffle is pressed. A changing value means "play
+   * this pad now" — it does not depend on the sample changing, which is what the old
+   * shouldPlayOnNextSample ref got wrong.
+   */
+  auditionToken?: number;
 }
 
 export const Pad: React.FC<PadProps> = ({
-  index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onReroll
+  index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onReroll,
+  auditionToken = 0
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const shouldPlayOnNextSample = useRef(false);
 
   useEffect(() => {
     if (!sample) {
@@ -51,18 +57,6 @@ export const Pad: React.FC<PadProps> = ({
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
-
-    // Only play automatically if this specific pad's Shuffle button was pressed
-    if (shouldPlayOnNextSample.current) {
-      shouldPlayOnNextSample.current = false;
-      if (chokeGroup) {
-        window.dispatchEvent(
-          new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
-        );
-      }
-      audio.play().catch(err => console.error('Audio playback error:', err));
-      setIsPlaying(true);
-    }
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
@@ -85,6 +79,30 @@ export const Pad: React.FC<PadProps> = ({
     window.addEventListener('choke', onChoke);
     return () => window.removeEventListener('choke', onChoke);
   }, [chokeGroup, index]);
+
+  /**
+   * Auditions this pad when Shuffle is pressed. Deliberately keyed on the token and
+   * NOT on `sample`: a shuffle can legitimately land on the same sample, and the old
+   * ref-based version then never fired — leaving itself armed, so the next full
+   * generate played every armed pad at once.
+   *
+   * This must stay declared below the effect that builds the audio element. React runs
+   * effects in declaration order within a commit, which is what guarantees the new
+   * sample is loaded before we play it.
+   */
+  useEffect(() => {
+    if (!auditionToken || !audioRef.current) return;
+
+    if (chokeGroup) {
+      window.dispatchEvent(
+        new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
+      );
+    }
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(err => console.error('Audio playback error:', err));
+    setIsPlaying(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auditionToken]);
 
   const handlePlay = React.useCallback(() => {
     if (!audioRef.current) return;
@@ -215,10 +233,7 @@ export const Pad: React.FC<PadProps> = ({
           disabled={!sample || isLocked || !onReroll}
           onClick={(e) => {
             e.stopPropagation();
-            if (onReroll) {
-              shouldPlayOnNextSample.current = true;
-              onReroll(index);
-            }
+            if (onReroll) onReroll(index);
           }}
           className={`w-1/2 border-l border-[#2A2A2A] flex items-center justify-center gap-1.5 transition-colors ${
             !sample || isLocked || !onReroll

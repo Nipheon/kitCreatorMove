@@ -887,6 +887,58 @@ await test('encodeWav interleaves stereo channels', async () => {
   assert.equal(view.getInt16(50, true), -32767);
 });
 
+await test('shuffle never hands back the pad\'s own sample', () => {
+  // It used to: only samples on OTHER pads were excluded, so with few candidates the
+  // preference walk re-picked the current one ~50% of the time. The pad appeared not
+  // to change, and — because the object reference was identical — React's
+  // useEffect([sample]) never fired, so the audition never played either.
+  const kicks = [makeSample('k1.wav', 'Kick'), makeSample('k2.wav', 'Kick')];
+  for (let run = 0; run < 100; run++) {
+    const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+    kit[0] = kicks[0];
+    const next = rerollSinglePad(kicks, kit, 0).kit[0];
+    assert.notEqual(next, kicks[0], 'shuffle returned the sample it started with');
+    assert.equal(next, kicks[1]);
+  }
+});
+
+await test('shuffle reaches a fallback category rather than repeating', () => {
+  const samples = [
+    makeSample('kick.wav', 'Kick'),
+    makeSample('perc1.wav', 'Perc'),
+    makeSample('perc2.wav', 'Perc')
+  ];
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = samples[0]; // the only kick, on a Kick pad
+  const next = rerollSinglePad(samples, kit, 0).kit[0];
+  assert.ok(next && next !== samples[0], 'should move off the only kick');
+  assert.equal(next!.category, 'Perc', 'should fall through to the next preference');
+});
+
+await test('shuffle keeps the sample when the library holds nothing else', () => {
+  // Excluding the current sample must not be allowed to empty the pad.
+  const solo = [makeSample('only.wav', 'Kick')];
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = solo[0];
+  assert.equal(rerollSinglePad(solo, kit, 0).kit[0], solo[0]);
+});
+
+await test('the substituted count does not move when an unrelated pad is shuffled', () => {
+  // A full generate skipped locked pads when counting; a shuffle counted all sixteen.
+  // Shuffling pad 0 made the warning jump from "2 pads" to "3 pads" on its own.
+  const pool = [
+    makeSample('kick1.wav', 'Kick'), makeSample('kick2.wav', 'Kick'),
+    makeSample('perc1.wav', 'Perc'), makeSample('perc2.wav', 'Perc')
+  ];
+  const locked: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  locked[1] = pool[2]; // a Perc pinned to the Snare pad
+
+  const generated = generateRandomKit(pool, locked);
+  const shuffled = rerollSinglePad(pool, generated.kit, 0);
+  assert.deepEqual(shuffled.substituted, generated.substituted);
+  assert.deepEqual(shuffled.empty, generated.empty);
+});
+
 await test('rerollSinglePad changes only target pad and preserves locked pads', () => {
   const kickPool = Array.from({ length: 10 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick'));
   const snarePool = Array.from({ length: 10 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'));

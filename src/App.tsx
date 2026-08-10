@@ -42,6 +42,8 @@ export default function App() {
   const [skipLoops, setSkipLoops] = useState(true);
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
+  const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
 
   // dragenter/dragleave also fire for every child element, so the overlay is driven
   // by a depth counter rather than by the raw events.
@@ -129,9 +131,12 @@ export default function App() {
       const newFolders: SourceFolder[] = [];
       const existingFolderNames = new Set(sourceFolders.map(f => f.name.toLowerCase()));
 
+      let skippedDuplicates = 0;
+
       for (const folder of folderData) {
         const folderName = folder.name || 'Dropped Files';
         if (existingFolderNames.has(folderName.toLowerCase())) {
+          skippedDuplicates++;
           continue;
         }
 
@@ -161,11 +166,16 @@ export default function App() {
       }
 
       if (newFolders.length === 0) {
-        if (sourceFolders.length === 0) {
-          setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
-        }
+        // A drop that changes nothing has to say why, or it reads as the app ignoring you.
+        setError(
+          skippedDuplicates > 0
+            ? skippedDuplicates === 1
+              ? 'That folder is already loaded.'
+              : `Those ${skippedDuplicates} folders are already loaded.`
+            : 'No .wav or .aiff files found in what you dropped. Move plays those two formats only.'
+        );
         return;
-      } 
+      }
 
       // Computed outside the state updater: updaters must stay pure, and StrictMode
       // double-invokes them.
@@ -286,6 +296,7 @@ export default function App() {
   const rerollPad = (index: number) => {
     if (samples.length > 0 && !lockedPads[index]) {
       setKitResult(rerollSinglePad(samples, kit, index, kitOptions));
+      setAudition(prev => ({ index, token: prev.token + 1 }));
     }
   };
 
@@ -472,6 +483,7 @@ export default function App() {
                 onToggleLock={() => toggleLock(index)}
                 onExclude={handleExcludeSample}
                 onReroll={rerollPad}
+                auditionToken={audition.index === index ? audition.token : 0}
               />
             ))}
           </div>
