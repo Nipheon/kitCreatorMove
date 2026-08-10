@@ -543,7 +543,9 @@ export default function App() {
               <div className='flex justify-between text-xs'><span>Filled Pads</span><span className='text-[#00FFFC]'>{filledPads} / {PAD_COUNT}</span></div>
               <div className='flex justify-between text-xs'><span>Source Audio</span><span className='text-[#00FFFC]'>{formatMb(kitSizeBytes(kit))}</span></div>
               <p className='text-[10px] text-[#555] pt-3 leading-relaxed'>
-                {kitResult.layout.id === 'generic-hats'
+                {kitResult.layout.id === 'minimal-layout'
+                  ? 'Only generic hats, kicks and snares were found, so each row is Kick, Snare, Snare, Hat.'
+                  : kitResult.layout.id === 'generic-hats'
                   ? 'No closed or open hats were found, so hats share one column and the bottom row is all percussion.'
                   : 'Closed and open hats each get their own column.'}
               </p>

@@ -403,6 +403,7 @@ await test('loops do not decide the pad layout', () => {
   const samples: Sample[] = [
     ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    makeSample('clap.wav', 'Clap'),
     ...Array.from({ length: 3 }, (_, i) => ({
       ...makeSample(`closed_hat_loop_${i}.wav`, 'CHH' as const),
       isLoop: true
@@ -555,6 +556,28 @@ await test('generic-hat layout is used when only undifferentiated hats exist', (
   assert.deepEqual(empty, []);
 });
 
+await test('minimal-layout is used when only generic hats, kicks and snares exist', () => {
+  const minimalPool: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'))
+  ];
+
+  const { layout, kit, substituted, empty } = generateRandomKit(minimalPool);
+  assert.equal(layout.id, 'minimal-layout');
+  assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'Hat']);
+  assert.deepEqual(layout.roles.slice(12), ['Kick', 'Snare', 'Snare', 'Hat']);
+
+  for (const row of [0, 4, 8, 12]) {
+    assert.equal(kit[row]?.category, 'Kick', `pad ${row}`);
+    assert.equal(kit[row + 1]?.category, 'Snare', `pad ${row + 1}`);
+    assert.equal(kit[row + 2]?.category, 'Snare', `pad ${row + 2}`);
+    assert.equal(kit[row + 3]?.category, 'Hat', `pad ${row + 3}`);
+  }
+  assert.deepEqual(substituted, [], 'every pad got its own category');
+  assert.deepEqual(empty, []);
+});
+
 await test('one closed hat is enough to keep the split layout', () => {
   const almost: Sample[] = [
     makeSample('kick.wav', 'Kick'),
@@ -595,7 +618,8 @@ await test('excluded hats do not influence the layout choice', () => {
     { ...makeSample('closed hat.wav', 'CHH'), isExcluded: true },
     { ...makeSample('open hat.wav', 'OHH'), isExcluded: true },
     ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
-    makeSample('kick.wav', 'Kick')
+    makeSample('kick.wav', 'Kick'),
+    makeSample('clap.wav', 'Clap')
   ];
   assert.equal(generateRandomKit(excluded).layout.id, 'generic-hats');
 });

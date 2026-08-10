@@ -3,7 +3,7 @@ import { Category, Sample } from './types';
 export const PAD_COUNT = 16;
 
 export interface PadLayout {
-  id: 'split-hats' | 'generic-hats';
+  id: 'split-hats' | 'generic-hats' | 'minimal-layout';
   label: string;
   /** The role each pad advertises, in Move's pad order (pad 1 = index 0). */
   roles: Category[];
@@ -70,6 +70,23 @@ export const GENERIC_HAT_LAYOUT: PadLayout = {
   ]
 };
 
+export const MINIMAL_LAYOUT: PadLayout = {
+  id: 'minimal-layout',
+  label: 'Kick, snare, hats only',
+  roles: [
+    'Kick', 'Snare', 'Snare', 'Hat',
+    'Kick', 'Snare', 'Snare', 'Hat',
+    'Kick', 'Snare', 'Snare', 'Hat',
+    'Kick', 'Snare', 'Snare', 'Hat'
+  ],
+  preferences: [
+    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other']
+  ]
+};
+
 /**
  * Picks the layout from what the library actually contains. The split layout needs
  * hats that are labelled closed or open; with only generic hats it would put two
@@ -80,6 +97,8 @@ export function chooseLayout(samples: Sample[]): PadLayout {
   let open = 0;
   let generic = 0;
   let claps = 0;
+  let perc = 0;
+  let crash = 0;
 
   for (const sample of samples) {
     if (sample.isExcluded) continue;
@@ -87,6 +106,12 @@ export function chooseLayout(samples: Sample[]): PadLayout {
     else if (sample.category === 'OHH') open++;
     else if (sample.category === 'Hat') generic++;
     else if (sample.category === 'Clap') claps++;
+    else if (sample.category === 'Perc') perc++;
+    else if (sample.category === 'Crash') crash++;
+  }
+
+  if (closed === 0 && open === 0 && generic > 0 && claps === 0 && perc === 0 && crash === 0) {
+    return MINIMAL_LAYOUT;
   }
 
   const baseLayout = closed === 0 && open === 0 && generic > 0 ? GENERIC_HAT_LAYOUT : SPLIT_HAT_LAYOUT;
