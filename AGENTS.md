@@ -158,29 +158,31 @@ real packs.
   percussion and stay unchoked — a ride is meant to ring out.
 - **Empty pads are deliberately not lockable.** Asserted explicitly on the lock button,
   not left to the disabled-ancestor side effect.
-- **The pad body is a `<div role="button">`, not a `<button>`.** The lock and exclude
+- **The pad body is a `<div role="button">`, not a `<button>`.** The lock, shuffle, and exclude
   controls are real buttons and cannot be nested inside one.
+- **Split Pad Bottom Bar (50/50):** The bottom bar of each pad is evenly split between
+  `Lock` (left) and `Shuffle` (right).
+- **Audio Auditioning Scoped to Single Pad Shuffle:** Auto-playback on sample updates is
+  guarded by `shouldPlayOnNextSample.current`. Clicking an individual pad's Shuffle button
+  plays that pad's new sample. Generating a full kit or dropping folders MUST remain silent —
+  never trigger all 16 pads at once.
+- **Duplicate Folder Skipping:** Folders already present in `sourceFolders` are automatically
+  skipped when dropped/added.
 
-## Preset naming (`kitNaming.ts`)
+## UI, Dimensions & Design System
 
-- **The prefix describes what the kit is built from**, recomputed whenever folders are
-  added, removed or disabled: no folders enabled gives `MOVE`, exactly one gives that
-  folder's name, more than one gives `MKIT` because no single folder names the kit.
-  It used to be set only on the first drop, so removing folder "AAAA" left kits built
-  entirely from "BBBB" exporting as `AAAA-…`.
-- **Once the user types their own prefix, deriving stops** (`prefixEdited`). Do not
-  overwrite a name the user has entered.
-- The suffix is rolled once on the first drop and thereafter belongs to the user, who
-  changes it with the Randomize Suffix button. Folder changes must not reroll it.
-- Naming lives in `kitNaming.ts` rather than `App.tsx` so it can be tested — the suite
-  is Node-only and cannot reach a component.
-
-## The UI must not state things the app does not know
-
-Hardcoded device status, firmware version, bit depth and sample rate were all removed
-because none of them were ever read from anything. The panel reports only what the app
-actually knows: filled pads, source audio size, the active layout, usable samples
-against the total. Keep it that way.
+- **Centralized Theme Accent Color (`index.css`):** The primary accent color is defined in
+  `src/index.css` via `:root { --accent-yellow: #D0C066; }` and `@theme { --color-accent-yellow: var(--accent-yellow); }`.
+  Use `accent-yellow` utility classes (`text-accent-yellow`, `border-accent-yellow`, `bg-accent-yellow`) rather than hardcoding hex values.
+- **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px`
+  (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain
+  aspect ratio and avoid pad overlap.
+- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with
+  enlarged readable text (`text-sm sm:text-base`).
+- **The UI must not state things the app does not know.** Hardcoded device status, firmware
+  version, bit depth and sample rate were all removed because none of them were ever read from anything.
+  The panel reports only what the app actually knows: filled pads, source audio size, the active layout,
+  usable samples against the total. Keep it that way.
 
 ---
 
