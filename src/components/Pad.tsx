@@ -65,7 +65,7 @@ export const Pad: React.FC<PadProps> = ({
     return () => window.removeEventListener('choke', onChoke);
   }, [chokeGroup, index]);
 
-  const handlePlay = () => {
+  const handlePlay = React.useCallback(() => {
     if (!audioRef.current) return;
 
     if (chokeGroup) {
@@ -79,7 +79,17 @@ export const Pad: React.FC<PadProps> = ({
       setIsPlaying(false);
     });
     setIsPlaying(true);
-  };
+  }, [chokeGroup, index]);
+
+  useEffect(() => {
+    const onPlayPad = (e: Event) => {
+      if ((e as CustomEvent<number>).detail === index) {
+        handlePlay();
+      }
+    };
+    window.addEventListener('play-pad', onPlayPad);
+    return () => window.removeEventListener('play-pad', onPlayPad);
+  }, [index, handlePlay]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {

@@ -11,7 +11,11 @@ export interface DroppedFolder {
   files: DroppedFile[];
 }
 
-const isAudio = (name: string) => /\.(wav|aif|aiff|flac|m4a|mp3|ogg)$/i.test(name);
+/**
+ * Move plays WAV and AIFF only. Compressed formats would be copied into the bundle
+ * untouched and then fail on the device, which is worse than never accepting them.
+ */
+export const isAudioFile = (name: string) => /\.(wav|aiff?)$/i.test(name);
 
 const directoryOf = (fullPath: string) => {
   const cut = fullPath.lastIndexOf('/');
@@ -47,7 +51,7 @@ async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> 
         (entry as FileSystemFileEntry).file(resolve, reject)
       );
       // The subfolder a sample sits in is often the only clue to what it is.
-      if (isAudio(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
+      if (isAudioFile(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
     } else if (entry.isDirectory) {
       const reader = (entry as FileSystemDirectoryEntry).createReader();
       queue.push(...await readAllEntries(reader));
@@ -176,6 +180,36 @@ function classify(text: string): Category | null {
   if (has(CRASH)) return 'Crash';
   if (has(PERC)) return 'Perc';
   return null;
+}
+
+/** Words that mark a file as a phrase rather than a one-shot. */
+const LOOP_WORDS = ['loop', 'loops', 'breakbeat', 'breakbeats', 'breaks', 'bpm'];
+
+/**
+ * A loop is a bar of music, not a drum hit, so it has no business on a pad.
+ *
+ * Matching is deliberately narrow. "loop" is accepted as a whole token or glued to the
+ * end of a longer word (percloop, prodigyloop), but never as a prefix — "Loopmasters"
+ * is a sample-pack vendor whose name appears in perfectly good one-shots. The prefix
+ * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
+ * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
+ */
+export function looksLikeLoop(name: string, directory = ''): boolean {
+  const tokens = tokenize(`${directory} ${name}`);
+  const joined = tokens.join(' ');
+
+  // A tempo has to say so: "130bpm", "[130bpm]", "128 bpm". A bare number —
+  // "[120]" — is just as likely to be an index or a catalogue number.
+  if (/\b\d{2,3} ?bpm\b/.test(joined)) return true;
+  if (/\b\d+ bars?\b/.test(joined)) return true;
+
+  return tokens.some(t => {
+    if (LOOP_WORDS.includes(t)) return true;
+    for (const suffix of ['loop', 'loops']) {
+      if (t.endsWith(suffix) && t.length - suffix.length >= 3) return true;
+    }
+    return false;
+  });
 }
 
 /**

@@ -27,7 +27,7 @@ import { PAD_COUNT } from '../src/padLayout';
 import { Sample } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
-import { categorizeSample } from '../src/utils/fileReader';
+import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
 import { generateRandomKit } from '../src/utils/kitGenerator';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -336,6 +336,79 @@ await test('Sonic Pi naming classifies', () => {
   for (const [name, expected] of cases) {
     assert.equal(categorizeSample(name), expected, name);
   }
+});
+
+await test('only WAV and AIFF are accepted', () => {
+  // Move plays these two formats. Anything else would be copied into the bundle
+  // untouched and fail on the device.
+  for (const name of ['kick.wav', 'kick.WAV', 'snare.aif', 'snare.aiff', 'hat.AIFF']) {
+    assert.equal(isAudioFile(name), true, name);
+  }
+  for (const name of ['kick.flac', 'kick.mp3', 'kick.m4a', 'kick.ogg', 'kick.wv', 'notes.txt']) {
+    assert.equal(isAudioFile(name), false, name);
+  }
+});
+
+await test('loops are recognised from the filename or folder', () => {
+  for (const [name, dir] of [
+    ['perc_loop_fake12.wav', ''], ['hat_loop.wav', ''], ['loop_amen.flac', ''],
+    ['percloop.wav', ''], ['prodigyloop.wav', ''],
+    ['drums_120bpm.wav', ''], ['perc [130bpm].wav', ''],
+    ['4 bars perc.wav', ''], ['breaks125.wav', ''], ['breakbeat 01.wav', ''],
+    ['01.wav', '/Pack/Drum Loops'], ['kick.wav', '/Pack/Loops']
+  ] as [string, string][]) {
+    assert.equal(looksLikeLoop(name, dir), true, `${dir}/${name}`);
+  }
+});
+
+await test('one-shots are not mistaken for loops', () => {
+  // "Loopmasters" is a sample-pack vendor; its name shows up in ordinary one-shots.
+  // "bloop" is a real one-shot name, so a glued "loop" needs a longer prefix.
+  for (const [name, dir] of [
+    ['Loopmasters_kick.wav', ''], ['loopmasters snare.wav', ''], ['bloop.wav', ''],
+    ['Kick 01.wav', ''], ['hihat_short.wav', ''], ['Crash Cymbal.wav', ''],
+    ['808 Bass.wav', ''], ['01.wav', '/Pack/Kicks'],
+    // A bare number is not a tempo — it is just as likely an index or catalogue number.
+    ['beat [128].wav', ''], ['hit [12].wav', ''], ['kick 120.wav', ''], ['snare_808.wav', '']
+  ] as [string, string][]) {
+    assert.equal(looksLikeLoop(name, dir), false, `${dir}/${name}`);
+  }
+});
+
+await test('loops are kept out of the kit unless asked for', () => {
+  const withLoops: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 6 }, (_, i) => ({
+      ...makeSample(`perc_loop_fake1${i}.wav`, 'Perc'),
+      isLoop: true
+    }))
+  ];
+
+  const skipped = generateRandomKit(withLoops).kit.filter(Boolean);
+  assert.ok(skipped.length > 0, 'the one-shots should still fill pads');
+  assert.equal(skipped.filter(s => s!.isLoop).length, 0, 'a loop reached a pad');
+
+  const included = generateRandomKit(withLoops, [], { skipLoops: false }).kit.filter(Boolean);
+  assert.ok(included.filter(s => s!.isLoop).length > 0, 'opting in should place loops');
+});
+
+await test('loops do not decide the pad layout', () => {
+  // Hat loops must not make this look like a library with real closed/open hats.
+  const samples: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    ...Array.from({ length: 3 }, (_, i) => ({
+      ...makeSample(`closed_hat_loop_${i}.wav`, 'CHH' as const),
+      isLoop: true
+    })),
+    ...Array.from({ length: 3 }, (_, i) => ({
+      ...makeSample(`open_hat_loop_${i}.wav`, 'OHH' as const),
+      isLoop: true
+    }))
+  ];
+  assert.equal(generateRandomKit(samples).layout.id, 'generic-hats');
+  assert.equal(generateRandomKit(samples, [], { skipLoops: false }).layout.id, 'split-hats');
 });
 
 await test('the containing folder classifies a nameless sample', () => {

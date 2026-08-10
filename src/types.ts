@@ -8,6 +8,8 @@ export interface Sample {
   category: Category;
   url: string; // Object URL for preview
   isExcluded?: boolean;
+  /** Looks like a bar of music rather than a one-shot — skipped unless asked for. */
+  isLoop?: boolean;
 }
 
 export interface SourceFolder {

@@ -27,11 +27,24 @@ function shuffle<T>(items: T[]): void {
   }
 }
 
+export interface KitOptions {
+  /** Leave loops out of the pools. On by default — a bar of music is not a drum hit. */
+  skipLoops?: boolean;
+}
+
+export function isUsableSample(sample: Sample, { skipLoops = true }: KitOptions = {}): boolean {
+  return !(skipLoops && sample.isLoop);
+}
+
 export function generateRandomKit(
   samples: Sample[],
-  lockedSamples: (Sample | null)[] = []
+  lockedSamples: (Sample | null)[] = [],
+  options: KitOptions = {}
 ): KitResult {
-  const layout = chooseLayout(samples);
+  // Filtered before choosing the layout too: a folder of hat loops must not decide
+  // which layout the kit uses.
+  const usable = samples.filter(s => isUsableSample(s, options));
+  const layout = chooseLayout(usable);
   const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
   const substituted: number[] = [];
   const empty: number[] = [];
@@ -45,7 +58,7 @@ export function generateRandomKit(
   // Same file dropped from two folders should not be able to fill two pads.
   const seenSignatures = new Set(locked.map(s => `${s.name}-${s.file.size}`));
 
-  samples.forEach(s => {
+  usable.forEach(s => {
     const signature = `${s.name}-${s.file.size}`;
     if (!lockedIds.has(s.id) && !seenSignatures.has(signature) && !s.isExcluded) {
       pools[s.category].push(s);

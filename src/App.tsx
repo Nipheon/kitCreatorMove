@@ -1,11 +1,11 @@
 import { FolderUp, Loader2, RefreshCw, Eye, EyeOff } from 'lucide-react';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { chokeGroupFor, chooseLayout, DISPLAY_INDICES, PAD_COUNT } from './padLayout';
 import { Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
-import { categorizeSample, getFilesFromDataTransfer } from './utils/fileReader';
-import { emptyKit, generateRandomKit, KitResult } from './utils/kitGenerator';
+import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
+import { emptyKit, generateRandomKit, isUsableSample, KitResult } from './utils/kitGenerator';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
@@ -59,6 +59,7 @@ export default function App() {
   const [kitSuffix, setKitSuffix] = useState('KIT');
   const [batchSize, setBatchSize] = useState(1);
   const [trimSilence, setTrimSilence] = useState(true);
+  const [skipLoops, setSkipLoops] = useState(true);
 
   // dragenter/dragleave also fire for every child element, so the overlay is driven
   // by a depth counter rather than by the raw events.
@@ -67,6 +68,38 @@ export default function App() {
 
   const samples = useMemo(() => enabledSamples(sourceFolders), [sourceFolders]);
   const kit = kitResult.kit;
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.repeat) return;
+
+      const KEY_TO_PAD: Record<string, number> = {
+        '1': 12, '2': 13, '3': 14, '4': 15,
+        'q': 8, 'w': 9, 'e': 10, 'r': 11,
+        'a': 4, 's': 5, 'd': 6, 'f': 7,
+        'y': 0, 'z': 0, 'x': 1, 'c': 2, 'v': 3
+      };
+
+      const key = e.key.toLowerCase();
+      const padIndex = KEY_TO_PAD[key];
+
+      if (padIndex !== undefined) {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('play-pad', { detail: padIndex }));
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  const kitOptions = { skipLoops };
+  const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
+  const usableCount = useMemo(
+    () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
+    [samples, skipLoops]
+  );
 
   const lockedFrom = (current: (Sample | null)[]) =>
     lockedPads.map((locked, idx) => (locked ? current[idx] : null));
@@ -103,6 +136,7 @@ export default function App() {
               name: file.name,
               // The containing folder is the fallback when the filename says nothing.
               category: categorizeSample(file.name, path),
+              isLoop: looksLikeLoop(file.name, path),
               url: URL.createObjectURL(file)
             }))
           };
@@ -110,7 +144,7 @@ export default function App() {
         .filter(folder => folder.samples.length > 0);
 
       if (newFolders.length === 0) {
-        setError('No supported audio files found in what you dropped.');
+        setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
         return;
       }
 
@@ -122,7 +156,7 @@ export default function App() {
 
       setSourceFolders(updated);
       if (allSamples.length > 0) {
-        setKitResult(generateRandomKit(allSamples, lockedFrom(kit)));
+        setKitResult(generateRandomKit(allSamples, lockedFrom(kit), kitOptions));
       }
       if (wasEmpty) {
         const { prefix, suffix } = generateKitName(newFolders[0].name);
@@ -159,7 +193,7 @@ export default function App() {
     );
 
     const next: KitResult = remaining.length > 0
-      ? generateRandomKit(remaining, survivors)
+      ? generateRandomKit(remaining, survivors, kitOptions)
       : {
           kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
           layout: chooseLayout(remaining),
@@ -197,7 +231,7 @@ export default function App() {
     setSourceFolders(updated);
     setKitResult(
       remaining.length > 0
-        ? generateRandomKit(remaining, survivors)
+        ? generateRandomKit(remaining, survivors, kitOptions)
         : {
             kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
             layout: chooseLayout(remaining),
@@ -218,14 +252,22 @@ export default function App() {
     setSourceFolders(updated);
     setKitResult(
       remaining.length > 0
-        ? generateRandomKit(remaining, survivors)
+        ? generateRandomKit(remaining, survivors, kitOptions)
         : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [] }
     );
   };
 
   const randomizeKit = () => {
     if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit)));
+      setKitResult(generateRandomKit(samples, lockedFrom(kit), kitOptions));
+    }
+  };
+
+  // Regenerates immediately, otherwise the toggle looks inert.
+  const toggleSkipLoops = (next: boolean) => {
+    setSkipLoops(next);
+    if (samples.length > 0) {
+      setKitResult(generateRandomKit(samples, lockedFrom(kit), { skipLoops: next }));
     }
   };
 
@@ -243,7 +285,7 @@ export default function App() {
     const kits = [{ kit: [...kit], name: currentName }];
 
     for (let i = 1; i < batchSize; i++) {
-      const next = generateRandomKit(samples, lockedFrom(kit));
+      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
       let name = `${kitPrefix}-${generateKitName('').suffix}`;
       // Fall back to a counter rather than appending repeatedly, which produced
       // names like NAME-Zap-3-3-3.
@@ -311,7 +353,7 @@ export default function App() {
               <>
                 <FolderUp className="w-16 h-16 text-[#00FFFC] mx-auto mb-4 animate-pulse" />
                 <h2 className="text-2xl font-bold uppercase tracking-widest">Drop Sample Folders Here</h2>
-                <p className="text-[#888] mt-2 text-sm uppercase tracking-wider">Audio files (.wav, .aif, .flac, etc)</p>
+                <p className="text-[#888] mt-2 text-sm uppercase tracking-wider">.wav and .aiff files</p>
               </>
             )}
           </div>
@@ -370,11 +412,11 @@ export default function App() {
           <div className='mt-auto'>
             <div className='p-4 bg-[#151515] rounded-lg border border-[#222]'>
               <div className='flex justify-between text-[10px] mb-2 text-[#888] uppercase'>
-                <span>Total Samples</span>
-                <span>{samples.length.toLocaleString()}</span>
+                <span>Usable Samples</span>
+                <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
               </div>
               <div className='w-full bg-[#333] h-1 rounded-full overflow-hidden'>
-                <div className='bg-[#00FFFC] h-full transition-all' style={{ width: samples.length > 0 ? '100%' : '0%' }}></div>
+                <div className='bg-[#00FFFC] h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
               </div>
             </div>
           </div>
@@ -410,7 +452,7 @@ export default function App() {
           <button
             onClick={randomizeKit}
             className='px-8 py-3 bg-[#00FFFC] text-black font-bold uppercase text-xs tracking-widest rounded-full hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
-            disabled={samples.length === 0}
+            disabled={usableCount === 0}
           >
             Generate Random Kit
           </button>
@@ -468,6 +510,22 @@ export default function App() {
               />
               <p className='text-[9px] text-[#555]'>
                 Export multiple random kits in one zip. Locked pads remain the same across all.
+              </p>
+            </div>
+
+            <div className='space-y-2'>
+              <label className='flex items-center gap-2 text-[10px] text-[#888] uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={skipLoops}
+                  onChange={(e) => toggleSkipLoops(e.target.checked)}
+                  className='accent-[#00FFFC]'
+                />
+                Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
+              </label>
+              <p className='text-[9px] text-[#555]'>
+                Leaves out files whose name or folder marks them as a loop — "loop",
+                a bar count, or a tempo like 128bpm.
               </p>
             </div>
 
