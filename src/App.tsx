@@ -6,32 +6,10 @@ import { Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult } from './utils/kitGenerator';
+import { DEFAULT_PREFIX, generateKitName, prefixForFolders } from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
-
-const KIT_SUFFIXES = [
-  'Zap', 'Boom', 'Fuzz', 'Grit', 'Hype', 'Vibe', 'Flow', 'Snap', 'Drop',
-  'Drip', 'Flip', 'Jump', 'Nova', 'Pulse', 'Wave', 'Echo', 'Zen', 'Void'
-];
-
-const generateKitName = (folderName: string) => {
-  const words = folderName.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
-  let prefix = '';
-  if (words.length >= 4) {
-    prefix = words[0][0] + words[1][0] + words[2][0] + words[3][0];
-  } else if (words.length === 3) {
-    prefix = words[0].substring(0, 2) + words[1][0] + words[2][0];
-  } else if (words.length === 2) {
-    prefix = words[0].substring(0, 2) + words[1].substring(0, 2);
-  } else if (words.length === 1) {
-    prefix = words[0].substring(0, 4);
-  }
-
-  prefix = (prefix + 'KITX').substring(0, 4).toUpperCase();
-  const suffix = KIT_SUFFIXES[Math.floor(Math.random() * KIT_SUFFIXES.length)];
-  return { prefix, suffix };
-};
 
 /**
  * crypto.randomUUID is secure-context only, and `npm run dev` binds 0.0.0.0 so the
@@ -55,7 +33,9 @@ export default function App() {
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [kitPrefix, setKitPrefix] = useState('MOVE');
+  const [kitPrefix, setKitPrefix] = useState(DEFAULT_PREFIX);
+  // Once the user types their own prefix, stop deriving it from the folder list.
+  const [prefixEdited, setPrefixEdited] = useState(false);
   const [kitSuffix, setKitSuffix] = useState('KIT');
   const [batchSize, setBatchSize] = useState(1);
   const [trimSilence, setTrimSilence] = useState(true);
@@ -100,6 +80,15 @@ export default function App() {
     () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
     [samples, skipLoops]
   );
+
+  /**
+   * Keeps the preset prefix in step with the folder that is actually loaded. Removing
+   * or disabling the folder the name came from used to leave its name behind, so a kit
+   * built entirely from "BBBB" still exported as "AAAA-…".
+   */
+  const syncPrefix = (folders: SourceFolder[]) => {
+    if (!prefixEdited) setKitPrefix(prefixForFolders(folders));
+  };
 
   const lockedFrom = (current: (Sample | null)[]) =>
     lockedPads.map((locked, idx) => (locked ? current[idx] : null));
@@ -158,11 +147,10 @@ export default function App() {
       if (allSamples.length > 0) {
         setKitResult(generateRandomKit(allSamples, lockedFrom(kit), kitOptions));
       }
-      if (wasEmpty) {
-        const { prefix, suffix } = generateKitName(newFolders[0].name);
-        setKitPrefix(prefix);
-        setKitSuffix(suffix);
-      }
+      syncPrefix(updated);
+      // The suffix is only rolled for the first drop; after that it is the user's,
+      // changed by the Randomize Suffix button.
+      if (wasEmpty) setKitSuffix(generateKitName(newFolders[0].name).suffix);
     } catch (err) {
       console.error('Failed to process files:', err);
       setError('Error processing files. Please try again.');
@@ -203,6 +191,7 @@ export default function App() {
 
     setSourceFolders(updated);
     setKitResult(next);
+    syncPrefix(updated);
 
     // Revoked here rather than in an effect cleanup: StrictMode's double-mount would
     // run an unmount cleanup immediately and break every preview. A locked pad keeps
@@ -239,6 +228,7 @@ export default function App() {
             empty: []
           }
     );
+    syncPrefix(updated);
   };
 
   const handleExcludeSample = (sampleId: string) => {
@@ -475,7 +465,10 @@ export default function App() {
                 <input
                   type='text'
                   value={kitPrefix}
-                  onChange={(e) => setKitPrefix(e.target.value)}
+                  onChange={(e) => {
+                    setKitPrefix(e.target.value);
+                    setPrefixEdited(true);
+                  }}
                   className='w-1/2 bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-[#00FFFC] outline-none text-[#E0E0E0] uppercase'
                   placeholder='PREFIX'
                   maxLength={12}

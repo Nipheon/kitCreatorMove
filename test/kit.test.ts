@@ -24,11 +24,14 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
 }
 
 import { PAD_COUNT } from '../src/padLayout';
-import { Sample } from '../src/types';
+import { Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
 import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
 import { generateRandomKit } from '../src/utils/kitGenerator';
+import {
+  DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, prefixForFolders, prefixFromFolderName
+} from '../src/utils/kitNaming';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
 const NO_TRIM = { trimSilence: false };
@@ -449,6 +452,52 @@ await test('glued hat qualifiers do not swallow ordinary words', () => {
   assert.equal(categorizeSample('BBT_Bossa_O_Hat.wav'), 'OHH');
   for (const name of ['chatter.wav', 'chatty loop.wav', 'ohateful.wav']) {
     assert.equal(categorizeSample(name), 'Other', name);
+  }
+});
+
+await test('the preset prefix follows the folder that is actually loaded', () => {
+  const folder = (name: string, isEnabled = true): SourceFolder =>
+    ({ id: name, name, samples: [], isEnabled });
+
+  // One folder names the kit after itself.
+  assert.equal(prefixForFolders([folder('AAAA')]), 'AAAA');
+  // Two or more and no single folder can claim it.
+  assert.equal(prefixForFolders([folder('AAAA'), folder('BBBB')]), MULTI_FOLDER_PREFIX);
+  assert.equal(
+    prefixForFolders([folder('AAAA'), folder('BBBB'), folder('CCCC')]),
+    MULTI_FOLDER_PREFIX
+  );
+  // Remove AAAA and the name must follow BBBB, not linger on the folder that is gone.
+  assert.equal(prefixForFolders([folder('BBBB')]), 'BBBB');
+  // Disabling counts as gone, so two folders with one disabled is a single-folder kit.
+  assert.equal(prefixForFolders([folder('AAAA', false), folder('BBBB')]), 'BBBB');
+  assert.equal(prefixForFolders([folder('AAAA'), folder('BBBB', false)]), 'AAAA');
+  // Nothing enabled falls back to the default.
+  assert.equal(prefixForFolders([]), DEFAULT_PREFIX);
+  assert.equal(prefixForFolders([folder('AAAA', false)]), DEFAULT_PREFIX);
+  assert.equal(
+    prefixForFolders([folder('AAAA', false), folder('BBBB', false)]),
+    DEFAULT_PREFIX
+  );
+});
+
+await test('prefixes are four uppercase characters', () => {
+  assert.equal(prefixFromFolderName('70s Breakbeats'), '70BR');
+  assert.equal(prefixFromFolderName('Vintage Drum Machine Pack'), 'VDMP');
+  assert.equal(prefixFromFolderName('Acoustic Kit'), 'ACKI');
+  assert.equal(prefixFromFolderName('Techno'), 'TECH');
+  assert.equal(prefixFromFolderName('Hi'), 'HIKI');
+  assert.equal(prefixFromFolderName(''), 'KITX');
+  for (const name of ['A', 'Some Very Long Folder Name Here', '!!!', '70s Breakbeats']) {
+    assert.equal(prefixFromFolderName(name).length, 4, name);
+  }
+});
+
+await test('the suffix pool is large and well formed', () => {
+  assert.ok(KIT_SUFFIXES.length >= 38, `only ${KIT_SUFFIXES.length} suffixes`);
+  assert.equal(new Set(KIT_SUFFIXES).size, KIT_SUFFIXES.length, 'duplicate suffix');
+  for (const word of KIT_SUFFIXES) {
+    assert.match(word, /^[A-Z][a-z]+$/, word);
   }
 });
 

@@ -1,0 +1,57 @@
+import { SourceFolder } from '../types';
+
+/** Short, slightly cryptic words. Three or four letters so names stay compact. */
+export const KIT_SUFFIXES = [
+  'Zap', 'Boom', 'Fuzz', 'Grit', 'Hype', 'Vibe', 'Flow', 'Snap', 'Drop',
+  'Drip', 'Flip', 'Jump', 'Nova', 'Pulse', 'Wave', 'Echo', 'Zen', 'Void',
+  'Rune', 'Onyx', 'Hex', 'Myth', 'Veil', 'Dusk', 'Omen', 'Wisp', 'Rift',
+  'Halo', 'Aura', 'Kiln', 'Vex', 'Wyrd', 'Fume', 'Murk', 'Pyre', 'Tomb',
+  'Grim', 'Idol', 'Sect'
+];
+
+export const DEFAULT_PREFIX = 'MOVE';
+
+/** Used once more than one folder is contributing — no single folder names the kit. */
+export const MULTI_FOLDER_PREFIX = 'MKIT';
+
+/** Four uppercase characters derived from the folder's words. */
+export function prefixFromFolderName(folderName: string): string {
+  const words = folderName.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
+  let prefix = '';
+  if (words.length >= 4) {
+    prefix = words[0][0] + words[1][0] + words[2][0] + words[3][0];
+  } else if (words.length === 3) {
+    prefix = words[0].substring(0, 2) + words[1][0] + words[2][0];
+  } else if (words.length === 2) {
+    prefix = words[0].substring(0, 2) + words[1].substring(0, 2);
+  } else if (words.length === 1) {
+    prefix = words[0].substring(0, 4);
+  }
+  return (prefix + 'KITX').substring(0, 4).toUpperCase();
+}
+
+export function randomSuffix(): string {
+  return KIT_SUFFIXES[Math.floor(Math.random() * KIT_SUFFIXES.length)];
+}
+
+export function generateKitName(folderName: string) {
+  return { prefix: prefixFromFolderName(folderName), suffix: randomSuffix() };
+}
+
+/**
+ * The prefix describes what the kit is actually built from:
+ *
+ *   no folders enabled    -> DEFAULT_PREFIX
+ *   exactly one           -> derived from that folder's name
+ *   more than one         -> MULTI_FOLDER_PREFIX, since no single folder names it
+ *
+ * This is recomputed whenever folders are added, removed or disabled. It used to be
+ * set only on the first drop, so a kit built entirely from "BBBB" still exported as
+ * "AAAA-…" after "AAAA" had been removed.
+ */
+export function prefixForFolders(folders: SourceFolder[]): string {
+  const enabled = folders.filter(f => f.isEnabled !== false);
+  if (enabled.length === 0) return DEFAULT_PREFIX;
+  if (enabled.length > 1) return MULTI_FOLDER_PREFIX;
+  return prefixFromFolderName(enabled[0].name);
+}
