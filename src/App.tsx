@@ -7,6 +7,7 @@ import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult } from './utils/kitGenerator';
 import { DEFAULT_PREFIX, generateKitName, prefixForFolders } from './utils/kitNaming';
+import { encodeWav } from './utils/audioTrimmer';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
@@ -121,32 +122,58 @@ export default function App() {
   const processFiles = async (items: DataTransferItemList) => {
     setIsLoading(true);
     setError(null);
+
     try {
       const folderData = await getFilesFromDataTransfer(items);
+      const newFolders: SourceFolder[] = [];
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = AudioContextClass ? new AudioContextClass() : null;
 
-      const newFolders: SourceFolder[] = folderData
-        .map(folder => {
-          return {
+      for (const folder of folderData) {
+        const samples: Sample[] = [];
+        for (const { file, path } of folder.files) {
+          let url = URL.createObjectURL(file);
+          const name = file.name.toLowerCase();
+          
+          if (ctx && (name.endsWith('.aif') || name.endsWith('.aiff'))) {
+            try {
+              const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+              const channels: Float32Array[] = [];
+              for (let i = 0; i < buffer.numberOfChannels; i++) {
+                channels.push(buffer.getChannelData(i));
+              }
+              const wavBlob = encodeWav(channels, buffer.sampleRate, 16);
+              URL.revokeObjectURL(url);
+              url = URL.createObjectURL(wavBlob);
+            } catch (err) {
+              console.warn(`Failed to create WAV preview for ${file.name}`, err);
+            }
+          }
+
+          samples.push({
+            id: newId('sample'),
+            file,
+            name: file.name,
+            category: categorizeSample(file.name, path),
+            isLoop: looksLikeLoop(file.name, path),
+            url
+          });
+        }
+        
+        if (samples.length > 0) {
+          newFolders.push({
             id: newId('folder'),
             name: folder.name || 'Dropped Files',
             isEnabled: true,
-            samples: folder.files.map<Sample>(({ file, path }) => ({
-              id: newId('sample'),
-              file,
-              name: file.name,
-              // The containing folder is the fallback when the filename says nothing.
-              category: categorizeSample(file.name, path),
-              isLoop: looksLikeLoop(file.name, path),
-              url: URL.createObjectURL(file)
-            }))
-          };
-        })
-        .filter(folder => folder.samples.length > 0);
+            samples
+          });
+        }
+      }
 
       if (newFolders.length === 0) {
         setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
         return;
-      }
+      } 
 
       // Computed outside the state updater: updaters must stay pure, and StrictMode
       // double-invokes them.
