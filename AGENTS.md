@@ -86,6 +86,10 @@ to match new behaviour unless the behaviour change is the point of the task.
 - **Trimming uses `OfflineAudioContext`, one per distinct source rate, created inside
   `createTrimmer`.** Do not swap it for `AudioContext` (16 hardware contexts per export,
   never closed) and do not hoist it to module scope (a closed context cannot be reused).
+- **Silence is trimmed from both ends, at a threshold of `0.001` (-60 dBFS).** The
+  threshold is deliberately low: percussion with a long tail must not be cut short. Do
+  not raise it back toward `0.005` on the theory that it trims more effectively — it
+  would eat decays.
 - **Trimming preserves the source rate and bit depth**, read from the `fmt ` chunk
   before decoding. `decodeAudioData` resamples to the context rate, so reading the rate
   after decoding is circular and changes nothing.
@@ -162,12 +166,50 @@ real packs.
   controls are real buttons and cannot be nested inside one.
 - **Split Pad Bottom Bar (50/50):** The bottom bar of each pad is evenly split between
   `Lock` (left) and `Shuffle` (right).
-- **Audio Auditioning Scoped to Single Pad Shuffle:** Auto-playback on sample updates is
-  guarded by `shouldPlayOnNextSample.current`. Clicking an individual pad's Shuffle button
-  plays that pad's new sample. Generating a full kit or dropping folders MUST remain silent —
-  never trigger all 16 pads at once.
-- **Duplicate Folder Skipping:** Folders already present in `sourceFolders` are automatically
-  skipped when dropped/added.
+- **Audio auditioning is scoped to a single pad's Shuffle.** Clicking a pad's Shuffle
+  plays that pad. Generating a full kit or dropping folders MUST remain silent — never
+  trigger all 16 pads at once.
+
+  This is driven by an **`auditionToken`**: `App` holds `{ index, token }` and bumps the
+  token on each Shuffle; `Pad` plays when the token changes. It is deliberately *not*
+  keyed on `sample`. The earlier `shouldPlayOnNextSample` ref was armed on click and
+  disarmed inside `useEffect([sample])` — but a shuffle can land on the same sample, and
+  an identical object reference means that effect never runs. The pad stayed armed, and
+  the next full generate played every armed pad at once, breaking this very rule.
+
+  **The audition effect must stay declared below the effect that builds the audio
+  element.** React runs effects in declaration order within a commit, which is what
+  guarantees the new sample is loaded before it plays.
+- **Shuffle never returns the pad's own sample.** It excludes the current sample and
+  walks the pad's preference chain, so it reaches a fallback category rather than
+  repeating. Only if the library holds nothing else does the pad keep what it has —
+  excluding the current sample must never empty a pad.
+- **`substituted`/`empty` come from one shared `summarisePads`.** A full generate and a
+  single-pad shuffle used to count differently, so shuffling an unrelated pad moved the
+  warning from "2 pads" to "3 pads" on its own.
+- **Duplicate folder skipping:** folders already present in `sourceFolders` are skipped
+  by lowercased name. A drop where *everything* was skipped reports "already loaded" —
+  a drop that changes nothing has to say why, or it reads as the app ignoring you.
+
+## Preset naming (`kitNaming.ts`)
+
+- **The prefix describes what the kit is built from**, recomputed whenever folders are
+  added, removed or disabled: no folders enabled gives `MOVE`, exactly one gives that
+  folder's name, more than one gives `MKIT` because no single folder names the kit.
+  It used to be set only on the first drop, so removing folder "AAAA" left kits built
+  entirely from "BBBB" exporting as `AAAA-…`.
+- **Once the user types their own prefix, deriving stops** (`prefixEdited`). Do not
+  overwrite a name the user has entered.
+- The suffix is rolled once on the first drop and thereafter belongs to the user, who
+  changes it with the Randomize Suffix button. Folder changes must not reroll it.
+- Naming lives in `kitNaming.ts` rather than `App.tsx` so it can be tested — the suite
+  is Node-only and cannot reach a component.
+
+## Analytics
+
+Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. A
+`@vercel/analytics` dependency was also present but never imported — dead weight,
+removed. Do not add a second provider.
 
 ## UI, Dimensions & Design System
 
@@ -200,7 +242,8 @@ in a browser. Everything below is confirmed on real hardware — treat it as set
   `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index` is correct.
 - **Choke groups work.** Hats cut each other, crashes cut each other, rides ring through.
 - **Trimming is clean.** Trimmed samples match their source apart from the removed
-  silence.
+  silence. Note this was confirmed when only *leading* silence was removed; trailing
+  trim and the `0.001` threshold came later and have not been re-checked on the device.
 - Drag-and-drop and audio preview work in the browser.
 
 Do not "modernise" the `$schema` version, flatten `Macro0`, invert the pad grid or

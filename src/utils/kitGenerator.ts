@@ -36,6 +36,27 @@ export function isUsableSample(sample: Sample, { skipLoops = true }: KitOptions 
   return !(skipLoops && sample.isLoop);
 }
 
+/**
+ * One definition of the warning counts, shared by a full generate and a single-pad
+ * shuffle. They used to compute this differently — a full generate skipped locked pads
+ * — so shuffling an unrelated pad made the banner jump from 2 pads to 3.
+ */
+function summarisePads(kit: (Sample | null)[], layout: PadLayout) {
+  const substituted: number[] = [];
+  const empty: number[] = [];
+
+  kit.forEach((sample, idx) => {
+    if (!sample) {
+      empty.push(idx);
+      return;
+    }
+    const prefs = layout.preferences[idx];
+    if (prefs && prefs.length > 0 && sample.category !== prefs[0]) substituted.push(idx);
+  });
+
+  return { substituted, empty };
+}
+
 export function generateRandomKit(
   samples: Sample[],
   lockedSamples: (Sample | null)[] = [],
@@ -46,8 +67,6 @@ export function generateRandomKit(
   const usable = samples.filter(s => isUsableSample(s, options));
   const layout = chooseLayout(usable);
   const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
-  const substituted: number[] = [];
-  const empty: number[] = [];
 
   const pools: Record<Category, Sample[]> = {
     Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Hat: [], Crash: [], Perc: [], Other: []
@@ -68,12 +87,12 @@ export function generateRandomKit(
 
   (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
 
-  const take = (index: number): { sample: Sample | null; exact: boolean } => {
+  const take = (index: number): { sample: Sample | null } => {
     const preferences = layout.preferences[index];
 
     for (const cat of preferences) {
       if (pools[cat].length > 0) {
-        return { sample: pools[cat].pop()!, exact: cat === preferences[0] };
+        return { sample: pools[cat].pop()! };
       }
     }
 
@@ -82,9 +101,7 @@ export function generateRandomKit(
       .sort((a, b) => pools[b].length - pools[a].length)
       .find(cat => pools[cat].length > 0);
 
-    return deepest
-      ? { sample: pools[deepest].pop()!, exact: false }
-      : { sample: null, exact: false };
+    return deepest ? { sample: pools[deepest].pop()! } : { sample: null };
   };
 
   for (let i = 0; i < PAD_COUNT; i++) {
@@ -92,13 +109,10 @@ export function generateRandomKit(
       kit[i] = lockedSamples[i];
       continue;
     }
-    const { sample, exact } = take(i);
-    kit[i] = sample;
-    if (!sample) empty.push(i);
-    else if (!exact) substituted.push(i);
+    kit[i] = take(i).sample;
   }
 
-  return { kit, layout, substituted, empty };
+  return { kit, layout, ...summarisePads(kit, layout) };
 }
 
 /**
@@ -125,11 +139,12 @@ export function rerollSinglePad(
   const layout = chooseLayout(usable);
   const nextKit = [...currentKit];
 
+  const current = nextKit[targetIndex];
   const usedIds = new Set<string>();
   const usedSignatures = new Set<string>();
 
-  nextKit.forEach((sample, idx) => {
-    if (idx !== targetIndex && sample) {
+  nextKit.forEach(sample => {
+    if (sample) {
       usedIds.add(sample.id);
       usedSignatures.add(`${sample.name}-${sample.file.size}`);
     }
@@ -168,21 +183,8 @@ export function rerollSinglePad(
     }
   }
 
-  nextKit[targetIndex] = chosenSample;
+  // Nothing else in the whole library: keep what is there rather than emptying the pad.
+  nextKit[targetIndex] = chosenSample ?? current;
 
-  const substituted: number[] = [];
-  const empty: number[] = [];
-
-  nextKit.forEach((sample, idx) => {
-    if (!sample) {
-      empty.push(idx);
-    } else {
-      const prefs = layout.preferences[idx];
-      if (prefs && prefs.length > 0 && sample.category !== prefs[0]) {
-        substituted.push(idx);
-      }
-    }
-  });
-
-  return { kit: nextKit, layout, substituted, empty };
+  return { kit: nextKit, layout, ...summarisePads(nextKit, layout) };
 }
