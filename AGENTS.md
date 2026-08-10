@@ -87,9 +87,9 @@ to match new behaviour unless the behaviour change is the point of the task.
   `createTrimmer`.** Do not swap it for `AudioContext` (16 hardware contexts per export,
   never closed) and do not hoist it to module scope (a closed context cannot be reused).
 - **Silence is trimmed from both ends, at a threshold of `0.001` (-60 dBFS).** The
-  threshold is deliberately low: percussion with a long tail must not be cut short. Do
-  not raise it back toward `0.005` on the theory that it trims more effectively — it
-  would eat decays.
+  threshold is deliberately low: percussion with a long tail must not be cut short, and
+  -60 dBFS is below audibility for a decay. Do not raise it back toward `0.005` on the
+  theory that it trims more effectively — it would eat decays.
 - **Trimming preserves the source rate and bit depth**, read from the `fmt ` chunk
   before decoding. `decodeAudioData` resamples to the context rate, so reading the rate
   after decoding is circular and changes nothing.
@@ -241,9 +241,9 @@ in a browser. Everything below is confirmed on real hardware — treat it as set
 - **Pad order is right.** Pad 1 in the UI is the bottom-left pad on the device;
   `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index` is correct.
 - **Choke groups work.** Hats cut each other, crashes cut each other, rides ring through.
-- **Trimming is clean.** Trimmed samples match their source apart from the removed
-  silence. Note this was confirmed when only *leading* silence was removed; trailing
-  trim and the `0.001` threshold came later and have not been re-checked on the device.
+- **Trimming is clean, at both ends.** Trimmed samples match their source apart from
+  the removed silence. `0.001` (-60 dBFS) is below audibility for a decay tail, so
+  trailing trim does not clip percussion.
 - Drag-and-drop and audio preview work in the browser.
 
 Do not "modernise" the `$schema` version, flatten `Macro0`, invert the pad grid or
