@@ -12,7 +12,7 @@ const SIZE_WARN_BYTES = 200 * 1024 * 1024;
 
 const KIT_SUFFIXES = [
   'Zap', 'Boom', 'Fuzz', 'Grit', 'Hype', 'Vibe', 'Flow', 'Snap', 'Drop',
-  'Drip', 'Flip', 'Jump', 'Nova', 'Pulse', 'Wave', 'Echo', 'Zen', 'Void', 'Dark, 'Whip'
+  'Drip', 'Flip', 'Jump', 'Nova', 'Pulse', 'Wave', 'Echo', 'Zen', 'Void'
 ];
 
 const generateKitName = (folderName: string) => {
