@@ -1,7 +1,7 @@
 import { readWavFormat, WavFormat } from './wavStripper';
 
-/** Amplitude below which a sample counts as leading silence. */
-const SILENCE_THRESHOLD = 0.005;
+/** Amplitude below which a sample counts as silence (-60 dBFS). */
+const SILENCE_THRESHOLD = 0.001;
 
 /** Bit depths encodeWav can write back. Anything else is passed through untouched. */
 const SUPPORTED_BIT_DEPTHS = [16, 24];
@@ -54,14 +54,19 @@ export function createTrimmer() {
         const audioBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
 
         const startOffset = findFirstAudibleFrame(audioBuffer);
-        if (startOffset <= 0) return { blob: file, trimmed: false };
+        const endOffset = findLastAudibleFrame(audioBuffer);
 
-        const trimmedLength = audioBuffer.length - startOffset;
-        if (trimmedLength <= 0) return { blob: file, trimmed: false };
+        if (startOffset < 0 || endOffset < 0 || startOffset > endOffset) {
+          return { blob: file, trimmed: false };
+        }
+
+        if (startOffset === 0 && endOffset === audioBuffer.length - 1) {
+          return { blob: file, trimmed: false };
+        }
 
         const channels: Float32Array[] = [];
         for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
-          channels.push(audioBuffer.getChannelData(c).subarray(startOffset));
+          channels.push(audioBuffer.getChannelData(c).subarray(startOffset, endOffset + 1));
         }
 
         return {
@@ -77,14 +82,32 @@ export function createTrimmer() {
 }
 
 function findFirstAudibleFrame(audioBuffer: AudioBuffer): number {
+  const numChannels = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
   const channels: Float32Array[] = [];
-  for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+  for (let c = 0; c < numChannels; c++) {
     channels.push(audioBuffer.getChannelData(c));
   }
 
-  for (let i = 0; i < audioBuffer.length; i++) {
-    for (const channel of channels) {
-      if (Math.abs(channel[i]) > SILENCE_THRESHOLD) return i;
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      if (Math.abs(channels[c][i]) > SILENCE_THRESHOLD) return i;
+    }
+  }
+  return -1;
+}
+
+function findLastAudibleFrame(audioBuffer: AudioBuffer): number {
+  const numChannels = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < numChannels; c++) {
+    channels.push(audioBuffer.getChannelData(c));
+  }
+
+  for (let i = len - 1; i >= 0; i--) {
+    for (let c = 0; c < numChannels; c++) {
+      if (Math.abs(channels[c][i]) > SILENCE_THRESHOLD) return i;
     }
   }
   return -1;

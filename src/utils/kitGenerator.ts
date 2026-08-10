@@ -100,3 +100,89 @@ export function generateRandomKit(
 
   return { kit, layout, substituted, empty };
 }
+
+/**
+ * Re-rolls a single pad in the kit while leaving all other pads (and locked pads) untouched.
+ * Selects a replacement sample for targetIndex from usable pools, avoiding samples already
+ * placed on other pads.
+ */
+export function rerollSinglePad(
+  samples: Sample[],
+  currentKit: (Sample | null)[],
+  targetIndex: number,
+  options: KitOptions = {}
+): KitResult {
+  if (targetIndex < 0 || targetIndex >= PAD_COUNT) {
+    return {
+      kit: [...currentKit],
+      layout: chooseLayout(samples.filter(s => isUsableSample(s, options))),
+      substituted: [],
+      empty: []
+    };
+  }
+
+  const usable = samples.filter(s => isUsableSample(s, options));
+  const layout = chooseLayout(usable);
+  const nextKit = [...currentKit];
+
+  const usedIds = new Set<string>();
+  const usedSignatures = new Set<string>();
+
+  nextKit.forEach((sample, idx) => {
+    if (idx !== targetIndex && sample) {
+      usedIds.add(sample.id);
+      usedSignatures.add(`${sample.name}-${sample.file.size}`);
+    }
+  });
+
+  const preferences = layout.preferences[targetIndex];
+
+  const pools: Record<Category, Sample[]> = {
+    Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Hat: [], Crash: [], Perc: [], Other: []
+  };
+
+  usable.forEach(s => {
+    const signature = `${s.name}-${s.file.size}`;
+    if (!usedIds.has(s.id) && !usedSignatures.has(signature) && !s.isExcluded) {
+      pools[s.category].push(s);
+    }
+  });
+
+  (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
+
+  let chosenSample: Sample | null = null;
+
+  for (const cat of preferences) {
+    if (pools[cat].length > 0) {
+      chosenSample = pools[cat][0];
+      break;
+    }
+  }
+
+  if (!chosenSample) {
+    const deepest = (Object.keys(pools) as Category[])
+      .sort((a, b) => pools[b].length - pools[a].length)
+      .find(cat => pools[cat].length > 0);
+    if (deepest) {
+      chosenSample = pools[deepest][0];
+    }
+  }
+
+  nextKit[targetIndex] = chosenSample;
+
+  const substituted: number[] = [];
+  const empty: number[] = [];
+
+  nextKit.forEach((sample, idx) => {
+    if (!sample) {
+      empty.push(idx);
+    } else {
+      const prefs = layout.preferences[idx];
+      if (prefs && prefs.length > 0 && sample.category !== prefs[0]) {
+        substituted.push(idx);
+      }
+    }
+  });
+
+  return { kit: nextKit, layout, substituted, empty };
+}

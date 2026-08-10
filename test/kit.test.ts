@@ -28,7 +28,7 @@ import { Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
 import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
-import { generateRandomKit } from '../src/utils/kitGenerator';
+import { generateRandomKit, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, prefixForFolders, prefixFromFolderName
 } from '../src/utils/kitNaming';
@@ -885,6 +885,27 @@ await test('encodeWav interleaves stereo channels', async () => {
   assert.equal(view.getInt16(46, true), 0);
   assert.equal(view.getInt16(48, true), 0);
   assert.equal(view.getInt16(50, true), -32767);
+});
+
+await test('rerollSinglePad changes only target pad and preserves locked pads', () => {
+  const kickPool = Array.from({ length: 10 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick'));
+  const snarePool = Array.from({ length: 10 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'));
+  const allSamples = [...kickPool, ...snarePool];
+
+  const initial = generateRandomKit(allSamples);
+  const targetIndex = 0;
+
+  const rerolled = rerollSinglePad(allSamples, initial.kit, targetIndex);
+
+  assert.equal(rerolled.kit.length, PAD_COUNT);
+  for (let i = 0; i < PAD_COUNT; i++) {
+    if (i !== targetIndex) {
+      assert.equal(rerolled.kit[i], initial.kit[i], `pad ${i} should be unchanged`);
+    }
+  }
+
+  const placed = rerolled.kit.filter((s): s is Sample => s !== null);
+  assert.equal(new Set(placed).size, placed.length, 'no duplicate samples across pads');
 });
 
 if (failures > 0) {
