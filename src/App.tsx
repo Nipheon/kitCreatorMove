@@ -1,4 +1,4 @@
-import { FolderUp, Loader2, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, Lock, Ban } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { chokeGroupFor, chooseLayout, DISPLAY_INDICES, PAD_COUNT } from './padLayout';
@@ -40,6 +40,7 @@ export default function App() {
   const [batchSize, setBatchSize] = useState(1);
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
+  const [showWarning, setShowWarning] = useState(false);
 
   // dragenter/dragleave also fire for every child element, so the overlay is driven
   // by a depth counter rather than by the raw events.
@@ -48,6 +49,16 @@ export default function App() {
 
   const samples = useMemo(() => enabledSamples(sourceFolders), [sourceFolders]);
   const kit = kitResult.kit;
+
+  useEffect(() => {
+    if (kitResult.substituted.length > 0 || kitResult.empty.length > 0) {
+      setShowWarning(true);
+      const timer = setTimeout(() => setShowWarning(false), 5000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowWarning(false);
+    }
+  }, [kitResult]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -413,6 +424,16 @@ export default function App() {
         </aside>
 
         <section className='flex-1 w-full bg-[#090909] flex flex-col items-center justify-center p-4 sm:p-8 shrink-0 lg:overflow-y-auto min-h-[60vh]'>
+          <div className='w-full max-w-lg mb-4 text-[#888] text-[10px] uppercase tracking-wider flex justify-between px-2'>
+            <div className='flex items-center gap-1.5'>
+              <Lock size={12} className='text-[#00FFFC]' />
+              <span>Lock to keep sample</span>
+            </div>
+            <div className='flex items-center gap-1.5'>
+              <Ban size={12} className='text-red-400' />
+              <span>Exclude sample from kits</span>
+            </div>
+          </div>
           <div className='grid grid-cols-4 gap-2 sm:gap-3 mb-8 w-full max-w-lg'>
             {DISPLAY_INDICES.map((index) => (
               <Pad
@@ -428,8 +449,8 @@ export default function App() {
             ))}
           </div>
 
-          {(kitResult.substituted.length > 0 || kitResult.empty.length > 0) && (
-            <div className='mb-6 text-[11px] text-[#B8860B] uppercase tracking-wider text-center space-y-1'>
+          {showWarning && (kitResult.substituted.length > 0 || kitResult.empty.length > 0) && (
+            <div className='mb-6 text-[11px] text-[#B8860B] uppercase tracking-wider text-center space-y-1 transition-opacity duration-500'>
               {kitResult.substituted.length > 0 && (
                 <div>{kitResult.substituted.length} pad(s) filled from a different category</div>
               )}

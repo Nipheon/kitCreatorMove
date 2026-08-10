@@ -144,10 +144,16 @@ real packs.
 
 ## Pads, layout and choking
 
-- **Two layouts, chosen from what the library contains** (`padLayout.ts`). With no
-  closed- and no open-hat samples but some generic hats, the kit switches to
-  `K S Cl Hat` rows over a percussion row. A single closed hat keeps the split layout.
-  The active layout is named in the settings panel so the grid never reshapes silently.
+- **Three layouts, chosen from what the library contains** (`padLayout.ts`):
+  - `split-hats` — the default, when closed and open hats can be told apart.
+  - `generic-hats` — no CHH and no OHH but some generic hats: `K S Cl Hat` rows over a
+    percussion row. A single closed hat is enough to keep the split layout.
+  - `minimal-layout` — only kicks, snares and generic hats, with no claps, percussion
+    or crashes: `K S S Hat` on every row.
+
+  On top of that, **if there are no clap samples at all, Clap pads become Snare pads**
+  in whichever layout was chosen. The active layout is named in the settings panel so
+  the grid never reshapes silently.
 - **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay
   percussion and stay unchoked — a ride is meant to ring out.
 - **Empty pads are deliberately not lockable.** Asserted explicitly on the lock button,
@@ -178,17 +184,43 @@ against the total. Keep it that way.
 
 ---
 
-## Not verified against hardware
+## Verified
 
-No Ableton Move has been involved in any of this. These remain untested and should not
-be presented as settled:
+A generated bundle loads and plays on an Ableton Move, and the app has been exercised
+in a browser. Everything below is confirmed on real hardware — treat it as settled:
 
-- The `$schema` version (`song/1.7.0/devicePreset.json`).
-- `Macro0` being an object while `Macro1`–`Macro7` are plain floats.
-- `BundleInfo.json` — nothing is known to read it.
-- The `DISPLAY_INDICES` bottom-left-origin grid versus Move's physical pad order.
-- `sampleUri` percent-encoding versus what Ableton actually parses.
+- `$schema` `song/1.7.0/devicePreset.json` is accepted by the device.
+- `Macro0` as an object alongside plain-float `Macro1`–`Macro7` is accepted.
+- `BundleInfo.json` does not break the import.
+- `sampleUri` percent-encoding parses — samples resolve and sound.
+- `STORE`-compressed bundles are readable.
+- **Pad order is right.** Pad 1 in the UI is the bottom-left pad on the device;
+  `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index` is correct.
+- **Choke groups work.** Hats cut each other, crashes cut each other, rides ring through.
+- **Trimming is clean.** Trimmed samples match their source apart from the removed
+  silence.
+- Drag-and-drop and audio preview work in the browser.
 
-The test suite covers kit generation, bundle building, sample detection and WAV
-handling. It does not cover drag-and-drop, audio preview, or the decode half of
-trimming — `OfflineAudioContext` does not exist in Node.
+Do not "modernise" the `$schema` version, flatten `Macro0`, invert the pad grid or
+change the note mapping on the theory that they look wrong. They were guesses once;
+they are not any more.
+
+## Confirmed by hand, not by the suite
+
+These were verified on the device, but the Node test suite cannot exercise them, so
+nothing will catch a regression except testing on hardware again:
+
+- Drag-and-drop and the directory walk (`getFilesFromDataTransfer`) — needs a browser.
+- Audio preview.
+- The decode half of trimming — `OfflineAudioContext` does not exist in Node. Only
+  `encodeWav` is unit-tested.
+- Whether a bundle still imports on the device at all.
+
+`DISPLAY_INDICES` and the `receivingNote`/`sendingNote` mapping *are* pinned by a test
+now, precisely because a wrong mapping still produces a bundle where every pad sounds —
+it just would not be the pad shown.
+
+## Test coverage
+
+The suite covers kit generation, bundle building, sample detection, preset shape, the
+pad-to-note mapping, choke grouping, kit naming and WAV handling.

@@ -23,7 +23,7 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
   };
 }
 
-import { PAD_COUNT } from '../src/padLayout';
+import { DISPLAY_INDICES, PAD_COUNT } from '../src/padLayout';
 import { Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
@@ -686,6 +686,31 @@ await test('every sampleUri resolves to a real zip entry', async () => {
     assert.ok(uri, `pad ${index} has a sample but no sampleUri`);
     const decoded = `Samples/${decodeURIComponent(uri.slice('Samples/'.length))}`;
     assert.ok(zip.file(decoded), `sampleUri ${uri} points at a missing entry`);
+  });
+});
+
+await test('pad-to-note mapping is the one confirmed on hardware', async () => {
+  // Pad 1 in the UI is the bottom-left pad on the device, and chain order maps to
+  // notes 36..51. Confirmed on an Ableton Move. Nothing else in the suite pins this,
+  // and a wrong mapping still produces a bundle where all sixteen pads make a sound —
+  // just not the ones shown. Pinned so a refactor cannot move it silently.
+  assert.deepEqual(DISPLAY_INDICES, [
+    12, 13, 14, 15,
+    8, 9, 10, 11,
+    4, 5, 6, 7,
+    0, 1, 2, 3
+  ]);
+
+  const { kit } = generateRandomKit(pool);
+  const blob = await createPresetBundle(kit, 'Note_Map', NO_TRIM);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const preset = JSON.parse(await zip.file('Preset.ablpreset')!.async('string'));
+  const zones = preset.chains[0].devices[0].chains.map((c: any) => c.drumZoneSettings);
+
+  assert.equal(zones.length, PAD_COUNT);
+  zones.forEach((zone: any, index: number) => {
+    assert.equal(zone.receivingNote, 36 + index, `pad ${index} receivingNote`);
+    assert.equal(zone.sendingNote, 60, `pad ${index} sendingNote`);
   });
 });
 
