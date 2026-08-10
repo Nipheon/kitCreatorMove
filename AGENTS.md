@@ -73,6 +73,9 @@ npm run build        # succeeds
 Then state which file paths you wrote. Do not report success on the strength of having
 made an edit — say what you changed and what the tests returned.
 
+Say either what you changed in this file, or that you checked it and no update was
+needed. Silently skipping it is how it went stale three times.
+
 `test/kit.test.ts` is the contract. If a test fails, fix the code. Do not edit the test
 to match new behaviour unless the behaviour change is the point of the task.
 
