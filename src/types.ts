@@ -1,4 +1,5 @@
-export type Category = 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Hat' | 'Perc' | 'Other';
+export type Category =
+  | 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Hat' | 'Crash' | 'Perc' | 'Other';
 
 export interface Sample {
   id: string;

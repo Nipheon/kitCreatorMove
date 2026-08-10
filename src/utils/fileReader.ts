@@ -1,57 +1,187 @@
 import { Category } from '../types';
 
-export async function getFilesFromDataTransfer(items: DataTransferItemList): Promise<{ name: string, files: File[] }[]> {
-  const result: { name: string, files: File[] }[] = [];
+export interface DroppedFile {
+  file: File;
+  /** Directory holding the file, relative to the drop, e.g. "/Pack/Kicks". */
+  path: string;
+}
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry();
-      if (entry) {
-        const files: File[] = [];
-        const queue: any[] = [entry];
-        
-        while (queue.length > 0) {
-          const currentEntry = queue.shift();
-          if (currentEntry.isFile) {
-            const file = await new Promise<File>((resolve) => currentEntry.file(resolve));
-            if (file.name.match(/\.wav$/i) && !file.name.toLowerCase().includes('loop') && file.size <= 600 * 1024) {
-              files.push(file);
-            }
-          } else if (currentEntry.isDirectory) {
-            const reader = currentEntry.createReader();
-            const readAllEntries = async (dirReader: any) => {
-              let allEntries: any[] = [];
-              let readEntries = await new Promise<any[]>((resolve) => dirReader.readEntries(resolve));
-              while (readEntries.length > 0) {
-                allEntries.push(...readEntries);
-                readEntries = await new Promise<any[]>((resolve) => dirReader.readEntries(resolve));
-              }
-              return allEntries;
-            };
-            const entries = await readAllEntries(reader);
-            queue.push(...entries);
-          }
-        }
-        
-        if (files.length > 0) {
-          result.push({ name: entry.name, files });
-        }
-      }
+export interface DroppedFolder {
+  name: string;
+  files: DroppedFile[];
+}
+
+const isAudio = (name: string) => /\.(wav|aif|aiff|flac|m4a|mp3|ogg)$/i.test(name);
+
+const directoryOf = (fullPath: string) => {
+  const cut = fullPath.lastIndexOf('/');
+  return cut <= 0 ? '' : fullPath.slice(0, cut);
+};
+
+/**
+ * readEntries returns at most 100 entries per call, so it has to be drained
+ * until it yields an empty batch.
+ */
+async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  const all: FileSystemEntry[] = [];
+  let batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+    reader.readEntries(resolve, reject)
+  );
+  while (batch.length > 0) {
+    all.push(...batch);
+    batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+      reader.readEntries(resolve, reject)
+    );
+  }
+  return all;
+}
+
+async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> {
+  const files: DroppedFile[] = [];
+  const queue: FileSystemEntry[] = [root];
+
+  while (queue.length > 0) {
+    const entry = queue.shift()!;
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) =>
+        (entry as FileSystemFileEntry).file(resolve, reject)
+      );
+      // The subfolder a sample sits in is often the only clue to what it is.
+      if (isAudio(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
+    } else if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader();
+      queue.push(...await readAllEntries(reader));
+    }
+  }
+
+  return files;
+}
+
+export async function getFilesFromDataTransfer(
+  items: DataTransferItemList
+): Promise<DroppedFolder[]> {
+  const result: DroppedFolder[] = [];
+
+  // The item list is invalidated once the drop handler yields, so snapshot the
+  // entries synchronously before any await.
+  const entries = Array.from(items)
+    .filter(item => item.kind === 'file')
+    .map(item => item.webkitGetAsEntry())
+    .filter((entry): entry is FileSystemEntry => entry !== null);
+
+  for (const entry of entries) {
+    const files = await collectAudioFiles(entry);
+    if (files.length > 0) {
+      result.push({ name: entry.name, files });
     }
   }
 
   return result;
 }
 
-export function categorizeSample(name: string): Category {
-  const lowerName = name.toLowerCase().replace(/_/g, ' ');
-  if (lowerName.match(/kick|bd|bassdrum/)) return 'Kick';
-  if (lowerName.match(/snare|sd|rim/)) return 'Snare';
-  if (lowerName.match(/clap|cp/)) return 'Clap';
-  if (lowerName.match(/c hat|chh|hat.*c|closed.*hat| ch /)) return 'CHH';
-  if (lowerName.match(/o hat|ohh|hat.*o|open.*hat| oh /)) return 'OHH';
-  if (lowerName.match(/hi hat|hihat| hh |hat/)) return 'Hat';
-  if (lowerName.match(/perc|tom|bongo|conga|shaker|tamb|cowbell|wood|block/)) return 'Perc';
-  return 'Other';
+// ── Categorisation ────────────────────────────────────────────────────────────
+
+/**
+ * Splits a name into lowercase word tokens. Separators, punctuation and the
+ * letter/digit boundary all break tokens, so "BD01", "SN_02" and "Hat-Tight" all
+ * yield the abbreviation on its own. Matching whole tokens rather than substrings
+ * is what stops "custom" reading as a tom and "bassdrop" as a snare.
+ */
+function tokenize(name: string): string[] {
+  return name
+    .replace(/\.[a-z0-9]+$/i, '')          // drop the extension
+    .replace(/([a-z])(\d)/gi, '$1 $2')     // BD01 -> BD 01
+    .replace(/(\d)([a-z])/gi, '$1 $2')     // 808bass -> 808 bass
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+const KICK = ['kick', 'kicks', 'kik', 'bd', 'kd', 'bassdrum'];
+const SNARE = ['snare', 'snares', 'snr', 'sn', 'sd', 'rim', 'rimshot', 'rs', 'sidestick'];
+const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
+/**
+ * Crashes get their own choke group, so they are their own category. Rides and bare
+ * "cymbal" stay percussion: a ride is meant to ring out, and an ambiguous "cymbal"
+ * is safer left unchoked than wrongly cut off.
+ */
+const CRASH = ['crash', 'crashes', 'splash', 'china', 'cc', 'csh'];
+
+const PERC = [
+  'perc', 'percussion', 'tom', 'toms', 'bongo', 'bongos', 'conga', 'congas',
+  'shaker', 'tamb', 'tambourine', 'cowbell', 'woodblock', 'block', 'wood',
+  'clave', 'claves', 'cabasa', 'guiro', 'triangle', 'timbale', 'timbales',
+  'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'maraca', 'maracas',
+  'tabla', 'udu', 'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cy',
+  // TR-808 style: high/mid/low toms, cowbell, claves, maracas.
+  'ht', 'mt', 'lt', 'cb', 'cl', 'clv', 'cr',
+  // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
+  // leading hh in the filename is what tells them apart — see isHat below.
+  'hc', 'mc', 'lc'
+];
+
+const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh'];
+const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl'];
+const OPEN = ['ohh', 'oh', 'open', 'opn'];
+
+/** Multi-word names that only make sense as a phrase. */
+const PHRASES: [RegExp, Category][] = [
+  [/\bbass drum\b/, 'Kick'],
+  [/\bside stick\b/, 'Snare'],
+  [/\bcross stick\b/, 'Snare'],
+  [/\bhand clap\b/, 'Clap'],
+  [/\bfinger snap\b/, 'Clap'],
+  [/\bwood block\b/, 'Perc'],
+  [/\bhi hat\b/, 'Hat']
+];
+
+function classify(text: string): Category | null {
+  const tokens = tokenize(text);
+  if (tokens.length === 0) return null;
+  // Short abbreviations must be whole tokens — "tom" inside "custom" is not a tom.
+  // Words of four characters or more are also matched glued to a prefix or suffix,
+  // which is how real packs name folders (popkick, linnhats, realclaps) and files
+  // with velocity codes appended (RIDED0 -> "rided").
+  const GLUE_MIN = 4;
+  const has = (list: string[]) =>
+    tokens.some(t =>
+      list.some(k => t === k || (k.length >= GLUE_MIN && (t.startsWith(k) || t.endsWith(k))))
+    );
+
+  const joined = tokens.join(' ');
+  for (const [pattern, category] of PHRASES) {
+    if (pattern.test(joined)) {
+      // "hi hat" still needs the open/closed pass below.
+      if (category !== 'Hat') return category;
+    }
+  }
+
+  if (has(KICK)) return 'Kick';
+  if (has(SNARE)) return 'Snare';
+  if (has(CLAP)) return 'Clap';
+
+  // Hats: identify the family first, then narrow only on an explicit qualifier.
+  // A token beginning "hh" is a hi-hat: packs write HHCD0 / HHOD0 with the level
+  // code glued on, which no whole-token or four-character rule would catch.
+  const isHat = has(HAT) || /\bhi hat\b/.test(joined) || tokens.some(t => t.startsWith('hh'));
+  if (isHat) {
+    if (has(CLOSED)) return 'CHH';
+    if (has(OPEN)) return 'OHH';
+    return 'Hat';
+  }
+  // Bare "CH01" / "OH03" with no hat word — in drum packs these are always hats.
+  if (tokens.includes('chh') || tokens.includes('ch')) return 'CHH';
+  if (tokens.includes('ohh') || tokens.includes('oh')) return 'OHH';
+
+  if (has(CRASH)) return 'Crash';
+  if (has(PERC)) return 'Perc';
+  return null;
+}
+
+/**
+ * Best-effort categorisation from the filename, falling back to the folder the
+ * sample sits in. There is no audio analysis.
+ */
+export function categorizeSample(name: string, directory = ''): Category {
+  return classify(name) ?? (directory ? classify(directory) : null) ?? 'Other';
 }

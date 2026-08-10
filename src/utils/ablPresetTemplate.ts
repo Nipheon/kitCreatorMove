@@ -1,17 +1,26 @@
-export function generateAblPreset(kitName: string, samples: (string | null)[], chokeGroups: (number | null)[], categories: (string | null)[]) {
+export function generateAblPreset(
+  kitName: string,
+  samples: (string | null)[],
+  chokeGroups: (number | null)[],
+  categories: (string | null)[],
+  sampleNames: (string | null)[] = []
+) {
   const chains = samples.map((sampleUri, index) => {
     const category = categories[index];
-    
-    let effectOn = true;
+    const sampleName = sampleNames[index] ?? '';
+
+    // Each effect's amount stays at 0.0 by design: the type is selected so the user
+    // can dial it in on the device, not so it colours the sample on import.
+    const punchAmount = 0.0;
+    const subOscAmount = 0.0;
+    const noiseAmount = 0.0;
+
     let effectType = "Stretch";
-    let punchAmount = 0.0;
-    let subOscAmount = 0.0;
-    let noiseAmount = 0.0;
 
     if (category) {
       if (category === 'Kick') {
         effectType = "Punch";
-      } else if (category === 'Other' && sampleUri?.toLowerCase().includes('808')) { 
+      } else if (category === 'Other' && sampleName.toLowerCase().includes('808')) {
         effectType = "Sub Osc";
       } else if (category === 'Snare' || category === 'Clap' || category === 'CHH' || category === 'OHH' || category === 'Hat') {
         effectType = "Noise";
@@ -35,7 +44,7 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
             "Effect_LoopOffset": 0.019999997690320015,
             "Effect_NoiseAmount": noiseAmount,
             "Effect_NoiseFrequency": 10000.0009765625,
-            "Effect_On": effectOn,
+            "Effect_On": true,
             "Effect_PitchEnvelopeAmount": 0.0,
             "Effect_PitchEnvelopeDecay": 0.29999998211860657,
             "Effect_PunchAmount": punchAmount,
@@ -146,7 +155,7 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
                   {
                     "presetUri": null,
                     "kind": "reverb",
-                    "name": "Swap for other Move/Note-compatible FX",
+                    "name": "Reverb",
                     "parameters": {
                       "AllPassGain": 0.6,
                       "AllPassSize": 0.4,
@@ -203,7 +212,7 @@ export function generateAblPreset(kitName: string, samples: (string | null)[], c
           {
             "presetUri": null,
             "kind": "saturator",
-            "name": "Swap for other Move/Note-compatible FX",
+            "name": "Saturator",
             "parameters": {
               "BaseDrive": 0.0,
               "BassShaperThreshold": -50.0,

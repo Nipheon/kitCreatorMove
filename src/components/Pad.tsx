@@ -1,58 +1,64 @@
-import { Play, Square, Lock, Unlock, Ban } from 'lucide-react';
-import React, { useRef, useState, useEffect } from 'react';
+import { Ban, Lock, Unlock } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sample } from '../types';
+
+interface ChokeDetail {
+  group: number;
+  sourceIndex: number;
+}
 
 interface PadProps {
   index: number;
   sample: Sample | null;
   expectedCategory: string;
-  chokeGroup?: number;
+  chokeGroup: number | null;
   isLocked: boolean;
   onToggleLock: () => void;
   onExclude?: (id: string) => void;
 }
 
-export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude }) => {
+export const Pad: React.FC<PadProps> = ({
+  index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude
+}) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (sample) {
-      const audio = new Audio(sample.url);
-      audioRef.current = audio;
-      
-      const handleEnded = () => setIsPlaying(false);
-      const handlePause = () => setIsPlaying(false);
-      const handleError = (e: Event) => {
-        console.error("Audio error:", e);
-        setIsPlaying(false);
-      };
-
-      audio.addEventListener('ended', handleEnded);
-      audio.addEventListener('pause', handlePause);
-      audio.addEventListener('error', handleError);
-
-      return () => {
-        audio.removeEventListener('ended', handleEnded);
-        audio.removeEventListener('pause', handlePause);
-        audio.removeEventListener('error', handleError);
-        audio.pause();
-        audioRef.current = null;
-      };
+    if (!sample) {
+      audioRef.current = null;
+      return;
     }
+
+    const audio = new Audio(sample.url);
+    audioRef.current = audio;
+
+    const handleEnded = () => setIsPlaying(false);
+    const handlePause = () => setIsPlaying(false);
+    const handleError = (e: Event) => {
+      console.error('Audio error:', e);
+      setIsPlaying(false);
+    };
+
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('error', handleError);
+
     return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('error', handleError);
+      audio.pause();
       audioRef.current = null;
     };
   }, [sample]);
 
   useEffect(() => {
-    const onChoke = (e: any) => {
-      if (chokeGroup && e.detail.group === chokeGroup && e.detail.sourceIndex !== index) {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          setIsPlaying(false);
-        }
+    const onChoke = (e: Event) => {
+      const { group, sourceIndex } = (e as CustomEvent<ChokeDetail>).detail;
+      if (chokeGroup && group === chokeGroup && sourceIndex !== index && audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        setIsPlaying(false);
       }
     };
     window.addEventListener('choke', onChoke);
@@ -60,27 +66,39 @@ export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, choke
   }, [chokeGroup, index]);
 
   const handlePlay = () => {
-    if (audioRef.current) {
-      if (chokeGroup) {
-        window.dispatchEvent(new CustomEvent('choke', { detail: { group: chokeGroup, sourceIndex: index } }));
-      }
-      audioRef.current.currentTime = 0;
-      const playPromise = audioRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error("Audio playback error:", error);
-          setIsPlaying(false);
-        });
-      }
-      setIsPlaying(true);
+    if (!audioRef.current) return;
+
+    if (chokeGroup) {
+      window.dispatchEvent(
+        new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
+      );
+    }
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(error => {
+      console.error('Audio playback error:', error);
+      setIsPlaying(false);
+    });
+    setIsPlaying(true);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handlePlay();
     }
   };
 
+  // A div rather than a button: the lock and exclude controls are buttons themselves,
+  // and interactive elements cannot be nested inside a button.
   return (
-    <button
-      onClick={handlePlay}
-      disabled={!sample}
-      className={`relative overflow-hidden w-32 h-32 bg-[#1A1A1A] border rounded-md p-2 flex flex-col transition-all duration-100 ease-out text-left ${
+    <div
+      role="button"
+      tabIndex={sample ? 0 : -1}
+      aria-disabled={!sample}
+      aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
+      onClick={sample ? handlePlay : undefined}
+      onKeyDown={sample ? handleKeyDown : undefined}
+      className={`relative overflow-hidden w-full aspect-square bg-[#1A1A1A] border rounded-md p-2 flex flex-col transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'border-[#00FFFC] shadow-[0_0_15px_rgba(0,255,252,0.3)] scale-[0.98]'
@@ -101,7 +119,7 @@ export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, choke
         </div>
         <div className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-[#00FFFC]' : 'border border-[#444]'}`}></div>
       </div>
-      
+
       <div className='w-full mt-auto mb-6'>
         <div className='w-full text-[9px] uppercase tracking-tighter text-[#666]'>
           {sample ? sample.category : expectedCategory}
@@ -111,34 +129,42 @@ export const Pad: React.FC<PadProps> = ({ index, sample, expectedCategory, choke
             {sample ? sample.name : 'Empty'}
           </div>
           {sample && onExclude && (
-            <div
-              role="button"
-              tabIndex={0}
+            <button
+              type='button'
               onClick={(e) => {
                 e.stopPropagation();
                 onExclude(sample.id);
               }}
-              className="text-[#555] hover:text-red-400 transition-colors shrink-0"
-              title="Exclude sample"
+              className='text-[#555] hover:text-red-400 transition-colors shrink-0'
+              title='Exclude sample'
+              aria-label={`Exclude ${sample.name}`}
             >
               <Ban size={10} />
-            </div>
+            </button>
           )}
         </div>
       </div>
 
-      <div 
-        role="button"
-        tabIndex={0}
+      {/* Empty pads are deliberately not lockable — there is nothing to hold. */}
+      <button
+        type='button'
+        disabled={!sample}
         onClick={(e) => {
           e.stopPropagation();
           onToggleLock();
         }}
-        className={`absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center transition-colors cursor-pointer ${isLocked ? 'bg-[#00FFFC]/20 text-[#00FFFC]' : 'bg-[#111] text-[#444] hover:text-[#888]'}`}
+        aria-pressed={isLocked}
+        aria-label={isLocked ? `Unlock pad ${index + 1}` : `Lock pad ${index + 1}`}
+        className={`absolute bottom-0 left-0 right-0 h-6 flex items-center justify-center transition-colors ${
+          !sample
+            ? 'bg-[#111] text-[#333] cursor-not-allowed'
+            : isLocked
+              ? 'bg-[#00FFFC]/20 text-[#00FFFC] cursor-pointer'
+              : 'bg-[#111] text-[#444] hover:text-[#888] cursor-pointer'
+        }`}
       >
         {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-      </div>
-    </button>
+      </button>
+    </div>
   );
 };
-

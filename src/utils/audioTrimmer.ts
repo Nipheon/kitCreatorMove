@@ -1,98 +1,143 @@
-export async function trimSilence(file: File): Promise<Blob | File> {
-  try {
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const arrayBuffer = await file.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+import { readWavFormat, WavFormat } from './wavStripper';
 
-    const threshold = 0.005; 
-    let startOffset = 0;
+/** Amplitude below which a sample counts as leading silence. */
+const SILENCE_THRESHOLD = 0.005;
 
-    const length = audioBuffer.length;
-    const channels = audioBuffer.numberOfChannels;
-    let found = false;
+/** Bit depths encodeWav can write back. Anything else is passed through untouched. */
+const SUPPORTED_BIT_DEPTHS = [16, 24];
 
-    for (let i = 0; i < length; i++) {
-      for (let c = 0; c < channels; c++) {
-        if (Math.abs(audioBuffer.getChannelData(c)[i]) > threshold) {
-          startOffset = i;
-          found = true;
-          break;
-        }
-      }
-      if (found) break;
-    }
+/** Outside this range an OfflineAudioContext cannot be constructed. */
+const MIN_RATE = 8000;
+const MAX_RATE = 192000;
 
-    if (startOffset === 0) {
-      return file; 
-    }
-
-    const trimmedLength = length - startOffset;
-    if (trimmedLength <= 0) return file;
-
-    const trimmedBuffer = audioContext.createBuffer(
-      channels,
-      trimmedLength,
-      audioBuffer.sampleRate
-    );
-
-    for (let c = 0; c < channels; c++) {
-      trimmedBuffer.getChannelData(c).set(audioBuffer.getChannelData(c).subarray(startOffset, length));
-    }
-
-    return encodeWAV(trimmedBuffer);
-  } catch (err) {
-    console.error("Failed to trim silence", err);
-    return file;
-  }
+export interface TrimResult {
+  blob: Blob | File;
+  /** False when the file was passed through unchanged — bad format, or nothing to trim. */
+  trimmed: boolean;
+  /** Set when trimming was attempted and failed, so the caller can report it. */
+  failed?: boolean;
 }
 
-function encodeWAV(audioBuffer: AudioBuffer): Blob {
-  const numOfChan = audioBuffer.numberOfChannels;
-  const length = audioBuffer.length * numOfChan * 2 + 44;
-  const buffer = new ArrayBuffer(length);
-  const view = new DataView(buffer);
-  const channels = [];
-  let sample = 0;
-  let offset = 0;
-  let pos = 0;
+/**
+ * Decoding resamples to the context's rate, so a context is created per distinct
+ * source rate and the audio comes back at the rate it went in at. OfflineAudioContext
+ * is used rather than AudioContext: it claims no output device, and it has no close()
+ * to get wrong across repeated exports.
+ */
+export function createTrimmer() {
+  const contexts = new Map<number, OfflineAudioContext>();
 
-  function setUint16(data: number) {
-    view.setUint16(pos, data, true);
-    pos += 2;
-  }
-
-  function setUint32(data: number) {
-    view.setUint32(pos, data, true);
-    pos += 4;
-  }
-
-  setUint32(0x46464952); // "RIFF"
-  setUint32(length - 8); // file length - 8
-  setUint32(0x45564157); // "WAVE"
-  setUint32(0x20746d66); // "fmt " chunk
-  setUint32(16); // length = 16
-  setUint16(1); // PCM (uncompressed)
-  setUint16(numOfChan);
-  setUint32(audioBuffer.sampleRate);
-  setUint32(audioBuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-  setUint16(numOfChan * 2); // block-align
-  setUint16(16); // 16-bit (hardcoded)
-  setUint32(0x61746164); // "data" - chunk
-  setUint32(length - pos - 4); // chunk length
-
-  for (let i = 0; i < audioBuffer.numberOfChannels; i++) {
-    channels.push(audioBuffer.getChannelData(i));
-  }
-
-  while (pos < length) {
-    for (let i = 0; i < numOfChan; i++) {
-      sample = Math.max(-1, Math.min(1, channels[i][offset]));
-      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
-      view.setInt16(pos, sample, true);
-      pos += 2;
+  const contextFor = (sampleRate: number) => {
+    let ctx = contexts.get(sampleRate);
+    if (!ctx) {
+      ctx = new OfflineAudioContext(1, 1, sampleRate);
+      contexts.set(sampleRate, ctx);
     }
-    offset++;
+    return ctx;
+  };
+
+  return {
+    async trim(file: File): Promise<TrimResult> {
+      const format = await readWavFormat(file);
+      if (
+        !format ||
+        !SUPPORTED_BIT_DEPTHS.includes(format.bitsPerSample) ||
+        format.sampleRate < MIN_RATE ||
+        format.sampleRate > MAX_RATE
+      ) {
+        // Preserving the original beats silently re-encoding it at some other format.
+        return { blob: file, trimmed: false };
+      }
+
+      try {
+        const ctx = contextFor(format.sampleRate);
+        const audioBuffer = await ctx.decodeAudioData(await file.arrayBuffer());
+
+        const startOffset = findFirstAudibleFrame(audioBuffer);
+        if (startOffset <= 0) return { blob: file, trimmed: false };
+
+        const trimmedLength = audioBuffer.length - startOffset;
+        if (trimmedLength <= 0) return { blob: file, trimmed: false };
+
+        const channels: Float32Array[] = [];
+        for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+          channels.push(audioBuffer.getChannelData(c).subarray(startOffset));
+        }
+
+        return {
+          blob: encodeWav(channels, audioBuffer.sampleRate, format.bitsPerSample),
+          trimmed: true
+        };
+      } catch (err) {
+        console.error('Failed to trim silence:', err);
+        return { blob: file, trimmed: false, failed: true };
+      }
+    }
+  };
+}
+
+function findFirstAudibleFrame(audioBuffer: AudioBuffer): number {
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+    channels.push(audioBuffer.getChannelData(c));
+  }
+
+  for (let i = 0; i < audioBuffer.length; i++) {
+    for (const channel of channels) {
+      if (Math.abs(channel[i]) > SILENCE_THRESHOLD) return i;
+    }
+  }
+  return -1;
+}
+
+export function encodeWav(channels: Float32Array[], sampleRate: number, bitsPerSample: number): Blob {
+  const numChannels = channels.length;
+  const frames = channels[0].length;
+  const bytesPerSample = bitsPerSample / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataSize = frames * blockAlign;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeFourCC = (offset: number, text: string) => {
+    for (let i = 0; i < 4; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+
+  writeFourCC(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeFourCC(8, 'WAVE');
+  writeFourCC(12, 'fmt ');
+  view.setUint32(16, 16, true);            // fmt chunk size
+  view.setUint16(20, 1, true);             // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeFourCC(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const peak = (1 << (bitsPerSample - 1)) - 1;
+  let offset = 44;
+
+  for (let i = 0; i < frames; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      const clamped = Math.max(-1, Math.min(1, channels[c][i]));
+      const value = Math.round(clamped * peak);
+      if (bitsPerSample === 16) {
+        view.setInt16(offset, value, true);
+      } else {
+        // 24-bit little-endian, low byte first.
+        view.setUint8(offset, value & 0xff);
+        view.setUint8(offset + 1, (value >> 8) & 0xff);
+        view.setUint8(offset + 2, (value >> 16) & 0xff);
+      }
+      offset += bytesPerSample;
+    }
   }
 
   return new Blob([buffer], { type: 'audio/wav' });
 }
+
+export type { WavFormat };
