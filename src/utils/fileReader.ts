@@ -124,9 +124,16 @@ const PERC = [
   'hc', 'mc', 'lc'
 ];
 
-const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'chat', 'ohat'];
-const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c', 'chat'];
-const OPEN = ['ohh', 'oh', 'open', 'opn', 'o', 'ohat'];
+const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh'];
+const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
+const OPEN = ['ohh', 'oh', 'open', 'opn', 'o'];
+
+/**
+ * "CHat"/"OHat" written without a separator. Matched as whole tokens only — they are
+ * four characters, so the glue rule would also catch "chatter", "chatty" and
+ * "ohateful" and file them as hats.
+ */
+const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH' };
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
@@ -167,6 +174,9 @@ function classify(text: string): Category | null {
   // Hats: identify the family first, then narrow only on an explicit qualifier.
   // A token beginning "hh" is a hi-hat: packs write HHCD0 / HHOD0 with the level
   // code glued on, which no whole-token or four-character rule would catch.
+  const gluedQualifier = tokens.map(t => GLUED_HAT_QUALIFIERS[t]).find(Boolean);
+  if (gluedQualifier) return gluedQualifier;
+
   const isHat = has(HAT) || /\bhi hat\b/.test(joined) || tokens.some(t => t.startsWith('hh'));
   if (isHat) {
     if (has(CLOSED)) return 'CHH';
@@ -182,8 +192,30 @@ function classify(text: string): Category | null {
   return null;
 }
 
-/** Words that mark a file as a phrase rather than a one-shot. */
-const LOOP_WORDS = ['loop', 'loops', 'breakbeat', 'breakbeats', 'breaks', 'bpm'];
+/**
+ * The folder segments worth reading, deepest first.
+ *
+ * The outermost folder is the pack's name — "70s Breakbeat", "Kick Ass Drums" — and
+ * describes the collection, not the file. Reading it made every sample in such a pack
+ * inherit the pack's name: a perc hit in "Kick Ass Drums" came back as a Kick, and
+ * everything in "70s Breakbeat" was discarded as a loop. It is skipped whenever there
+ * is a deeper folder that does describe the file, and used only when it is the sole
+ * folder — a bare "Loops/" drop still counts.
+ */
+function folderCandidates(directory: string): string[] {
+  const parts = directory.split('/').filter(Boolean);
+  const scoped = parts.length > 1 ? parts.slice(1) : parts;
+  return scoped.reverse();
+}
+
+/**
+ * Words that mark a file as a phrase rather than a one-shot.
+ *
+ * "breaks" and "breakbeat" used to be here and were removed: they name a genre, not a
+ * file. A pack called "70s Breakbeat" or "Breaks Vol 2" is full of one-shots, and
+ * matching them discarded every sample in it.
+ */
+const LOOP_WORDS = ['loop', 'loops', 'bpm'];
 
 /**
  * A loop is a bar of music, not a drum hit, so it has no business on a pad.
@@ -194,8 +226,8 @@ const LOOP_WORDS = ['loop', 'loops', 'breakbeat', 'breakbeats', 'breaks', 'bpm']
  * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
  * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
  */
-export function looksLikeLoop(name: string, directory = ''): boolean {
-  const tokens = tokenize(`${directory} ${name}`);
+function textLooksLikeLoop(text: string): boolean {
+  const tokens = tokenize(text);
   const joined = tokens.join(' ');
 
   // A tempo has to say so: "130bpm", "[130bpm]", "128 bpm". A bare number —
@@ -212,10 +244,22 @@ export function looksLikeLoop(name: string, directory = ''): boolean {
   });
 }
 
+export function looksLikeLoop(name: string, directory = ''): boolean {
+  if (textLooksLikeLoop(name)) return true;
+  return folderCandidates(directory).some(textLooksLikeLoop);
+}
+
 /**
  * Best-effort categorisation from the filename, falling back to the folder the
  * sample sits in. There is no audio analysis.
  */
 export function categorizeSample(name: string, directory = ''): Category {
-  return classify(name) ?? (directory ? classify(directory) : null) ?? 'Other';
+  const fromName = classify(name);
+  if (fromName) return fromName;
+
+  for (const folder of folderCandidates(directory)) {
+    const fromFolder = classify(folder);
+    if (fromFolder) return fromFolder;
+  }
+  return 'Other';
 }

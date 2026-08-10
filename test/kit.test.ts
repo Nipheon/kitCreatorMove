@@ -354,8 +354,8 @@ await test('loops are recognised from the filename or folder', () => {
     ['perc_loop_fake12.wav', ''], ['hat_loop.wav', ''], ['loop_amen.flac', ''],
     ['percloop.wav', ''], ['prodigyloop.wav', ''],
     ['drums_120bpm.wav', ''], ['perc [130bpm].wav', ''],
-    ['4 bars perc.wav', ''], ['breaks125.wav', ''], ['breakbeat 01.wav', ''],
-    ['01.wav', '/Pack/Drum Loops'], ['kick.wav', '/Pack/Loops']
+    ['4 bars perc.wav', ''],
+    ['01.wav', '/Pack/Drum Loops'], ['kick.wav', '/Pack/Loops'], ['01.wav', '/Loops']
   ] as [string, string][]) {
     assert.equal(looksLikeLoop(name, dir), true, `${dir}/${name}`);
   }
@@ -369,7 +369,9 @@ await test('one-shots are not mistaken for loops', () => {
     ['Kick 01.wav', ''], ['hihat_short.wav', ''], ['Crash Cymbal.wav', ''],
     ['808 Bass.wav', ''], ['01.wav', '/Pack/Kicks'],
     // A bare number is not a tempo — it is just as likely an index or catalogue number.
-    ['beat [128].wav', ''], ['hit [12].wav', ''], ['kick 120.wav', ''], ['snare_808.wav', '']
+    ['beat [128].wav', ''], ['hit [12].wav', ''], ['kick 120.wav', ''], ['snare_808.wav', ''],
+    // "breaks" and "breakbeat" name a genre, not a file.
+    ['breaks125.wav', ''], ['breakbeat 01.wav', '']
   ] as [string, string][]) {
     assert.equal(looksLikeLoop(name, dir), false, `${dir}/${name}`);
   }
@@ -409,6 +411,45 @@ await test('loops do not decide the pad layout', () => {
   ];
   assert.equal(generateRandomKit(samples).layout.id, 'generic-hats');
   assert.equal(generateRandomKit(samples, [], { skipLoops: false }).layout.id, 'split-hats');
+});
+
+await test('a pack name does not decide what its samples are', () => {
+  // The outermost folder is the pack's marketing name. Reading it made every file in
+  // "70s Breakbeat" a loop, and a perc hit in "Kick Ass Drums" a kick.
+  assert.equal(looksLikeLoop('hh 01.wav', '/70s breakbeat/hats'), false);
+  assert.equal(looksLikeLoop('kick 01.wav', '/70s breakbeat/kicks'), false);
+  assert.equal(looksLikeLoop('snare.wav', '/Breaks Vol 2/snares'), false);
+
+  assert.equal(categorizeSample('hh 01.wav', '/70s breakbeat/hats'), 'Hat');
+  assert.equal(categorizeSample('01.wav', '/Kick Ass Drums/perc'), 'Perc');
+  assert.equal(categorizeSample('02.wav', '/Snare Attack/hats'), 'Hat');
+
+  // The cases above are also satisfied by reading folders deepest-first, so they do
+  // not prove the pack folder is skipped. These do: the deeper folder says nothing,
+  // leaving the pack name as the only thing left to read.
+  assert.equal(categorizeSample('01.wav', '/Kick Ass Drums/misc'), 'Other');
+  assert.equal(categorizeSample('02.wav', '/Snare Attack/bits'), 'Other');
+  assert.equal(looksLikeLoop('03.wav', '/Drum Loops Pack/hats'), false);
+  assert.equal(looksLikeLoop('04.wav', '/128bpm Pack/hats'), false);
+});
+
+await test('a sole folder is still read, and deeper folders still win', () => {
+  // With nothing deeper to go on, the one folder we have is the best evidence.
+  assert.equal(looksLikeLoop('01.wav', '/Loops'), true);
+  // Otherwise the nearest folder describes the file.
+  assert.equal(looksLikeLoop('01.wav', '/Pack/Drum Loops'), true);
+  assert.equal(categorizeSample('01.wav', '/Pack/Kicks/Sub'), 'Kick');
+});
+
+await test('glued hat qualifiers do not swallow ordinary words', () => {
+  // "chat" and "ohat" are matched as whole tokens only.
+  assert.equal(categorizeSample('BBT_Bossa_CHat.wav'), 'CHH');
+  assert.equal(categorizeSample('BBT_Bossa_OHat.wav'), 'OHH');
+  assert.equal(categorizeSample('BBT_Bossa_C_Hat.wav'), 'CHH');
+  assert.equal(categorizeSample('BBT_Bossa_O_Hat.wav'), 'OHH');
+  for (const name of ['chatter.wav', 'chatty loop.wav', 'ohateful.wav']) {
+    assert.equal(categorizeSample(name), 'Other', name);
+  }
 });
 
 await test('the containing folder classifies a nameless sample', () => {
