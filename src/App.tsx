@@ -944,10 +944,6 @@ export default function App() {
                   ? ` (${kitResult.layout.columnsId}) — the top row is left off to fit the display on the device.`
                   : '.'}
               </p>
-              <p className='text-sm text-text-muted-dark pt-2 leading-relaxed'>
-                Samples keep the format of the files you dropped. Nothing is converted
-                to a fixed bit depth or sample rate.
-              </p>
             </div>
           </div>
 

@@ -230,18 +230,18 @@ export const Pad: React.FC<PadProps> = ({
           : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
-      <div className='flex w-full justify-between items-start'>
-        <div className='flex items-center gap-1.5 sm:gap-2 flex-wrap'>
-          <span className='text-sm font-bold text-accent-yellow'>
+      <div className='flex w-full justify-between items-center'>
+        <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
+          <span className='text-sm font-bold text-accent-yellow shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
-            <span className='text-sm font-mono text-text-muted bg-surface-header px-1.5 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
+            <span className='text-xs font-mono text-text-muted bg-surface-header px-1 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
               {hotkey}
             </span>
           )}
           {chokeGroup && (
-            <span className='text-sm uppercase tracking-widest text-accent-yellow/80 border border-accent-yellow/40 px-1.5 py-0.5 rounded-sm shrink-0'>
+            <span className='text-[10px] sm:text-xs font-medium uppercase tracking-wider text-accent-yellow/90 border border-accent-yellow/40 px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'>
               Choke {chokeGroup}
             </span>
           )}
