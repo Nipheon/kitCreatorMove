@@ -205,15 +205,20 @@ real packs.
   matched least badly, and layout choice never looked at kicks or snares at all, so a
   percussion-only pack got a Kick/Snare/CHH/OHH grid and filled it by fallback.
 - **The grid id is a fingerprint of the arrangement.** One letter per category —
-  `K`ick, `S`nare, c`L`ap, `C`losed, `O`pen, `P`erc, `X` for other — as four column
-  letters, then `_` and four top-row letters if there is a shared row: `KSCO`, `KSSC`,
-  `KSCO_LLPP`. Equal ids mean every pad advertises the same role, which is the condition
+  `k`ick, `s`nare, c`l`ap, `c`losed, `o`pen, `p`erc, `x` for other — as four column
+  letters, then `_` and four top-row letters if there is a shared row: `ksco`, `kssc`,
+  `ksco_llpp`. Equal ids mean every pad advertises the same role, which is the condition
   for swapping one drum rack for another on the device.
+
+  **Lowercase deliberately:** Move renders lowercase glyphs in fewer pixels than
+  capitals, so a lowercase id survives further into a preset-name display that shows
+  roughly 9-11 characters. Do not "tidy" it to uppercase. The prefix stays uppercase —
+  it is the part that can afford to be cut.
 - **The exported name carries `columnsId`, not `id`.** Move shows roughly 9-11
   characters of a preset name, so the shared top row is left out and a kit exports as
-  `PRE-KSCO-Suffix` (13 characters, which truncates into the decorative suffix rather
+  `PRE-ksco-Suffix` (13 characters, which truncates into the decorative suffix rather
   than into either identifying part). **`columnsId` is therefore a deliberately weaker
-  fingerprint than `id`:** `KSCO_LLLL` and `KSCO_LLPP` both name as `KSCO`, so two kits
+  fingerprint than `id`:** `ksco_llll` and `ksco_llpp` both name as `ksco`, so two kits
   sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
   worth the characters. Any check that two grids are genuinely identical must use `id`,
   which is what the settings panel shows.
@@ -225,8 +230,8 @@ real packs.
   URL-encoded or rejected by a device parser — next door to the `encodeURIComponent`
   landmine in `exporter.ts`. **Name length and character set are unverified on Move
   hardware.** Two tests pin the id: one asserts it is injective across all 127 non-empty
-  category subsets, one asserts it matches `/^[A-Z]{4}(_[A-Z]{4})?$/`.
-- **`NO_SAMPLES_GRID_ID` (`NONE`) is the grid before any folder is dropped.** The pads
+  category subsets, one asserts it matches `/^[a-z]{4}(_[a-z]{4})?$/`.
+- **`NO_SAMPLES_GRID_ID` (`none`) is the grid before any folder is dropped.** The pads
   show a Kick/Snare/CHH/OHH placeholder so the empty app does not read as broken, and
   the id is dropped from the kit name rather than exported as a lie.
 - **An unqualified `Hat` is a closed hat, and a `Crash` is percussion.**

@@ -278,8 +278,8 @@ export default function App() {
   /**
    * The grid id travels in the exported kit name so a rack can be identified on the
    * device. `columnsId` rather than `id`: Move shows roughly 9-11 characters, and
-   * `PREFIX-KSCO-Suffix` keeps both identifying parts ahead of the cut while the full
-   * id would not fit. The id is dropped entirely while no samples are loaded.
+   * `PRE-ksco-Suffix` keeps both identifying parts ahead of the cut while the full id
+   * would not fit. The id is dropped entirely while no samples are loaded.
    */
   const kitNameFor = (suffix: string, gridId: string) =>
     gridId && gridId !== NO_SAMPLES_GRID_ID

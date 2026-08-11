@@ -52,9 +52,14 @@ const COLUMN_ORDER: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc',
  */
 const DOUBLING_ORDER: Category[] = ['Snare', 'Kick', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
 
-/** One character per category, so the grid id stays short enough to live in a kit name. */
+/**
+ * One character per category, so the grid id stays short enough to live in a kit name.
+ *
+ * Lowercase because Move renders lowercase glyphs in fewer pixels than capitals, and the
+ * id has to survive a preset-name display that shows roughly 9-11 characters.
+ */
 const LETTER: Partial<Record<Category, string>> = {
-  Kick: 'K', Snare: 'S', Clap: 'L', CHH: 'C', OHH: 'O', Perc: 'P', Other: 'X'
+  Kick: 'k', Snare: 's', Clap: 'l', CHH: 'c', OHH: 'o', Perc: 'p', Other: 'x'
 };
 
 const SHORT_LABEL: Partial<Record<Category, string>> = {
@@ -63,7 +68,7 @@ const SHORT_LABEL: Partial<Record<Category, string>> = {
 
 /** Shown before any folder is dropped, when there is nothing to derive a grid from. */
 const PLACEHOLDER_COLUMNS: Category[] = ['Kick', 'Snare', 'CHH', 'OHH'];
-export const NO_SAMPLES_GRID_ID = 'NONE';
+export const NO_SAMPLES_GRID_ID = 'none';
 
 /**
  * Which pool a sample is drawn from, which is not always its own category.
