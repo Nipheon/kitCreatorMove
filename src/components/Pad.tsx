@@ -7,6 +7,11 @@ interface ChokeDetail {
   sourceIndex: number;
 }
 
+interface PadReadyDetail {
+  index: number;
+  sampleId: string;
+}
+
 const PAD_HOTKEYS: Record<number, string> = {
   12: '1', 13: '2', 14: '3', 15: '4',
   8: 'Q', 9: 'W', 10: 'E', 11: 'R',
@@ -47,8 +52,6 @@ export const Pad: React.FC<PadProps> = ({
 
     const audio = new Audio(sample.url);
     audio.preload = 'auto';
-    audio.load();
-    audioRef.current = audio;
 
     const handleEnded = () => setIsPlaying(false);
     const handlePause = () => setIsPlaying(false);
@@ -56,15 +59,32 @@ export const Pad: React.FC<PadProps> = ({
       console.error('Audio error:', e);
       setIsPlaying(false);
     };
+    /**
+     * Preview scheduling waits on this. A pad that never buffers simply never reports,
+     * and App's ceiling timer starts the sequence anyway.
+     */
+    const sampleId = sample.id;
+    const announceReady = () => {
+      window.dispatchEvent(
+        new CustomEvent<PadReadyDetail>('pad-ready', { detail: { index, sampleId } })
+      );
+    };
 
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
+    audio.addEventListener('canplaythrough', announceReady);
+
+    audio.load();
+    audioRef.current = audio;
+    // A blob already decoded for an earlier kit can be ready before canplaythrough fires.
+    if (audio.readyState >= 3) announceReady();
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
+      audio.removeEventListener('canplaythrough', announceReady);
       audio.pause();
       audioRef.current = null;
       setIsPlaying(false);

@@ -50,6 +50,21 @@ export default function App() {
   const previewTimerIds = useRef<number[]>([]);
   const spinTimerIds = useRef<number[]>([]);
   const lastStoppedTime = useRef(0);
+  /** Pad index -> id of the sample that pad has finished buffering. */
+  const readyPads = useRef(new Map<number, string>());
+  /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
+  const readyWaitCleanup = useRef<(() => void) | null>(null);
+
+  // Mounted for the app's lifetime: pads buffer long before any preview is requested,
+  // so the registry has to be listening before startPreview is ever called.
+  useEffect(() => {
+    const onPadReady = (e: Event) => {
+      const { index, sampleId } = (e as CustomEvent<{ index: number; sampleId: string }>).detail;
+      readyPads.current.set(index, sampleId);
+    };
+    window.addEventListener('pad-ready', onPadReady);
+    return () => window.removeEventListener('pad-ready', onPadReady);
+  }, []);
 
   const stopSpinAnimation = React.useCallback(() => {
     spinTimerIds.current.forEach(id => clearTimeout(id));
@@ -61,11 +76,18 @@ export default function App() {
     lastStoppedTime.current = Date.now();
     previewTimerIds.current.forEach(id => clearTimeout(id));
     previewTimerIds.current = [];
+    readyWaitCleanup.current?.();
+    readyWaitCleanup.current = null;
     setIsPreviewing(false);
     window.dispatchEvent(new CustomEvent('stop-all-audio'));
   }, []);
 
-  const startPreview = React.useCallback(() => {
+  /**
+   * Takes the kit to preview as an argument rather than reading `kit` state: a generate
+   * calls setKitResult and startPreview in the same tick, so the state read here would
+   * still be the previous kit.
+   */
+  const startPreview = React.useCallback((kitToPreview: (Sample | null)[]) => {
     stopPreview();
     setIsPreviewing(true);
 
@@ -117,9 +139,41 @@ export default function App() {
       window.dispatchEvent(new CustomEvent('play-pad', { detail: padIndex }));
     };
 
-    // 100ms tick to ensure React effects & audio.load() buffer before pad 0 fires
-    const initialTimerId = window.setTimeout(playNextStep, 100);
-    previewTimerIds.current.push(initialTimerId);
+    /**
+     * Pad 0 used to fire on a flat 100ms tick while every later pad got 750ms+ of extra
+     * buffering, so on a cold generate only pad 0 was still decoding when it was told to
+     * play. `pad-started` fires when play() is initiated, not when sound comes out, so
+     * pad 1 landed 750ms after that event and only ~500-600ms after pad 0 was audible.
+     * Waiting for every pad to report buffered removes the asymmetry at the source.
+     */
+    const isReady = (sample: Sample | null, index: number) =>
+      !sample || readyPads.current.get(index) === sample.id;
+
+    if (kitToPreview.every(isReady)) {
+      playNextStep();
+      return;
+    }
+
+    const beginWhenReady = () => {
+      if (!kitToPreview.every(isReady)) return;
+      readyWaitCleanup.current?.();
+      readyWaitCleanup.current = null;
+      playNextStep();
+    };
+
+    window.addEventListener('pad-ready', beginWhenReady);
+    // Ceiling so a sample that never decodes cannot leave the preview hanging.
+    const ceilingTimerId = window.setTimeout(() => {
+      readyWaitCleanup.current?.();
+      readyWaitCleanup.current = null;
+      playNextStep();
+    }, 2000);
+    previewTimerIds.current.push(ceilingTimerId);
+
+    readyWaitCleanup.current = () => {
+      window.removeEventListener('pad-ready', beginWhenReady);
+      clearTimeout(ceilingTimerId);
+    };
   }, [stopPreview]);
 
   const previewKit = React.useCallback(() => {
@@ -128,8 +182,8 @@ export default function App() {
       return;
     }
 
-    startPreview();
-  }, [isPreviewing, stopPreview, startPreview]);
+    startPreview(kitResult.kit);
+  }, [isPreviewing, stopPreview, startPreview, kitResult.kit]);
 
   useEffect(() => {
     if (!isPreviewing) return;
@@ -400,10 +454,11 @@ export default function App() {
     stopSpinAnimation();
 
     if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), kitOptions));
+      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
+      setKitResult(next);
 
       if (autoPreview) {
-        startPreview();
+        startPreview(next.kit);
       } else {
         // All pads start spinning simultaneously
         setSpinningPads(new Array(PAD_COUNT).fill(true));
