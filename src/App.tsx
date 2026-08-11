@@ -24,10 +24,10 @@ const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 /**
  * Held before pad 0 fires, on top of the buffering gate. Buffered is not the same as
  * able to make a sound immediately: the first play after the output stream has been idle
- * carries device start-up latency the readyState of a blob says nothing about. 300ms is
+ * carries device start-up latency the readyState of a blob says nothing about. 150ms is
  * a deliberate, tuned-by-ear constant, not a measurement.
  */
-const PREVIEW_LEAD_IN_MS = 300;
+const PREVIEW_LEAD_IN_MS = 150;
 
 const enabledSamples = (folders: SourceFolder[]) =>
   folders.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
@@ -95,7 +95,7 @@ export default function App() {
    * calls setKitResult and startPreview in the same tick, so the state read here would
    * still be the previous kit.
    */
-  const startPreview = React.useCallback((kitToPreview: (Sample | null)[]) => {
+  const startPreview = React.useCallback((kitToPreview: (Sample | null)[], isAutoPreview: boolean = false) => {
     stopPreview();
     setIsPreviewing(true);
 
@@ -157,11 +157,11 @@ export default function App() {
     const isReady = (sample: Sample | null, index: number) =>
       !sample || readyPads.current.get(index) === sample.id;
 
-    // Buffered is not the same as able to sound instantly, so the gate alone left pad 01
-    // late. The lead-in is the blunt half of the fix; Pad dispatching `pad-started` at
-    // real audible onset is the half that keeps pad 02 from arriving early regardless.
+    // PREVIEW_LEAD_IN_MS is used only for auto preview. Manual preview button clicks
+    // start immediately (0ms lead-in).
     const startSequence = () => {
-      const leadInTimerId = window.setTimeout(playNextStep, PREVIEW_LEAD_IN_MS);
+      const leadInMs = isAutoPreview ? PREVIEW_LEAD_IN_MS : 0;
+      const leadInTimerId = window.setTimeout(playNextStep, leadInMs);
       previewTimerIds.current.push(leadInTimerId);
     };
 
@@ -474,7 +474,7 @@ export default function App() {
       setKitResult(next);
 
       if (autoPreview) {
-        startPreview(next.kit);
+        startPreview(next.kit, true);
       } else {
         // All pads start spinning simultaneously
         setSpinningPads(new Array(PAD_COUNT).fill(true));
