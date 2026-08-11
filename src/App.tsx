@@ -956,7 +956,7 @@ export default function App() {
                     rel='noopener noreferrer'
                     className='text-accent-yellow hover:underline font-medium'
                   >
-                    drum-kit-generator
+                    klingklangmatze
                   </a>{' '}
                   for providing great insights on how to create ablpreset files. Also check out {' '}
                   <a
