@@ -153,7 +153,7 @@ export default function App() {
             url
           });
         }
-        
+
         if (samples.length > 0) {
           newFolders.push({
             id: newId('folder'),
@@ -223,11 +223,11 @@ export default function App() {
     const next: KitResult = remaining.length > 0
       ? generateRandomKit(remaining, survivors, kitOptions)
       : {
-          kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
-          layout: chooseLayout(remaining),
-          substituted: [],
-          empty: []
-        };
+        kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
+        layout: chooseLayout(remaining),
+        substituted: [],
+        empty: []
+      };
 
     setSourceFolders(updated);
     setKitResult(next);
@@ -262,11 +262,11 @@ export default function App() {
       remaining.length > 0
         ? generateRandomKit(remaining, survivors, kitOptions)
         : {
-            kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
-            layout: chooseLayout(remaining),
-            substituted: [],
-            empty: []
-          }
+          kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
+          layout: chooseLayout(remaining),
+          substituted: [],
+          empty: []
+        }
     );
     syncPrefix(updated);
   };
@@ -402,7 +402,7 @@ export default function App() {
           <div className='w-8 h-8 bg-accent-yellow rounded-sm flex items-center justify-center'>
             <div className='w-4 h-4 border-2 border-black rotate-45'></div>
           </div>
-          <h1 className='text-lg font-bold tracking-widest uppercase'>Move Kit Builder</h1>
+          <h1 className='text-lg font-bold tracking-widest uppercase'>Kit Creator for Ableton Move</h1>
         </div>
         <div className='flex items-center gap-4'>
           <div className='hidden sm:block text-sm text-[#666] uppercase tracking-wider'>
@@ -609,8 +609,8 @@ export default function App() {
                 {kitResult.layout.id === 'minimal-layout'
                   ? 'Only generic hats, kicks and snares were found, so each row is Kick, Snare, Snare, Hat.'
                   : kitResult.layout.id === 'generic-hats'
-                  ? 'No closed or open hats were found, so hats share one column and the bottom row is all percussion.'
-                  : 'Closed and open hats each get their own column.'}
+                    ? 'No closed or open hats were found, so hats share one column and the bottom row is all percussion.'
+                    : 'Closed and open hats each get their own column.'}
               </p>
               <p className='text-sm text-[#555] pt-2 leading-relaxed'>
                 Samples keep the format of the files you dropped. Nothing is converted
@@ -649,7 +649,7 @@ export default function App() {
       </main>
 
       <footer className='bg-[#111] border-t border-[#222] px-8 py-2.5 flex justify-between items-center text-sm text-[#555] uppercase tracking-widest shrink-0'>
-        <div>Move Kit Builder</div>
+        <div>Kit Creator for Ableton Move</div>
         <div>{sourceFolders.length > 0 ? `${sourceFolders.length} folder(s) loaded` : 'Waiting for samples'}</div>
       </footer>
 
@@ -660,7 +660,7 @@ export default function App() {
             <div className='flex items-center justify-between px-6 sm:px-8 py-5 border-b border-[#222] bg-[#181818] shrink-0'>
               <div className='flex items-center gap-3'>
                 <HelpCircle size={24} className='text-accent-yellow' />
-                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-[#FFF]'>Move Kit Builder — User Manual</h2>
+                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-[#FFF]'>Kit Creator for Ableton Move — User Manual</h2>
               </div>
               <button
                 onClick={() => setIsHelpOpen(false)}
@@ -676,7 +676,7 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
-                  Move Kit Builder automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-black/60 px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
+                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-black/60 px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
                 </p>
               </section>
 
