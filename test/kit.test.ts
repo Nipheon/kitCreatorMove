@@ -28,7 +28,7 @@ import { Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
 import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
-import { generateRandomKit, rerollSinglePad } from '../src/utils/kitGenerator';
+import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, prefixForFolders, prefixFromFolderName
 } from '../src/utils/kitNaming';
@@ -415,6 +415,20 @@ await test('loops do not decide the pad layout', () => {
   ];
   assert.equal(generateRandomKit(samples).layout.id, 'generic-hats');
   assert.equal(generateRandomKit(samples, [], { skipLoops: false }).layout.id, 'split-hats');
+});
+
+await test('isUsableSample filters out loops and excluded samples', () => {
+  const normal = makeSample('kick.wav', 'Kick');
+  const loop = { ...makeSample('loop.wav', 'Kick'), isLoop: true };
+  const excluded = { ...makeSample('snare.wav', 'Snare'), isExcluded: true };
+  const excludedLoop = { ...makeSample('hat_loop.wav', 'Hat'), isLoop: true, isExcluded: true };
+
+  assert.equal(isUsableSample(normal), true);
+  assert.equal(isUsableSample(loop), false);
+  assert.equal(isUsableSample(loop, { skipLoops: false }), true);
+  assert.equal(isUsableSample(excluded), false);
+  assert.equal(isUsableSample(excludedLoop), false);
+  assert.equal(isUsableSample(excludedLoop, { skipLoops: false }), false);
 });
 
 await test('a pack name does not decide what its samples are', () => {

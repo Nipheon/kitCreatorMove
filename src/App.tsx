@@ -2,7 +2,7 @@ import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { chokeGroupFor, chooseLayout, DISPLAY_INDICES, PAD_COUNT } from './padLayout';
-import { Sample, SourceFolder } from './types';
+import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
@@ -274,6 +274,26 @@ export default function App() {
     () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
     [samples, skipLoops]
   );
+  const categoryStats = useMemo(() => {
+    const stats: Record<Category, { usable: number; total: number }> = {
+      Kick: { usable: 0, total: 0 },
+      Snare: { usable: 0, total: 0 },
+      Clap: { usable: 0, total: 0 },
+      CHH: { usable: 0, total: 0 },
+      OHH: { usable: 0, total: 0 },
+      Hat: { usable: 0, total: 0 },
+      Crash: { usable: 0, total: 0 },
+      Perc: { usable: 0, total: 0 },
+      Other: { usable: 0, total: 0 }
+    };
+    samples.forEach(s => {
+      stats[s.category].total += 1;
+      if (isUsableSample(s, { skipLoops })) {
+        stats[s.category].usable += 1;
+      }
+    });
+    return stats;
+  }, [samples, skipLoops]);
 
   /**
    * Keeps the preset prefix in step with the folder that is actually loaded. Removing
@@ -667,14 +687,42 @@ export default function App() {
             <div className='text-xs text-text-muted uppercase tracking-wider font-medium px-1'>
               {sourceFolders.length > 0 ? `${activeFoldersCount} folder(s) used` : 'Waiting for samples'}
             </div>
-            <div className='p-4 bg-surface-card rounded-lg border border-border-dark'>
-              <div className='flex justify-between text-sm mb-2 text-text-muted uppercase'>
-                <span>Usable Samples</span>
-                <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
+            <div className='p-4 bg-surface-card rounded-lg border border-border-dark space-y-3'>
+              <div>
+                <div className='flex justify-between text-sm mb-2 text-text-muted uppercase font-medium'>
+                  <span>Usable Samples</span>
+                  <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
+                </div>
+                <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
+                  <div className='bg-accent-yellow h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
+                </div>
               </div>
-              <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
-                <div className='bg-accent-yellow h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
-              </div>
+
+              {samples.length > 0 && (
+                <div className='pt-3 border-t border-border-dark space-y-1.5'>
+                  <div className='text-xs text-text-muted uppercase tracking-wider font-medium mb-2'>
+                    Breakdown by Type
+                  </div>
+                  <div className='flex flex-col space-y-1.5'>
+                    {(['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Hat', 'Crash', 'Perc', 'Other'] as Category[]).map(cat => {
+                      const { usable, total } = categoryStats[cat];
+                      return (
+                        <div
+                          key={cat}
+                          className='flex justify-between text-sm uppercase font-medium'
+                        >
+                          <span className={total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}>
+                            {cat}
+                          </span>
+                          <span className={usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}>
+                            {usable.toLocaleString()} / {total.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </aside>

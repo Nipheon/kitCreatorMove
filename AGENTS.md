@@ -177,6 +177,8 @@ real packs.
   likely an index or a catalogue number, and `beat [128].wav` is not a loop.
 - **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
   makes a generic-hat library look like it has real split hats.
+- **`isUsableSample` filters out both loops (when `skipLoops` is enabled) and excluded samples (`sample.isExcluded`).**
+  This ensures the "Usable Samples" card count updates immediately when a user excludes a sample via the UI button.
 
 ## Pads, layout and choking
 
@@ -237,7 +239,7 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Includes section 5 "Thank You" with links to drum-kit-generator and Kit-Maker.
 - **Font Sizes & Lock/Shuffle Buttons:** Lock and Shuffle buttons use `text-pad-action` (12px, decreased by 2px from `text-sm`). Other text elements across the UI maintain a 14px (`text-sm`) minimum for legibility without breaking grid or panel layouts.
-- **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The bottom footer has been removed.
+- **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 - **The UI must not state things the app does not know.** Hardcoded device status, firmware version, bit depth and sample rate were all removed because none of them were ever read from anything. The panel reports only what the app actually knows: filled pads, source audio size, the active layout, usable samples against the total. Keep it that way.
 
 ---

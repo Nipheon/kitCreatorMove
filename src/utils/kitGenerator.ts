@@ -33,7 +33,7 @@ export interface KitOptions {
 }
 
 export function isUsableSample(sample: Sample, { skipLoops = true }: KitOptions = {}): boolean {
-  return !(skipLoops && sample.isLoop);
+  return !(skipLoops && sample.isLoop) && !sample.isExcluded;
 }
 
 /**
