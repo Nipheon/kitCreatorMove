@@ -30,7 +30,8 @@ import { createPresetBundle } from '../src/utils/exporter';
 import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
 import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
-  DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, prefixForFolders, prefixFromFolderName
+  DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
+  prefixFromFolderName
 } from '../src/utils/kitNaming';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -492,8 +493,8 @@ await test('the preset prefix follows the folder that is actually loaded', () =>
   const folder = (name: string, isEnabled = true): SourceFolder =>
     ({ id: name, name, samples: [], isEnabled });
 
-  // One folder names the kit after itself.
-  assert.equal(prefixForFolders([folder('AAAA')]), 'AAAA');
+  // One folder names the kit after itself, trimmed to the three-character prefix.
+  assert.equal(prefixForFolders([folder('AAAA')]), 'AAA');
   // Two or more and no single folder can claim it.
   assert.equal(prefixForFolders([folder('AAAA'), folder('BBBB')]), MULTI_FOLDER_PREFIX);
   assert.equal(
@@ -501,10 +502,10 @@ await test('the preset prefix follows the folder that is actually loaded', () =>
     MULTI_FOLDER_PREFIX
   );
   // Remove AAAA and the name must follow BBBB, not linger on the folder that is gone.
-  assert.equal(prefixForFolders([folder('BBBB')]), 'BBBB');
+  assert.equal(prefixForFolders([folder('BBBB')]), 'BBB');
   // Disabling counts as gone, so two folders with one disabled is a single-folder kit.
-  assert.equal(prefixForFolders([folder('AAAA', false), folder('BBBB')]), 'BBBB');
-  assert.equal(prefixForFolders([folder('AAAA'), folder('BBBB', false)]), 'AAAA');
+  assert.equal(prefixForFolders([folder('AAAA', false), folder('BBBB')]), 'BBB');
+  assert.equal(prefixForFolders([folder('AAAA'), folder('BBBB', false)]), 'AAA');
   // Nothing enabled falls back to the default.
   assert.equal(prefixForFolders([]), DEFAULT_PREFIX);
   assert.equal(prefixForFolders([folder('AAAA', false)]), DEFAULT_PREFIX);
@@ -514,15 +515,15 @@ await test('the preset prefix follows the folder that is actually loaded', () =>
   );
 });
 
-await test('prefixes are four uppercase characters', () => {
-  assert.equal(prefixFromFolderName('70s Breakbeats'), '70BR');
-  assert.equal(prefixFromFolderName('Vintage Drum Machine Pack'), 'VDMP');
-  assert.equal(prefixFromFolderName('Acoustic Kit'), 'ACKI');
-  assert.equal(prefixFromFolderName('Techno'), 'TECH');
-  assert.equal(prefixFromFolderName('Hi'), 'HIKI');
-  assert.equal(prefixFromFolderName(''), 'KITX');
+await test('prefixes are three uppercase characters', () => {
+  assert.equal(prefixFromFolderName('70s Breakbeats'), '70B');
+  assert.equal(prefixFromFolderName('Vintage Drum Machine Pack'), 'VDM');
+  assert.equal(prefixFromFolderName('Acoustic Kit'), 'ACK');
+  assert.equal(prefixFromFolderName('Techno'), 'TEC');
+  assert.equal(prefixFromFolderName('Hi'), 'HIK');
+  assert.equal(prefixFromFolderName(''), 'KIT');
   for (const name of ['A', 'Some Very Long Folder Name Here', '!!!', '70s Breakbeats']) {
-    assert.equal(prefixFromFolderName(name).length, 4, name);
+    assert.equal(prefixFromFolderName(name).length, PREFIX_LENGTH, name);
   }
 });
 
@@ -627,13 +628,39 @@ await test('a grid id identifies the arrangement, and nothing else', () => {
   assert.equal(new Set(shapes).size, shapes.length, 'one arrangement got two ids');
 });
 
+await test('the name carries the columns half of the id, the app keeps the whole thing', () => {
+  // Move shows roughly 9-11 characters of a preset name, so the shared top row is left
+  // out of the exported name. That makes columnsId a deliberately weaker fingerprint:
+  // two grids differing only in their top row name identically.
+  const kicks = Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick'));
+  const snares = Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'));
+  const closed = Array.from({ length: 4 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH'));
+  const open = Array.from({ length: 4 }, (_, i) => makeSample(`ohh${i}.wav`, 'OHH'));
+  const claps = Array.from({ length: 4 }, (_, i) => makeSample(`clap${i}.wav`, 'Clap'));
+  const perc = Array.from({ length: 4 }, (_, i) => makeSample(`perc${i}.wav`, 'Perc'));
+
+  const clapRow = generateRandomKit([...kicks, ...snares, ...closed, ...open, ...claps]).layout;
+  const shared = generateRandomKit([
+    ...kicks, ...snares, ...closed, ...open, ...claps, ...perc
+  ]).layout;
+
+  assert.equal(clapRow.id, 'KSCO_LLLL');
+  assert.equal(shared.id, 'KSCO_LLPP');
+  assert.notEqual(clapRow.id, shared.id, 'the full id still tells them apart');
+  assert.equal(clapRow.columnsId, 'KSCO');
+  assert.equal(shared.columnsId, 'KSCO');
+  assert.notDeepEqual(clapRow.roles, shared.roles, 'and they really are different grids');
+});
+
 await test('a grid id is safe to put in a filename', () => {
   const CATEGORIES: Category[] = ['Kick', 'Snare', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
   for (let mask = 1; mask < (1 << CATEGORIES.length); mask++) {
     const present = CATEGORIES.filter((_, i) => mask & (1 << i));
     const library = present.map((category, i) => makeSample(`${category}-${i}.wav`, category));
-    const { id } = generateRandomKit(library).layout;
+    const { id, columnsId } = generateRandomKit(library).layout;
     assert.match(id, /^[A-Z]{4}(_[A-Z]{4})?$/, id);
+    assert.match(columnsId, /^[A-Z]{4}$/, columnsId);
+    assert.ok(id.startsWith(columnsId), `${id} should start with ${columnsId}`);
   }
 });
 

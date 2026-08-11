@@ -204,12 +204,21 @@ real packs.
   the libraries someone had thought of; everything else fell through to whichever
   matched least badly, and layout choice never looked at kicks or snares at all, so a
   percussion-only pack got a Kick/Snare/CHH/OHH grid and filled it by fallback.
-- **The grid id is a fingerprint of the arrangement, and it ships in the kit name.**
-  One letter per category — `K`ick, `S`nare, c`L`ap, `C`losed, `O`pen, `P`erc, `X` for
-  other — as four column letters, then `_` and four top-row letters if there is a shared
-  row: `KSCO`, `KSSC`, `KSCO_LLPP`. Equal ids mean every pad advertises the same role,
-  which is the condition for swapping one drum rack for another on the device, so the
-  kit exports as `PREFIX-KSCO_LLPP-Suffix`.
+- **The grid id is a fingerprint of the arrangement.** One letter per category —
+  `K`ick, `S`nare, c`L`ap, `C`losed, `O`pen, `P`erc, `X` for other — as four column
+  letters, then `_` and four top-row letters if there is a shared row: `KSCO`, `KSSC`,
+  `KSCO_LLPP`. Equal ids mean every pad advertises the same role, which is the condition
+  for swapping one drum rack for another on the device.
+- **The exported name carries `columnsId`, not `id`.** Move shows roughly 9-11
+  characters of a preset name, so the shared top row is left out and a kit exports as
+  `PRE-KSCO-Suffix` (13 characters, which truncates into the decorative suffix rather
+  than into either identifying part). **`columnsId` is therefore a deliberately weaker
+  fingerprint than `id`:** `KSCO_LLLL` and `KSCO_LLPP` both name as `KSCO`, so two kits
+  sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
+  worth the characters. Any check that two grids are genuinely identical must use `id`,
+  which is what the settings panel shows.
+- **The preset prefix is three characters** (`PREFIX_LENGTH` in `kitNaming.ts`), cut down
+  from four to make room for the grid id inside the same visible budget.
 
   The separator is `_` and the alphabet is A-Z on purpose: this string becomes part of a
   `.ablpresetbundle` directory name, and `+` is the kind of character that gets

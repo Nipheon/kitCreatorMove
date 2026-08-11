@@ -8,7 +8,9 @@ import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
-import { DEFAULT_PREFIX, generateKitName, prefixForFolders } from './utils/kitNaming';
+import {
+  DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders
+} from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
@@ -275,15 +277,16 @@ export default function App() {
 
   /**
    * The grid id travels in the exported kit name so a rack can be identified on the
-   * device: two kits are safe to swap exactly when their ids match. It is dropped while
-   * no samples are loaded, where there is no grid to name.
+   * device. `columnsId` rather than `id`: Move shows roughly 9-11 characters, and
+   * `PREFIX-KSCO-Suffix` keeps both identifying parts ahead of the cut while the full
+   * id would not fit. The id is dropped entirely while no samples are loaded.
    */
   const kitNameFor = (suffix: string, gridId: string) =>
     gridId && gridId !== NO_SAMPLES_GRID_ID
       ? `${kitPrefix}-${gridId}-${suffix}`
       : `${kitPrefix}-${suffix}`;
 
-  const exportName = kitNameFor(kitSuffix, kitResult.layout.id);
+  const exportName = kitNameFor(kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
   const activeFoldersCount = useMemo(
     () => sourceFolders.filter(f => f.isEnabled !== false).length,
@@ -581,10 +584,12 @@ export default function App() {
       const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
       // Every kit in a batch is built from the same library, so they all share a grid
       // and the id is the same for each — which is the point: a batch is swappable.
-      let name = kitNameFor(generateKitName('').suffix, next.layout.id);
+      let name = kitNameFor(generateKitName('').suffix, next.layout.columnsId);
       // Fall back to a counter rather than appending repeatedly, which produced
       // names like NAME-Zap-3-3-3.
-      if (used.has(name)) name = `${kitNameFor(generateKitName('').suffix, next.layout.id)}-${i + 1}`;
+      if (used.has(name)) {
+        name = `${kitNameFor(generateKitName('').suffix, next.layout.columnsId)}-${i + 1}`;
+      }
       used.add(name);
       kits.push({ kit: next.kit, name });
     }
@@ -855,8 +860,8 @@ export default function App() {
                     setPrefixEdited(true);
                   }}
                   className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright uppercase'
-                  placeholder='PREFIX'
-                  maxLength={12}
+                  placeholder='PRE'
+                  maxLength={PREFIX_LENGTH}
                   aria-label='Preset name prefix'
                 />
                 <span className='text-text-muted-dark'>-</span>
@@ -934,7 +939,10 @@ export default function App() {
               <p className='text-sm text-text-muted-dark pt-3 leading-relaxed'>
                 The grid is built from the categories this library actually holds. Kits
                 sharing a Grid ID lay their pads out identically, so one can replace the
-                other on the device. The ID is part of the exported kit name.
+                other on the device. The exported name carries the column half of the ID
+                {kitResult.layout.id !== kitResult.layout.columnsId
+                  ? ` (${kitResult.layout.columnsId}) — the top row is left off to fit the display on the device.`
+                  : '.'}
               </p>
               <p className='text-sm text-text-muted-dark pt-2 leading-relaxed'>
                 Samples keep the format of the files you dropped. Nothing is converted

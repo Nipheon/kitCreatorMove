@@ -9,25 +9,31 @@ export const KIT_SUFFIXES = [
   'Grim', 'Idol', 'Sect'
 ];
 
-export const DEFAULT_PREFIX = 'MOVE';
+export const DEFAULT_PREFIX = 'MOV';
 
 /** Used once more than one folder is contributing — no single folder names the kit. */
-export const MULTI_FOLDER_PREFIX = 'MKIT';
+export const MULTI_FOLDER_PREFIX = 'MKT';
 
-/** Four uppercase characters derived from the folder's words. */
+/**
+ * Three uppercase characters derived from the folder's words.
+ *
+ * Three rather than four because the exported name also carries the grid id, and Move
+ * shows roughly 9-11 characters of a preset name. `PREFIX-GRID-Suffix` puts both of the
+ * parts that identify a kit ahead of the cut, and truncates the decorative suffix.
+ */
+export const PREFIX_LENGTH = 3;
+
 export function prefixFromFolderName(folderName: string): string {
   const words = folderName.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
   let prefix = '';
-  if (words.length >= 4) {
-    prefix = words[0][0] + words[1][0] + words[2][0] + words[3][0];
-  } else if (words.length === 3) {
-    prefix = words[0].substring(0, 2) + words[1][0] + words[2][0];
+  if (words.length >= 3) {
+    prefix = words[0][0] + words[1][0] + words[2][0];
   } else if (words.length === 2) {
-    prefix = words[0].substring(0, 2) + words[1].substring(0, 2);
+    prefix = words[0].substring(0, 2) + words[1][0];
   } else if (words.length === 1) {
-    prefix = words[0].substring(0, 4);
+    prefix = words[0].substring(0, PREFIX_LENGTH);
   }
-  return (prefix + 'KITX').substring(0, 4).toUpperCase();
+  return (prefix + 'KIT').substring(0, PREFIX_LENGTH).toUpperCase();
 }
 
 export function randomSuffix(): string {

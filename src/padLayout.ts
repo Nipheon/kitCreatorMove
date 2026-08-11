@@ -7,9 +7,19 @@ export interface PadLayout {
    * Identifies the grid *shape*, not the library that produced it. Two kits built from
    * completely different packs share an id exactly when every pad advertises the same
    * role, which is the condition for swapping one drum rack for the other on the device.
-   * It travels in the kit name, so it has to stay short and filename-safe.
    */
   id: string;
+  /**
+   * The four column letters alone — `id` without its shared-top-row half. This is what
+   * goes in the exported kit name, because Move shows roughly 9-11 characters of a
+   * preset name and the full id does not fit alongside a prefix and suffix.
+   *
+   * It is deliberately a weaker fingerprint than `id`: `KSCO_LLLL` and `KSCO_LLPP` both
+   * name as `KSCO`, so two kits sharing a name id can still differ on pads 13-16. The
+   * top row was judged not worth the characters. Use `id`, not this, for any check that
+   * two grids are genuinely identical.
+   */
+  columnsId: string;
   label: string;
   /** The role each pad advertises, in Move's pad order (pad 1 = index 0). */
   roles: Category[];
@@ -135,10 +145,11 @@ function shareTopRow(leftovers: Category[]): Category[] {
   return row;
 }
 
+const gridCode = (categories: Category[]) => categories.map(c => LETTER[c] ?? 'X').join('');
+
 function gridId(columns: Category[], topRow: Category[]): string {
-  const code = (categories: Category[]) => categories.map(c => LETTER[c] ?? 'X').join('');
   // `_` rather than `+`: this string becomes part of a .ablpresetbundle directory name.
-  return topRow.length > 0 ? `${code(columns)}_${code(topRow)}` : code(columns);
+  return topRow.length > 0 ? `${gridCode(columns)}_${gridCode(topRow)}` : gridCode(columns);
 }
 
 function gridLabel(columns: Category[], topRow: Category[]): string {
@@ -179,6 +190,7 @@ export function deriveLayout(samples: Sample[]): PadLayout {
     const roles = Array.from({ length: PAD_COUNT }, (_, i) => PLACEHOLDER_COLUMNS[i % 4]);
     return {
       id: NO_SAMPLES_GRID_ID,
+      columnsId: NO_SAMPLES_GRID_ID,
       label: 'No samples yet',
       roles,
       preferences: roles.map(role => [role, ...RANK.filter(c => c !== role)])
@@ -202,7 +214,13 @@ export function deriveLayout(samples: Sample[]): PadLayout {
    */
   const preferences = roles.map(role => [role, ...RANK.filter(c => c !== role)]);
 
-  return { id: gridId(columns, topRow), label: gridLabel(columns, topRow), roles, preferences };
+  return {
+    id: gridId(columns, topRow),
+    columnsId: gridCode(columns),
+    label: gridLabel(columns, topRow),
+    roles,
+    preferences
+  };
 }
 
 /** Kept as the name the rest of the app calls; the grid is derived, never chosen. */
