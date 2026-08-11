@@ -943,6 +943,31 @@ export default function App() {
                   <li><strong className='text-white'>Device Transfer:</strong> Copy exported <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Thank You</h3>
+                <p className='text-text-light'>
+                  Special thanks to{' '}
+                  <a
+                    href='https://github.com/klingklangmatze/drum-kit-generator'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    drum-kit-generator
+                  </a>{' '}
+                  for providing great insights on how to create ablpreset files. Also check out {' '}
+                  <a
+                    href='https://www.kit-maker.com/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Kit-Maker
+                  </a>{' '}
+                  for a much more capable tool for kit creation.
+                </p>
+              </section>
             </div>
 
             {/* Modal Footer */}
