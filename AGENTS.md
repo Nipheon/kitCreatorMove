@@ -192,6 +192,36 @@ real packs.
   On top of that, **if there are no clap samples at all, Clap pads become Snare pads**
   in whichever layout was chosen. The active layout is named in the settings panel so
   the grid never reshapes silently.
+- **In the split layout an unqualified `Hat` is a closed hat.** `poolCategoryFor` files
+  generic hats into the `CHH` pool, so the closed pads draw from labelled and generic
+  hats together, and neither hat chain lists `Hat` any more. Ranking `Hat` below `CHH`
+  in the chain was the earlier attempt and did nothing: `take` drains the `CHH` pool
+  completely before it reads the next entry, so a library with three or more labelled
+  closed hats could never reach its generic ones. The open pads are deliberately left
+  out — under the same assumption a generic hat is the wrong sound for an open pad, so
+  `OHH` falls through to `Other`.
+
+  **Consequence, accepted deliberately:** labelled and generic hats are now equal
+  citizens in one pool. A library with 3 CHH and 25 generic hats will usually show
+  generic hats on all three closed pads. If that ever needs to change, bias the draw —
+  do not put `Hat` back in the preference chain, it does not work.
+
+  The promotion applies to the split layout only. `generic-hats` and `minimal-layout`
+  have real `Hat` pads and need that pool where it is.
+- **A role the library cannot fill is reported once, in `unavailableRoles` — not as
+  every pad being "substituted".** A percussion-only pack used to report all 16 pads,
+  which buried the pads that had genuinely lost a draw. `substituted` now means only
+  that: the pad's category existed in the library and the pad still did not get it.
+  `satisfiesRole` keeps the generic-hat-on-closed-pad equivalence out of both counts.
+- **The sample pool dedupe key is `name + byte size` (`kitGenerator.ts`), deliberately a
+  heuristic.** Nothing reads the audio. Two same-named files of identical length from a
+  fixed-length pack collide, and because the set is rebuilt per generate in folder
+  order, the same twin wins every time — the other is permanently unreachable rather
+  than occasionally skipped. Accepted: the cost is silent variety loss, never a wrong
+  export. Do **not** "fix" it by adding `file.lastModified` — copies that lose their
+  mtime would stop merging and put the same hit on two pads, which is worse than one
+  sample quietly missing. A correct fix is byte comparison for colliding signatures
+  only; note `crypto.subtle` is unavailable, this app is served over plain http.
 - **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay
   percussion and stay unchoked — a ride is meant to ring out.
 - **Empty pads are deliberately not lockable.** Asserted explicitly on the lock button,
@@ -209,7 +239,7 @@ real packs.
   - **The actual cause was buffering asymmetry, not spacing.** Pad 0 was fired on a flat `setTimeout(playNextStep, 100)` while pads 1–15 each got 750ms+ of extra decode time, so only pad 0 was ever told to play while still cold.
   - **Readiness gate (`pad-ready`).** Each `Pad` dispatches `pad-ready` with `{ index, sampleId }` on `canplaythrough` (and immediately if `readyState >= 3`, which a blob decoded for an earlier kit can already be). `App` keeps a lifetime-mounted listener filling a `readyPads` map of pad index -> buffered sample id, and `startPreview` waits until every non-empty pad in the kit reports its current sample buffered, with a 2s ceiling so a sample that never decodes cannot hang the preview. The map is keyed by index *and* id so a stale entry from a previous sample never counts as ready.
   - **The gate alone did not fix the symptom, and decode latency is therefore ruled out.** It shipped in `#5` and pad 01 still sounded late: either the gate opened, meaning pad 01 played at `readyState 4`, or the 2s ceiling ran, which leaves it just as buffered. Whatever the remaining lag is, it is not the blob still decoding. Do not re-derive a buffering fix for this.
-  - **Lead-in (`PREVIEW_LEAD_IN_MS`, 150ms).** Held before pad 01 fires during auto preview, on top of the gate. Ignored when the user manually presses the preview button (0ms lead-in, starts immediately). Buffered is not the same as able to sound immediately — the first play after the output stream has been idle carries device start-up latency that no `readyState` reports. This constant is tuned by ear, not measured; say so rather than inventing a number for it.
+  - **Lead-in (`PREVIEW_LEAD_IN_MS`, 150ms).** Held before pad 01 fires **whenever the readiness gate had to wait**, on top of the gate; skipped when every pad was already buffered at the moment preview was requested. It was briefly keyed on auto-vs-manual instead, which gave manual preview a 0ms start even when it had just waited on the gate — pressing Preview Kit straight after a generate reproduced the original late pad 01. Auto preview always arrives cold so it is unaffected in practice; a generate with every pad locked is now the one case where auto preview starts with no lead-in, correctly, because there is nothing to wait for. Buffered is not the same as able to sound immediately — the first play after the output stream has been idle carries device start-up latency that no `readyState` reports. This constant is tuned by ear, not measured; say so rather than inventing a number for it.
   - **`pad-started` is dispatched at audible onset, not at `play()` resolution.** `Pad.firstAudibleProgress` polls animation frames until `audio.currentTime > 0` (400ms cap) before dispatching. This is what keeps pad 02 from arriving early: the 750ms step spacing is measured from that event, so if pad 01's sound lags its `play()` call for *any* reason, the gap to pad 02 shrinks by exactly that lag. `timeupdate` is not usable here — throttled ~250ms, the same order as the lag being corrected.
   - **`startPreview` takes the kit as an argument.** A generate calls `setKitResult` and `startPreview` in the same tick, so reading `kit` state inside would gate on the *previous* kit.
   - **Audio Pre-buffering:** Each pad executes `audio.preload = 'auto'` and `audio.load()` inside `useEffect([sample])` upon sample assignment to force the browser to decode and buffer PCM data in RAM immediately upon kit creation.
@@ -240,6 +270,17 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Includes section 5 "Thank You" with links to drum-kit-generator and Kit-Maker.
 - **Font Sizes & Lock/Shuffle Buttons:** Lock and Shuffle buttons use `text-pad-action` (12px, decreased by 2px from `text-sm`). Other text elements across the UI maintain a 14px (`text-sm`) minimum for legibility without breaking grid or panel layouts.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
+
+  **The Hat row folds into a "CHH + HAT" row whenever the split layout is active**,
+  because that is where those samples are actually drawn from. A separate Hat row would
+  read as unused while its samples sit on closed pads. The merge is decided by running
+  `chooseLayout` over the current sample list, *not* by reading `kitResult.layout` —
+  `emptyKit` defaults that field to the split layout, so before the first generate it is
+  a placeholder rather than a decision about this library.
+- **The pad warning block is currently wrapped in `hidden`** ("Hidden UI container: code
+  logic preserved" in `App.tsx`). `substituted`, `empty` and `unavailableRoles` are all
+  computed and rendered, but nothing reaches the user until that wrapper comes off. Do
+  not conclude the counts are unused.
 - **The UI must not state things the app does not know.** Hardcoded device status, firmware version, bit depth and sample rate were all removed because none of them were ever read from anything. The panel reports only what the app actually knows: filled pads, source audio size, the active layout, usable samples against the total. Keep it that way.
 
 ---
