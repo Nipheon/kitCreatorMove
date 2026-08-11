@@ -196,67 +196,41 @@ real packs.
   not left to the disabled-ancestor side effect.
 - **The pad body is a `<div role="button">`, not a `<button>`.** The lock, shuffle, and exclude
   controls are real buttons and cannot be nested inside one.
-- **Split Pad Bottom Bar (50/50):** The bottom bar of each pad is evenly split between
-  `Lock` (left) and `Shuffle` (right).
-- **Audio auditioning is scoped to a single pad's Shuffle.** Clicking a pad's Shuffle
-  plays that pad. Generating a full kit or dropping folders MUST remain silent — never
-  trigger all 16 pads at once.
+- **Kit Generation Visual Feedback:** When clicking "Generate Random Kit", all pads simultaneously start a brief spinner animation (`Loader2` + "Rolling") that stops at random durations up to 100ms per pad before revealing their newly picked sample names. When Auto Preview is enabled, this spinner animation is skipped so preview playback begins immediately.
+- **Preview Kit Button & Auto Preview:** Located directly to the right of the "Generate Random Kit" button. When clicked, it sequentially triggers each pad in index order with a 750ms delay between pads. An **Auto Preview** checkbox next to the button automatically triggers kit preview playback whenever a new kit is generated. Clicking anywhere on the interface, pressing any keyboard key, clicking the preview button again, or generating a new kit stops the active preview sequence cleanly.
 
-  This is driven by an **`auditionToken`**: `App` holds `{ index, token }` and bumps the
-  token on each Shuffle; `Pad` plays when the token changes. It is deliberately *not*
-  keyed on `sample`. The earlier `shouldPlayOnNextSample` ref was armed on click and
-  disarmed inside `useEffect([sample])` — but a shuffle can land on the same sample, and
-  an identical object reference means that effect never runs. The pad stayed armed, and
-  the next full generate played every armed pad at once, breaking this very rule.
+  *Technical root cause analysis & tried solutions for Auto Preview timing discrepancies:*
+  - **Manual vs. Auto Preview Difference:** Manual preview clicks occur seconds after kit generation when all 16 `HTMLAudioElement` instances have fully rendered and buffered their Blob URLs. In contrast, `autoPreview` triggers immediately upon kit generation when 16 brand-new Blob URLs (`blob:http://...`) are created simultaneously.
+  - **Browser HTMLAudioElement Cold-Start Latency:** When `audio.play()` is invoked on a freshly created `new Audio(blobUrl)` whose media buffer has not reached `HAVE_ENOUGH_DATA`, the browser defers outputting sound until decoding completes (~100–250ms latency). This causes Pad 0 (the first pad) to start late on a cold generate.
+  - **Static vs. Event-Driven Step Timing:** Hardcoded static timers (`t = step * 750`) resulted in Pad 1 firing at absolute `750ms` while Pad 0's sound was delayed to `150ms`, making Pad 1 sound only ~600ms after Pad 0 started. To fix step spacing, timing is event-driven via a `pad-started` custom event dispatched when `await audio.play()` resolves, ensuring each subsequent pad is scheduled exactly 750ms after the preceding pad actually outputs sound.
+  - **Audio Pre-buffering:** Each pad executes `audio.preload = 'auto'` and `audio.load()` inside `useEffect([sample])` upon sample assignment to force the browser to decode and buffer PCM data in RAM immediately upon kit creation.
+- **Audio auditioning is scoped to a single pad's Shuffle or Exclude.** Clicking a pad's Shuffle or clicking the icon to remove a sample from the pool plays that pad's new sample. Generating a full kit or dropping folders MUST remain silent — never trigger all 16 pads at once.
 
-  **The audition effect must stay declared below the effect that builds the audio
-  element.** React runs effects in declaration order within a commit, which is what
-  guarantees the new sample is loaded before it plays.
-- **Shuffle never returns the pad's own sample.** It excludes the current sample and
-  walks the pad's preference chain, so it reaches a fallback category rather than
-  repeating. Only if the library holds nothing else does the pad keep what it has —
-  excluding the current sample must never empty a pad.
-- **`substituted`/`empty` come from one shared `summarisePads`.** A full generate and a
-  single-pad shuffle used to count differently, so shuffling an unrelated pad moved the
-  warning from "2 pads" to "3 pads" on its own.
-- **Duplicate folder skipping:** folders already present in `sourceFolders` are skipped
-  by lowercased name. A drop where *everything* was skipped reports "already loaded" —
-  a drop that changes nothing has to say why, or it reads as the app ignoring you.
+  This is driven by an **`auditionToken`**: `App` holds `{ index, token }` and bumps the token on Shuffle or Exclude; `Pad` plays when the token changes. It is deliberately *not* keyed on `sample`. The earlier `shouldPlayOnNextSample` ref was armed on click and disarmed inside `useEffect([sample])` — but a shuffle can land on the same sample, and an identical object reference means that effect never runs. The pad stayed armed, and the next full generate played every armed pad at once, breaking this very rule.
+
+  **The audition effect must stay declared below the effect that builds the audio element.** React runs effects in declaration order within a commit, which is what guarantees the new sample is loaded before it plays.
+- **Shuffle never returns the pad's own sample.** It excludes the current sample and walks the pad's preference chain, so it reaches a fallback category rather than repeating. Only if the library holds nothing else does the pad keep what it has — excluding the current sample must never empty a pad.
+- **`substituted`/`empty` come from one shared `summarisePads`.** A full generate and a single-pad shuffle used to count differently, so shuffling an unrelated pad moved the warning from "2 pads" to "3 pads" on its own.
+- **Duplicate folder skipping:** folders already present in `sourceFolders` are skipped by lowercased name. A drop where *everything* was skipped reports "already loaded" — a drop that changes nothing has to say why, or it reads as the app ignoring you.
 
 ## Preset naming (`kitNaming.ts`)
 
-- **The prefix describes what the kit is built from**, recomputed whenever folders are
-  added, removed or disabled: no folders enabled gives `MOVE`, exactly one gives that
-  folder's name, more than one gives `MKIT` because no single folder names the kit.
-  It used to be set only on the first drop, so removing folder "AAAA" left kits built
-  entirely from "BBBB" exporting as `AAAA-…`.
-- **Once the user types their own prefix, deriving stops** (`prefixEdited`). Do not
-  overwrite a name the user has entered.
-- The suffix is rolled once on the first drop and thereafter belongs to the user, who
-  changes it with the Randomize Suffix button. Folder changes must not reroll it.
-- Naming lives in `kitNaming.ts` rather than `App.tsx` so it can be tested — the suite
-  is Node-only and cannot reach a component.
+- **The prefix describes what the kit is built from**, recomputed whenever folders are added, removed or disabled: no folders enabled gives `MOVE`, exactly one gives that folder's name, more than one gives `MKIT` because no single folder names the kit. It used to be set only on the first drop, so removing folder "AAAA" left kits built entirely from "BBBB" exporting as `AAAA-…`.
+- **Once the user types their own prefix, deriving stops** (`prefixEdited`). Do not overwrite a name the user has entered.
+- The suffix is rolled once on the first drop and thereafter belongs to the user, who changes it with the Randomize Suffix button. Folder changes must not reroll it.
+- Naming lives in `kitNaming.ts` rather than `App.tsx` so it can be tested — the suite is Node-only and cannot reach a component.
 
 ## Analytics
 
-Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. A
-`@vercel/analytics` dependency was also present but never imported — dead weight,
-removed. Do not add a second provider.
+Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. A `@vercel/analytics` dependency was also present but never imported — dead weight, removed. Do not add a second provider.
 
 ## UI, Dimensions & Design System
 
-- **Centralized Theme Accent Color (`index.css`):** The primary accent color is defined in
-  `src/index.css` via `:root { --accent-yellow: #D0C066; }` and `@theme { --color-accent-yellow: var(--accent-yellow); }`.
-  Use `accent-yellow` utility classes (`text-accent-yellow`, `border-accent-yellow`, `bg-accent-yellow`) rather than hardcoding hex values.
-- **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px`
-  (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain
-  aspect ratio and avoid pad overlap.
+- **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements.
+- **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`).
-- **Minimum Font Size:** All text elements across the entire UI are styled at `14px` (`text-sm`) minimum to ensure legibility without breaking grid or panel layouts.
-- **The UI must not state things the app does not know.** Hardcoded device status, firmware
-  version, bit depth and sample rate were all removed because none of them were ever read from anything.
-  The panel reports only what the app actually knows: filled pads, source audio size, the active layout,
-  usable samples against the total. Keep it that way.
+- **Font Sizes & Lock/Shuffle Buttons:** Lock and Shuffle buttons use `text-pad-action` (12px, decreased by 2px from `text-sm`). Other text elements across the UI maintain a 14px (`text-sm`) minimum for legibility without breaking grid or panel layouts.
+- **The UI must not state things the app does not know.** Hardcoded device status, firmware version, bit depth and sample rate were all removed because none of them were ever read from anything. The panel reports only what the app actually knows: filled pads, source audio size, the active layout, usable samples against the total. Keep it that way.
 
 ---
 

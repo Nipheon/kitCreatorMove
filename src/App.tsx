@@ -1,4 +1,4 @@
-import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X } from 'lucide-react';
+import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { chokeGroupFor, chooseLayout, DISPLAY_INDICES, PAD_COUNT } from './padLayout';
@@ -44,6 +44,111 @@ export default function App() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
   const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [autoPreview, setAutoPreview] = useState(false);
+  const [spinningPads, setSpinningPads] = useState<boolean[]>(new Array(PAD_COUNT).fill(false));
+  const previewTimerIds = useRef<number[]>([]);
+  const spinTimerIds = useRef<number[]>([]);
+  const lastStoppedTime = useRef(0);
+
+  const stopSpinAnimation = React.useCallback(() => {
+    spinTimerIds.current.forEach(id => clearTimeout(id));
+    spinTimerIds.current = [];
+    setSpinningPads(new Array(PAD_COUNT).fill(false));
+  }, []);
+
+  const stopPreview = React.useCallback(() => {
+    lastStoppedTime.current = Date.now();
+    previewTimerIds.current.forEach(id => clearTimeout(id));
+    previewTimerIds.current = [];
+    setIsPreviewing(false);
+    window.dispatchEvent(new CustomEvent('stop-all-audio'));
+  }, []);
+
+  const startPreview = React.useCallback(() => {
+    stopPreview();
+    setIsPreviewing(true);
+
+    const padOrder = Array.from({ length: PAD_COUNT }, (_, i) => i);
+    let currentStep = 0;
+
+    const playNextStep = () => {
+      if (currentStep >= padOrder.length) {
+        setIsPreviewing(false);
+        return;
+      }
+
+      const padIndex = padOrder[currentStep];
+      currentStep++;
+
+      let stepAdvanced = false;
+
+      const advanceStep = () => {
+        if (stepAdvanced) return;
+        stepAdvanced = true;
+
+        if (currentStep < padOrder.length) {
+          const timerId = window.setTimeout(playNextStep, 750);
+          previewTimerIds.current.push(timerId);
+        } else {
+          const endTimerId = window.setTimeout(() => {
+            setIsPreviewing(false);
+          }, 750);
+          previewTimerIds.current.push(endTimerId);
+        }
+      };
+
+      const onPadStarted = (e: Event) => {
+        if ((e as CustomEvent<number>).detail === padIndex) {
+          window.removeEventListener('pad-started', onPadStarted);
+          advanceStep();
+        }
+      };
+
+      window.addEventListener('pad-started', onPadStarted);
+
+      // Fallback timer in case pad is empty or audio playback fails/errors
+      const fallbackTimerId = window.setTimeout(() => {
+        window.removeEventListener('pad-started', onPadStarted);
+        advanceStep();
+      }, 1000);
+      previewTimerIds.current.push(fallbackTimerId);
+
+      window.dispatchEvent(new CustomEvent('play-pad', { detail: padIndex }));
+    };
+
+    // 100ms tick to ensure React effects & audio.load() buffer before pad 0 fires
+    const initialTimerId = window.setTimeout(playNextStep, 100);
+    previewTimerIds.current.push(initialTimerId);
+  }, [stopPreview]);
+
+  const previewKit = React.useCallback(() => {
+    if (isPreviewing || Date.now() - lastStoppedTime.current < 200) {
+      stopPreview();
+      return;
+    }
+
+    startPreview();
+  }, [isPreviewing, stopPreview, startPreview]);
+
+  useEffect(() => {
+    if (!isPreviewing) return;
+
+    const handleGlobalInteraction = () => {
+      stopPreview();
+    };
+
+    window.addEventListener('pointerdown', handleGlobalInteraction, true);
+    window.addEventListener('keydown', handleGlobalInteraction, true);
+    return () => {
+      window.removeEventListener('pointerdown', handleGlobalInteraction, true);
+      window.removeEventListener('keydown', handleGlobalInteraction, true);
+    };
+  }, [isPreviewing, stopPreview]);
+
+  useEffect(() => {
+    return () => stopPreview();
+  }, [stopPreview]);
 
   // dragenter/dragleave also fire for every child element, so the overlay is driven
   // by a depth counter rather than by the raw events.
@@ -271,7 +376,7 @@ export default function App() {
     syncPrefix(updated);
   };
 
-  const handleExcludeSample = (sampleId: string) => {
+  const handleExcludeSample = (sampleId: string, padIndex?: number) => {
     const updated = sourceFolders.map(f => ({
       ...f,
       samples: f.samples.map(s => (s.id === sampleId ? { ...s, isExcluded: true } : s))
@@ -285,11 +390,37 @@ export default function App() {
         ? generateRandomKit(remaining, survivors, kitOptions)
         : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [] }
     );
+    if (padIndex !== undefined) {
+      setAudition(prev => ({ index: padIndex, token: prev.token + 1 }));
+    }
   };
 
   const randomizeKit = () => {
+    stopPreview();
+    stopSpinAnimation();
+
     if (samples.length > 0) {
       setKitResult(generateRandomKit(samples, lockedFrom(kit), kitOptions));
+
+      if (autoPreview) {
+        startPreview();
+      } else {
+        // All pads start spinning simultaneously
+        setSpinningPads(new Array(PAD_COUNT).fill(true));
+
+        // Each pad gets a random duration up to 100ms
+        for (let i = 0; i < PAD_COUNT; i++) {
+          const duration = Math.floor(Math.random() * 70) + 30; // 30ms - 100ms
+          const timerId = window.setTimeout(() => {
+            setSpinningPads(prev => {
+              const next = [...prev];
+              next[i] = false;
+              return next;
+            });
+          }, duration);
+          spinTimerIds.current.push(timerId);
+        }
+      }
     }
   };
 
@@ -371,33 +502,33 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col h-screen w-screen bg-[#090909] text-[#E0E0E0] font-sans overflow-hidden"
+      className="flex flex-col h-screen w-screen bg-surface-darkest text-text-bright font-sans overflow-hidden"
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {(isDragging || isLoading) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#090909]/90 backdrop-blur-sm border-2 border-dashed border-accent-yellow m-4 rounded-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-darkest/90 backdrop-blur-sm border-2 border-dashed border-accent-yellow m-4 rounded-xl">
           <div className="text-center">
             {isLoading ? (
               <>
                 <Loader2 className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-spin" />
                 <h2 className="text-2xl font-bold uppercase tracking-widest">Scanning</h2>
-                <p className="text-[#888] mt-2 text-sm uppercase tracking-wider">Reading audio files…</p>
+                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">Reading audio files…</p>
               </>
             ) : (
               <>
                 <FolderUp className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-pulse" />
                 <h2 className="text-2xl font-bold uppercase tracking-widest">Drop Sample Folders Here</h2>
-                <p className="text-[#888] mt-2 text-sm uppercase tracking-wider">.wav and .aiff files</p>
+                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">.wav and .aiff files</p>
               </>
             )}
           </div>
         </div>
       )}
 
-      <header className='flex items-center justify-between px-8 py-4 border-b border-[#222] bg-[#111] shrink-0'>
+      <header className='flex items-center justify-between px-8 py-4 border-b border-border-dark bg-surface-header shrink-0'>
         <div className='flex items-center gap-3'>
           <div className='w-8 h-8 bg-accent-yellow rounded-sm flex items-center justify-center'>
             <div className='w-4 h-4 border-2 border-black rotate-45'></div>
@@ -405,12 +536,12 @@ export default function App() {
           <h1 className='text-lg font-bold tracking-widest uppercase'>Kit Creator for Ableton Move</h1>
         </div>
         <div className='flex items-center gap-4'>
-          <div className='hidden sm:block text-sm text-[#666] uppercase tracking-wider'>
+          <div className='hidden sm:block text-sm text-text-subtle uppercase tracking-wider'>
             Exports an .ablpresetbundle — copy it to your Move
           </div>
           <button
             onClick={() => setIsHelpOpen(true)}
-            className='flex items-center gap-1.5 px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#252525] border border-[#333] hover:border-accent-yellow text-[#CCC] hover:text-accent-yellow rounded text-sm font-semibold uppercase tracking-wider transition-all cursor-pointer'
+            className='flex items-center gap-1.5 px-3 py-1.5 bg-surface-pad hover:bg-surface-btn-hover border border-border-main hover:border-accent-yellow text-text-light hover:text-accent-yellow rounded text-sm font-semibold uppercase tracking-wider transition-all cursor-pointer'
             title='Open User Manual & Help'
             aria-label='Open User Manual'
           >
@@ -421,31 +552,31 @@ export default function App() {
       </header>
 
       <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden'>
-        <aside className='w-full lg:w-72 bg-[#0E0E0E] border-b lg:border-b-0 lg:border-r border-[#222] p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
+        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
           <div className='mb-8'>
-            <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-[#666] mb-4'>Source Folders</h2>
-            <div className='border-2 border-dashed border-[#333] rounded-lg p-4 text-center mb-4'>
-              <div className='text-2xl mb-2 text-[#444]'>+</div>
-              <p className='text-sm text-[#888]'>Drag sample folders anywhere on this window</p>
+            <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4'>Source Folders</h2>
+            <div className='border-2 border-dashed border-border-main rounded-lg p-4 text-center mb-4'>
+              <div className='text-2xl mb-2 text-text-dim'>+</div>
+              <p className='text-sm text-text-muted'>Drag sample folders anywhere on this window</p>
             </div>
             {sourceFolders.map(folder => (
               <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
-                <div className='bg-[#1A1A1A] px-3 py-2 rounded flex items-center justify-between group'>
+                <div className='bg-surface-pad px-3 py-2 rounded flex items-center justify-between group'>
                   <div className='flex items-center gap-2 overflow-hidden flex-1'>
                     <button
                       onClick={() => toggleFolder(folder.id)}
-                      className='text-[#555] hover:text-[#E0E0E0] transition-colors shrink-0'
+                      className='text-text-muted-dark hover:text-text-bright transition-colors shrink-0'
                       title={folder.isEnabled === false ? 'Enable folder' : 'Disable folder'}
                       aria-label={folder.isEnabled === false ? `Enable ${folder.name}` : `Disable ${folder.name}`}
                     >
                       {folder.isEnabled === false ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
-                    <span className='text-sm truncate text-[#E0E0E0] flex-1'>{folder.name}</span>
-                    <span className='text-sm text-[#888] shrink-0 font-medium bg-[#111] px-2 py-0.5 rounded'>{folder.samples.length}</span>
+                    <span className='text-sm truncate text-text-bright flex-1'>{folder.name}</span>
+                    <span className='text-sm text-text-muted shrink-0 font-medium bg-surface-header px-2 py-0.5 rounded'>{folder.samples.length}</span>
                   </div>
                   <button
                     onClick={() => removeFolder(folder.id)}
-                    className='text-sm font-bold text-[#555] group-hover:text-red-400 ml-2'
+                    className='text-sm font-bold text-text-muted-dark group-hover:text-red-400 ml-2'
                     aria-label={`Remove ${folder.name}`}
                   >
                     ✕
@@ -454,23 +585,23 @@ export default function App() {
               </div>
             ))}
             {sourceFolders.length === 0 && (
-              <div className='text-sm text-[#555] text-center mt-4'>No folders loaded</div>
+              <div className='text-sm text-text-muted-dark text-center mt-4'>No folders loaded</div>
             )}
           </div>
           <div className='mt-auto'>
-            <div className='p-4 bg-[#151515] rounded-lg border border-[#222]'>
-              <div className='flex justify-between text-sm mb-2 text-[#888] uppercase'>
+            <div className='p-4 bg-surface-card rounded-lg border border-border-dark'>
+              <div className='flex justify-between text-sm mb-2 text-text-muted uppercase'>
                 <span>Usable Samples</span>
                 <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
               </div>
-              <div className='w-full bg-[#333] h-1.5 rounded-full overflow-hidden'>
+              <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
                 <div className='bg-accent-yellow h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
               </div>
             </div>
           </div>
         </aside>
 
-        <section className='flex-1 w-full bg-[#090909] flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto min-h-0'>
+        <section className='flex-1 w-full bg-surface-darkest flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto min-h-0'>
           <div className='grid grid-cols-4 gap-3 sm:gap-4 mb-8 w-full max-w-[700px] aspect-square'>
             {DISPLAY_INDICES.map((index) => (
               <Pad
@@ -484,6 +615,7 @@ export default function App() {
                 onExclude={handleExcludeSample}
                 onReroll={rerollPad}
                 auditionToken={audition.index === index ? audition.token : 0}
+                isSpinning={spinningPads[index]}
               />
             ))}
           </div>
@@ -491,7 +623,7 @@ export default function App() {
           {/* Hidden UI container: code logic preserved */}
           <div className='hidden h-10 mb-2 flex-col items-center justify-center shrink-0'>
             {showWarning && (kitResult.substituted.length > 0 || kitResult.empty.length > 0) && (
-              <div className='text-sm text-[#B8860B] uppercase tracking-wider text-center space-y-1 transition-opacity duration-500'>
+              <div className='text-sm text-warning-amber uppercase tracking-wider text-center space-y-1 transition-opacity duration-500'>
                 {kitResult.substituted.length > 0 && (
                   <div>{kitResult.substituted.length} pad(s) filled from a different category</div>
                 )}
@@ -502,21 +634,44 @@ export default function App() {
             )}
           </div>
 
-          <button
-            onClick={randomizeKit}
-            className='px-8 py-3 bg-accent-yellow text-black font-bold uppercase text-sm tracking-widest rounded-full hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(232,229,216,0.2)]'
-            disabled={usableCount === 0}
-          >
-            Generate Random Kit
-          </button>
+          <div className='flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
+            <button
+              onClick={randomizeKit}
+              className='px-8 py-3 bg-accent-yellow text-black font-bold uppercase text-sm tracking-widest rounded-full hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(232,229,216,0.2)] cursor-pointer'
+              disabled={usableCount === 0}
+            >
+              Generate Random Kit
+            </button>
+            <div className='flex items-center gap-3'>
+              <button
+                onClick={previewKit}
+                disabled={isEmpty}
+                className='px-6 py-3 bg-surface-pad border border-border-main hover:border-accent-yellow text-text-bright hover:text-accent-yellow font-bold uppercase text-sm tracking-widest rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2'
+                title={isPreviewing ? 'Stop preview' : 'Preview each pad in sequence'}
+                aria-label={isPreviewing ? 'Stop previewing kit' : 'Preview kit'}
+              >
+                {isPreviewing ? <Square size={14} className='fill-current' /> : <Play size={14} className='fill-current' />}
+                <span>{isPreviewing ? 'Stop Preview' : 'Preview Kit'}</span>
+              </button>
+              <label className='flex items-center gap-2 text-sm text-text-muted hover:text-text-bright uppercase tracking-wider cursor-pointer select-none'>
+                <input
+                  type='checkbox'
+                  checked={autoPreview}
+                  onChange={(e) => setAutoPreview(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4 cursor-pointer'
+                />
+                Auto Preview
+              </label>
+            </div>
+          </div>
         </section>
 
-        <aside className='w-full lg:w-80 bg-[#0E0E0E] border-t lg:border-t-0 lg:border-l border-[#222] p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
-          <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-[#666] mb-6'>Preset Settings</h2>
+        <aside className='w-full lg:w-80 bg-surface-panel border-t lg:border-t-0 lg:border-l border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
+          <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-6'>Preset Settings</h2>
           <div className='space-y-6'>
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
-                <label className='text-sm text-[#888] uppercase'>Preset Name</label>
+                <label className='text-sm text-text-muted uppercase'>Preset Name</label>
                 <button
                   onClick={() => setKitSuffix(generateKitName('').suffix)}
                   className='text-sm text-accent-yellow hover:text-white transition-colors flex items-center gap-1 cursor-pointer'
@@ -532,17 +687,17 @@ export default function App() {
                     setKitPrefix(e.target.value);
                     setPrefixEdited(true);
                   }}
-                  className='w-1/2 bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-[#E0E0E0] uppercase'
+                  className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright uppercase'
                   placeholder='PREFIX'
                   maxLength={12}
                   aria-label='Preset name prefix'
                 />
-                <span className='text-[#555]'>-</span>
+                <span className='text-text-muted-dark'>-</span>
                 <input
                   type='text'
                   value={kitSuffix}
                   onChange={(e) => setKitSuffix(e.target.value)}
-                  className='w-1/2 bg-[#1A1A1A] border border-[#333] rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-[#E0E0E0]'
+                  className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright'
                   placeholder='SUFFIX'
                   maxLength={12}
                   aria-label='Preset name suffix'
@@ -552,7 +707,7 @@ export default function App() {
 
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
-                <label htmlFor='batch-size' className='text-sm text-[#888] uppercase'>Batch Export Amount</label>
+                <label htmlFor='batch-size' className='text-sm text-text-muted uppercase'>Batch Export Amount</label>
                 <span className='text-sm text-accent-yellow font-bold'>{batchSize} Kit{batchSize !== 1 ? 's' : ''}</span>
               </div>
               <input
@@ -564,13 +719,13 @@ export default function App() {
                 onChange={(e) => setBatchSize(parseInt(e.target.value))}
                 className='w-full accent-accent-yellow'
               />
-              <p className='text-sm leading-snug text-[#555]'>
+              <p className='text-sm leading-snug text-text-muted-dark'>
                 Export multiple random kits in one zip. Locked pads remain the same across all.
               </p>
             </div>
 
             <div className='space-y-2'>
-              <label className='flex items-center gap-2 text-sm text-[#888] uppercase cursor-pointer'>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
                   checked={skipLoops}
@@ -579,14 +734,14 @@ export default function App() {
                 />
                 Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
               </label>
-              <p className='text-sm leading-snug text-[#555]'>
+              <p className='text-sm leading-snug text-text-muted-dark'>
                 Leaves out files whose name or folder marks them as a loop — "loop",
                 a bar count, or a tempo like 128bpm.
               </p>
             </div>
 
             <div className='space-y-2'>
-              <label className='flex items-center gap-2 text-sm text-[#888] uppercase cursor-pointer'>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
                   checked={trimSilence}
@@ -595,24 +750,24 @@ export default function App() {
                 />
                 Trim silence (start & end)
               </label>
-              <p className='text-sm leading-snug text-[#555]'>
+              <p className='text-sm leading-snug text-text-muted-dark'>
                 Re-encodes trimmed samples at their original sample rate and bit depth.
                 Turn off to copy every sample byte-for-byte.
               </p>
             </div>
 
-            <div className='pt-6 border-t border-[#222] space-y-1.5'>
+            <div className='pt-6 border-t border-border-dark space-y-1.5'>
               <div className='flex justify-between text-sm'><span>Layout</span><span className='text-accent-yellow'>{kitResult.layout.label}</span></div>
               <div className='flex justify-between text-sm'><span>Filled Pads</span><span className='text-accent-yellow'>{filledPads} / {PAD_COUNT}</span></div>
               <div className='flex justify-between text-sm'><span>Source Audio</span><span className='text-accent-yellow'>{formatMb(kitSizeBytes(kit))}</span></div>
-              <p className='text-sm text-[#555] pt-3 leading-relaxed'>
+              <p className='text-sm text-text-muted-dark pt-3 leading-relaxed'>
                 {kitResult.layout.id === 'minimal-layout'
                   ? 'Only generic hats, kicks and snares were found, so each row is Kick, Snare, Snare, Hat.'
                   : kitResult.layout.id === 'generic-hats'
                     ? 'No closed or open hats were found, so hats share one column and the bottom row is all percussion.'
                     : 'Closed and open hats each get their own column.'}
               </p>
-              <p className='text-sm text-[#555] pt-2 leading-relaxed'>
+              <p className='text-sm text-text-muted-dark pt-2 leading-relaxed'>
                 Samples keep the format of the files you dropped. Nothing is converted
                 to a fixed bit depth or sample rate.
               </p>
@@ -625,21 +780,21 @@ export default function App() {
             </div>
           )}
           {notice && (
-            <div className='mt-6 text-sm text-[#B8860B] border border-[#5a4404] bg-[#2a2004]/40 rounded px-3 py-2'>
+            <div className='mt-6 text-sm text-warning-amber border border-warning-border bg-warning-bg/40 rounded px-3 py-2'>
               {notice}
             </div>
           )}
 
           <div className='mt-auto pt-6'>
             {isExporting && exportProgress && exportProgress.total > 1 && (
-              <div className='text-sm text-[#888] uppercase tracking-wider mb-2 text-center'>
+              <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
                 Kit {Math.min(exportProgress.done + 1, exportProgress.total)} of {exportProgress.total}
               </div>
             )}
             <button
               onClick={exportKit}
               disabled={isEmpty || isExporting}
-              className='w-full py-3.5 bg-white text-black font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-[#E0E0E0] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              className='w-full py-3.5 bg-white text-black font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-text-bright transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
             >
               {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
               {isExporting ? 'Building Bundle…' : 'Export To Move'}
@@ -648,23 +803,23 @@ export default function App() {
         </aside>
       </main>
 
-      <footer className='bg-[#111] border-t border-[#222] px-8 py-2.5 flex justify-between items-center text-sm text-[#555] uppercase tracking-widest shrink-0'>
+      <footer className='bg-surface-header border-t border-border-dark px-8 py-2.5 flex justify-between items-center text-sm text-text-muted-dark uppercase tracking-widest shrink-0'>
         <div>Kit Creator for Ableton Move</div>
         <div>{sourceFolders.length > 0 ? `${sourceFolders.length} folder(s) loaded` : 'Waiting for samples'}</div>
       </footer>
 
       {isHelpOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto'>
-          <div className='bg-[#121212] border border-[#333] rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden'>
+          <div className='bg-surface-modal border border-border-main rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden'>
             {/* Modal Header */}
-            <div className='flex items-center justify-between px-6 sm:px-8 py-5 border-b border-[#222] bg-[#181818] shrink-0'>
+            <div className='flex items-center justify-between px-6 sm:px-8 py-5 border-b border-border-dark bg-surface-modal-header shrink-0'>
               <div className='flex items-center gap-3'>
                 <HelpCircle size={24} className='text-accent-yellow' />
-                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-[#FFF]'>Kit Creator for Ableton Move — User Manual</h2>
+                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-white'>Kit Creator for Ableton Move — User Manual</h2>
               </div>
               <button
                 onClick={() => setIsHelpOpen(false)}
-                className='text-[#888] hover:text-[#FFF] p-1.5 rounded-lg hover:bg-[#252525] transition-colors cursor-pointer'
+                className='text-text-muted hover:text-white p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer'
                 aria-label='Close manual'
               >
                 <X size={20} />
@@ -672,7 +827,7 @@ export default function App() {
             </div>
 
             {/* Modal Content Body */}
-            <div className='p-6 sm:p-8 overflow-y-auto space-y-7 text-sm sm:text-base text-[#DDD] leading-relaxed'>
+            <div className='p-6 sm:p-8 overflow-y-auto space-y-7 text-sm sm:text-base text-text-lighter leading-relaxed'>
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
@@ -682,45 +837,45 @@ export default function App() {
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding & Scanning Sample Folders</h3>
-                <ul className='list-disc pl-6 space-y-2 text-[#CCC]'>
-                  <li><strong className='text-[#FFF]'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
-                  <li><strong className='text-[#FFF]'>Supported Formats:</strong> Accepts uncompressed <code className='text-[#FFF] font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-[#FFF] font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
-                  <li><strong className='text-[#FFF]'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
-                  <li><strong className='text-[#FFF]'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-white'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
+                  <li><strong className='text-white'>Supported Formats:</strong> Accepts uncompressed <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
+                  <li><strong className='text-white'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
+                  <li><strong className='text-white'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>3. 4×4 Pad Grid & Controls</h3>
-                <ul className='list-disc pl-6 space-y-2 text-[#CCC]'>
-                  <li><strong className='text-[#FFF]'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
-                  <li><strong className='text-[#FFF]'>Keyboard Hotkeys:</strong> Play pads instantly with row keys:
-                    <div className='grid grid-cols-4 gap-1.5 max-w-sm text-sm font-mono text-accent-yellow mt-2 bg-[#1A1A1A] p-3 rounded-lg border border-[#333] text-center font-bold'>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-white'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
+                  <li><strong className='text-white'>Keyboard Hotkeys:</strong> Play pads instantly with row keys:
+                    <div className='grid grid-cols-4 gap-1.5 max-w-sm text-sm font-mono text-accent-yellow mt-2 bg-surface-pad p-3 rounded-lg border border-border-main text-center font-bold'>
                       <div>1 2 3 4</div>
                       <div>Q W E R</div>
                       <div>A S D F</div>
                       <div>Z X C V</div>
                     </div>
                   </li>
-                  <li><strong className='text-[#FFF]'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
-                  <li><strong className='text-[#FFF]'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
-                  <li><strong className='text-[#FFF]'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
+                  <li><strong className='text-white'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
+                  <li><strong className='text-white'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
+                  <li><strong className='text-white'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
-                <ul className='list-disc pl-6 space-y-2 text-[#CCC]'>
-                  <li><strong className='text-[#FFF]'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-[#FFF] font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-[#FFF] font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
-                  <li><strong className='text-[#FFF]'>Silence Trimming:</strong> Trims leading and trailing silence (&lt; -60 dBFS) while keeping exact bit depth and sample rate.</li>
-                  <li><strong className='text-[#FFF]'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
-                  <li><strong className='text-[#FFF]'>Device Transfer:</strong> Copy exported <code className='text-[#FFF] font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-white'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
+                  <li><strong className='text-white'>Silence Trimming:</strong> Trims leading and trailing silence (&lt; -60 dBFS) while keeping exact bit depth and sample rate.</li>
+                  <li><strong className='text-white'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
+                  <li><strong className='text-white'>Device Transfer:</strong> Copy exported <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
             </div>
 
             {/* Modal Footer */}
-            <div className='px-6 sm:px-8 py-4 border-t border-[#222] bg-[#181818] flex justify-end shrink-0'>
+            <div className='px-6 sm:px-8 py-4 border-t border-border-dark bg-surface-modal-header flex justify-end shrink-0'>
               <button
                 onClick={() => setIsHelpOpen(false)}
                 className='px-6 py-2.5 bg-accent-yellow text-black font-bold uppercase text-sm tracking-wider rounded-lg hover:bg-white transition-colors cursor-pointer'

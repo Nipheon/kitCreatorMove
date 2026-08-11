@@ -2,6 +2,42 @@
 
 @theme {
   --color-accent-yellow: var(--accent-yellow);
+  --color-accent-yellow-glow: var(--accent-yellow-glow);
+
+  /* Surfaces & Backgrounds */
+  --color-surface-darkest: #090909;
+  --color-surface-panel: #0E0E0E;
+  --color-surface-header: #111111;
+  --color-surface-modal: #121212;
+  --color-surface-card: #151515;
+  --color-surface-modal-header: #181818;
+  --color-surface-pad: #1A1A1A;
+  --color-surface-hover: #1C1C1C;
+  --color-surface-btn-hover: #252525;
+
+  /* Borders */
+  --color-border-dark: #222222;
+  --color-border-bar: #2A2A2A;
+  --color-border-main: #333333;
+  --color-border-light: #444444;
+
+  /* Text colors */
+  --color-text-dim: #444444;
+  --color-text-muted-dark: #555555;
+  --color-text-subtle: #666666;
+  --color-text-medium: #777777;
+  --color-text-muted: #888888;
+  --color-text-light: #CCCCCC;
+  --color-text-lighter: #DDDDDD;
+  --color-text-bright: #E0E0E0;
+
+  /* Alert & Warning colors */
+  --color-warning-amber: #B8860B;
+  --color-warning-border: #5a4404;
+  --color-warning-bg: #2a2004;
+
+  /* Font sizes */
+  --text-pad-action: 0.75rem; /* 12px - 2px smaller than text-sm (14px) for Lock and Shuffle buttons */
 }
 
 :root {
@@ -9,4 +45,5 @@
   --accent-yellow: #D0C066;
   --accent-yellow-glow: rgba(208, 192, 102, 0.35);
 }
+
 

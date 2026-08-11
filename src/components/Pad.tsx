@@ -1,4 +1,4 @@
-import { Ban, Lock, RefreshCw, Unlock } from 'lucide-react';
+import { Ban, Lock, RefreshCw, Unlock, Loader2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { Sample } from '../types';
 
@@ -21,7 +21,7 @@ interface PadProps {
   chokeGroup: number | null;
   isLocked: boolean;
   onToggleLock: () => void;
-  onExclude?: (id: string) => void;
+  onExclude?: (id: string, index: number) => void;
   onReroll?: (index: number) => void;
   /**
    * Bumped by App when this pad's Shuffle is pressed. A changing value means "play
@@ -29,11 +29,12 @@ interface PadProps {
    * shouldPlayOnNextSample ref got wrong.
    */
   auditionToken?: number;
+  isSpinning?: boolean;
 }
 
 export const Pad: React.FC<PadProps> = ({
   index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onReroll,
-  auditionToken = 0
+  auditionToken = 0, isSpinning = false
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -45,6 +46,8 @@ export const Pad: React.FC<PadProps> = ({
     }
 
     const audio = new Audio(sample.url);
+    audio.preload = 'auto';
+    audio.load();
     audioRef.current = audio;
 
     const handleEnded = () => setIsPlaying(false);
@@ -64,8 +67,21 @@ export const Pad: React.FC<PadProps> = ({
       audio.removeEventListener('error', handleError);
       audio.pause();
       audioRef.current = null;
+      setIsPlaying(false);
     };
   }, [sample, chokeGroup, index]);
+
+  useEffect(() => {
+    const onStopAll = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+      setIsPlaying(false);
+    };
+    window.addEventListener('stop-all-audio', onStopAll);
+    return () => window.removeEventListener('stop-all-audio', onStopAll);
+  }, []);
 
   useEffect(() => {
     const onChoke = (e: Event) => {
@@ -104,7 +120,7 @@ export const Pad: React.FC<PadProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditionToken]);
 
-  const handlePlay = React.useCallback(() => {
+  const handlePlay = React.useCallback(async () => {
     if (!audioRef.current) return;
 
     if (chokeGroup) {
@@ -113,11 +129,14 @@ export const Pad: React.FC<PadProps> = ({
       );
     }
     audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(error => {
+    setIsPlaying(true);
+    try {
+      await audioRef.current.play();
+      window.dispatchEvent(new CustomEvent<number>('pad-started', { detail: index }));
+    } catch (error) {
       console.error('Audio playback error:', error);
       setIsPlaying(false);
-    });
-    setIsPlaying(true);
+    }
   }, [chokeGroup, index]);
 
   useEffect(() => {
@@ -149,12 +168,12 @@ export const Pad: React.FC<PadProps> = ({
       aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
       onClick={sample ? handlePlay : undefined}
       onKeyDown={sample ? handleKeyDown : undefined}
-      className={`group relative overflow-hidden w-full aspect-square bg-[#1A1A1A] border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
+      className={`group relative overflow-hidden w-full aspect-square bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'border-accent-yellow shadow-[0_0_20px_var(--accent-yellow-glow)] scale-[0.98]'
-            : 'border-[#333] hover:border-accent-yellow cursor-pointer'
-          : 'border-[#333] opacity-50 cursor-not-allowed'
+            : 'border-border-main hover:border-accent-yellow cursor-pointer'
+          : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
       <div className='flex w-full justify-between items-start'>
@@ -163,7 +182,7 @@ export const Pad: React.FC<PadProps> = ({
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
-            <span className='text-sm font-mono text-[#888] bg-[#111] px-1.5 py-0.5 rounded border border-[#333] shrink-0' title={`Keyboard key [${hotkey}]`}>
+            <span className='text-sm font-mono text-text-muted bg-surface-header px-1.5 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
               {hotkey}
             </span>
           )}
@@ -173,16 +192,23 @@ export const Pad: React.FC<PadProps> = ({
             </span>
           )}
         </div>
-        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-accent-yellow shadow-[0_0_8px_var(--accent-yellow)] scale-110' : 'border border-[#444]'}`}></div>
+        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-accent-yellow shadow-[0_0_8px_var(--accent-yellow)] scale-110' : 'border border-border-light'}`}></div>
       </div>
 
       <div className='w-full mt-auto mb-8 sm:mb-9'>
-        <div className='w-full text-sm uppercase tracking-wider text-[#666] font-medium mb-0.5'>
+        <div className='w-full text-sm uppercase tracking-wider text-text-subtle font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
-          <div className='text-sm truncate font-medium text-[#E0E0E0] pr-1'>
-            {sample ? sample.name : 'Empty'}
+          <div className='text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
+            {isSpinning ? (
+              <span className='flex items-center gap-1 text-accent-yellow animate-pulse'>
+                <Loader2 className='w-3.5 h-3.5 animate-spin shrink-0 text-accent-yellow' />
+                <span className='text-text-muted text-xs uppercase font-mono tracking-wider'>Rolling</span>
+              </span>
+            ) : (
+              sample ? sample.name : 'Empty'
+            )}
           </div>
           <div className='flex items-center gap-1 shrink-0'>
             {sample && onExclude && (
@@ -190,9 +216,9 @@ export const Pad: React.FC<PadProps> = ({
                 type='button'
                 onClick={(e) => {
                   e.stopPropagation();
-                  onExclude(sample.id);
+                  onExclude(sample.id, index);
                 }}
-                className='text-[#666] hover:text-red-400 transition-colors p-1'
+                className='text-text-subtle hover:text-red-400 transition-colors p-1'
                 title='Exclude sample'
                 aria-label={`Exclude ${sample.name}`}
               >
@@ -204,7 +230,7 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       {/* Split Bottom Bar: 50% Lock + 50% Shuffle */}
-      <div className='absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-[#2A2A2A] bg-[#111] z-10'>
+      <div className='absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
         <button
           type='button'
           disabled={!sample}
@@ -216,14 +242,14 @@ export const Pad: React.FC<PadProps> = ({
           aria-label={isLocked ? `Unlock pad ${index + 1}` : `Lock pad ${index + 1}`}
           className={`w-1/2 flex items-center justify-center gap-1.5 transition-colors ${
             !sample
-              ? 'text-[#333] cursor-not-allowed'
+              ? 'text-border-main cursor-not-allowed'
               : isLocked
                 ? 'bg-accent-yellow/20 text-accent-yellow font-semibold cursor-pointer'
-                : 'text-[#555] hover:text-[#CCC] hover:bg-[#1C1C1C] cursor-pointer'
+                : 'text-text-muted-dark hover:text-text-light hover:bg-surface-hover cursor-pointer'
           }`}
         >
           {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-          <span className='text-sm uppercase tracking-wider font-semibold'>
+          <span className='text-pad-action uppercase tracking-wider font-semibold'>
             {isLocked ? 'Locked' : 'Lock'}
           </span>
         </button>
@@ -235,16 +261,16 @@ export const Pad: React.FC<PadProps> = ({
             e.stopPropagation();
             if (onReroll) onReroll(index);
           }}
-          className={`w-1/2 border-l border-[#2A2A2A] flex items-center justify-center gap-1.5 transition-colors ${
+          className={`w-1/2 border-l border-border-bar flex items-center justify-center gap-1.5 transition-colors ${
             !sample || isLocked || !onReroll
-              ? 'text-[#333] cursor-not-allowed'
-              : 'text-[#777] hover:text-accent-yellow hover:bg-[#1C1C1C] cursor-pointer'
+              ? 'text-border-main cursor-not-allowed'
+              : 'text-text-medium hover:text-accent-yellow hover:bg-surface-hover cursor-pointer'
           }`}
           title='Shuffle sample on this pad'
           aria-label={`Shuffle sample on pad ${index + 1}`}
         >
           <RefreshCw size={14} />
-          <span className='text-sm uppercase tracking-wider font-semibold'>
+          <span className='text-pad-action uppercase tracking-wider font-semibold'>
             Shuffle
           </span>
         </button>
