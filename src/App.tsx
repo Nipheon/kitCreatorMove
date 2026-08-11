@@ -21,6 +21,14 @@ const newId = (label: string) =>
 
 const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
+/**
+ * Held before pad 0 fires, on top of the buffering gate. Buffered is not the same as
+ * able to make a sound immediately: the first play after the output stream has been idle
+ * carries device start-up latency the readyState of a blob says nothing about. 300ms is
+ * a deliberate, tuned-by-ear constant, not a measurement.
+ */
+const PREVIEW_LEAD_IN_MS = 300;
+
 const enabledSamples = (folders: SourceFolder[]) =>
   folders.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
 
@@ -140,17 +148,25 @@ export default function App() {
     };
 
     /**
-     * Pad 0 used to fire on a flat 100ms tick while every later pad got 750ms+ of extra
-     * buffering, so on a cold generate only pad 0 was still decoding when it was told to
-     * play. `pad-started` fires when play() is initiated, not when sound comes out, so
-     * pad 1 landed 750ms after that event and only ~500-600ms after pad 0 was audible.
-     * Waiting for every pad to report buffered removes the asymmetry at the source.
+     * Pad 01 used to fire on a flat 100ms tick while every later pad got 750ms+ of extra
+     * buffering, so on a cold generate only pad 01 was told to play while still decoding.
+     * This gate holds the sequence until every pad reports buffered — necessary, but it
+     * was not sufficient on its own: pad 01 still sounded late with the gate alone, which
+     * is why the lead-in below and the onset-accurate `pad-started` in Pad exist.
      */
     const isReady = (sample: Sample | null, index: number) =>
       !sample || readyPads.current.get(index) === sample.id;
 
+    // Buffered is not the same as able to sound instantly, so the gate alone left pad 01
+    // late. The lead-in is the blunt half of the fix; Pad dispatching `pad-started` at
+    // real audible onset is the half that keeps pad 02 from arriving early regardless.
+    const startSequence = () => {
+      const leadInTimerId = window.setTimeout(playNextStep, PREVIEW_LEAD_IN_MS);
+      previewTimerIds.current.push(leadInTimerId);
+    };
+
     if (kitToPreview.every(isReady)) {
-      playNextStep();
+      startSequence();
       return;
     }
 
@@ -158,7 +174,7 @@ export default function App() {
       if (!kitToPreview.every(isReady)) return;
       readyWaitCleanup.current?.();
       readyWaitCleanup.current = null;
-      playNextStep();
+      startSequence();
     };
 
     window.addEventListener('pad-ready', beginWhenReady);
@@ -166,7 +182,7 @@ export default function App() {
     const ceilingTimerId = window.setTimeout(() => {
       readyWaitCleanup.current?.();
       readyWaitCleanup.current = null;
-      playNextStep();
+      startSequence();
     }, 2000);
     previewTimerIds.current.push(ceilingTimerId);
 
