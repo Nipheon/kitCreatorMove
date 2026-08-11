@@ -3,7 +3,23 @@ import { Category, Sample } from './types';
 export const PAD_COUNT = 16;
 
 export interface PadLayout {
-  id: 'split-hats' | 'generic-hats' | 'minimal-layout';
+  /**
+   * Identifies the grid *shape*, not the library that produced it. Two kits built from
+   * completely different packs share an id exactly when every pad advertises the same
+   * role, which is the condition for swapping one drum rack for the other on the device.
+   */
+  id: string;
+  /**
+   * The four column letters alone — `id` without its shared-top-row half. This is what
+   * goes in the exported kit name, because Move shows roughly 9-11 characters of a
+   * preset name and the full id does not fit alongside a prefix and suffix.
+   *
+   * It is deliberately a weaker fingerprint than `id`: `KSCO_LLLL` and `KSCO_LLPP` both
+   * name as `KSCO`, so two kits sharing a name id can still differ on pads 13-16. The
+   * top row was judged not worth the characters. Use `id`, not this, for any check that
+   * two grids are genuinely identical.
+   */
+  columnsId: string;
   label: string;
   /** The role each pad advertises, in Move's pad order (pad 1 = index 0). */
   roles: Category[];
@@ -12,155 +28,208 @@ export interface PadLayout {
 }
 
 /**
- * Default. Assumes the library distinguishes closed from open hats, so each row
- * carries both and the last row is claps and percussion.
+ * Which category claims a column first when the grid cannot hold them all.
  *
- *   K  S  CHH OHH
- *   K  S  CHH OHH
- *   K  S  CHH OHH
- *   Cl Cl Perc Perc
+ * `Hat` and `Crash` are absent on purpose: an unqualified hat is pooled as a closed hat
+ * and a crash is pooled as percussion, so neither is ever a role in its own right.
+ * `Other` ranks last but does rank — a pack whose files defeat the categoriser still
+ * fills its grid with its own samples rather than doubling kicks across half the pads.
  */
-export const SPLIT_HAT_LAYOUT: PadLayout = {
-  id: 'split-hats',
-  label: 'Split hats (closed / open)',
-  roles: [
-    'Kick', 'Snare', 'CHH', 'OHH',
-    'Kick', 'Snare', 'CHH', 'OHH',
-    'Kick', 'Snare', 'CHH', 'OHH',
-    'Clap', 'Clap', 'Perc', 'Perc'
-  ],
-  preferences: [
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
-    ['Clap', 'Perc', 'Crash', 'Other', 'Kick'],
-    ['Clap', 'Perc', 'Crash', 'Other', 'Snare'],
-    ['Perc', 'Crash', 'Clap', 'Other', 'CHH'],
-    ['Perc', 'Crash', 'Clap', 'Other', 'OHH']
-  ]
-};
+const RANK: Category[] = ['Kick', 'Snare', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
 
 /**
- * Used when the library only has undifferentiated hats. Spending two pads per row
- * on hats that would hold near-identical samples wastes them, so the second hat
- * slot becomes a clap and the last row goes entirely to percussion.
- *
- *   K    S    Cl   Hat
- *   K    S    Cl   Hat
- *   K    S    Cl   Hat
- *   Perc Perc Perc Perc
+ * Left-to-right order once the columns are chosen, which is deliberately not `RANK`.
+ * A clap sits between the snare and the hats (`k s cl ch`), but when open and closed
+ * hats are both present they take the two right-hand columns and the clap moves to the
+ * shared top row instead (`k s ch oh` + `cl cl pc pc`).
  */
-export const GENERIC_HAT_LAYOUT: PadLayout = {
-  id: 'generic-hats',
-  label: 'Generic hats',
-  roles: [
-    'Kick', 'Snare', 'Clap', 'Hat',
-    'Kick', 'Snare', 'Clap', 'Hat',
-    'Kick', 'Snare', 'Clap', 'Hat',
-    'Perc', 'Perc', 'Perc', 'Perc'
-  ],
-  preferences: [
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Clap', 'Perc', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Clap', 'Perc', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Clap', 'Perc', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Perc', 'Crash', 'Clap', 'Other'],
-    ['Perc', 'Crash', 'Clap', 'Other'],
-    ['Perc', 'Crash', 'Clap', 'Other'],
-    ['Perc', 'Crash', 'Clap', 'Other']
-  ]
-};
-
-export const MINIMAL_LAYOUT: PadLayout = {
-  id: 'minimal-layout',
-  label: 'Kick, snare, hats only',
-  roles: [
-    'Kick', 'Snare', 'Snare', 'Hat',
-    'Kick', 'Snare', 'Snare', 'Hat',
-    'Kick', 'Snare', 'Snare', 'Hat',
-    'Kick', 'Snare', 'Snare', 'Hat'
-  ],
-  preferences: [
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['Snare', 'Other'], ['Hat', 'CHH', 'OHH', 'Other']
-  ]
-};
+const COLUMN_ORDER: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
 
 /**
- * Picks the layout from what the library actually contains. The split layout needs
- * hats that are labelled closed or open; with only generic hats it would put two
- * interchangeable samples in every row.
+ * Which category doubles up when fewer than four are present. Fixed rather than driven
+ * by pool size: the same library must always produce the same grid, or the id in the kit
+ * name would change as folders are toggled and swapping would stop meaning anything.
  */
-export function chooseLayout(samples: Sample[]): PadLayout {
-  let closed = 0;
-  let open = 0;
-  let generic = 0;
-  let claps = 0;
-  let perc = 0;
-  let crash = 0;
+const DOUBLING_ORDER: Category[] = ['Snare', 'Kick', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
 
-  for (const sample of samples) {
-    if (sample.isExcluded) continue;
-    if (sample.category === 'CHH') closed++;
-    else if (sample.category === 'OHH') open++;
-    else if (sample.category === 'Hat') generic++;
-    else if (sample.category === 'Clap') claps++;
-    else if (sample.category === 'Perc') perc++;
-    else if (sample.category === 'Crash') crash++;
-  }
+/**
+ * One character per category, so the grid id stays short enough to live in a kit name.
+ *
+ * Lowercase because Move renders lowercase glyphs in fewer pixels than capitals, and the
+ * id has to survive a preset-name display that shows roughly 9-11 characters.
+ */
+const LETTER: Partial<Record<Category, string>> = {
+  Kick: 'k', Snare: 's', Clap: 'l', CHH: 'c', OHH: 'o', Perc: 'p', Other: 'x'
+};
 
-  if (closed === 0 && open === 0 && generic > 0 && claps === 0 && perc === 0 && crash === 0) {
-    return MINIMAL_LAYOUT;
-  }
+const SHORT_LABEL: Partial<Record<Category, string>> = {
+  Kick: 'K', Snare: 'S', Clap: 'CL', CHH: 'CH', OHH: 'OH', Perc: 'PERC', Other: 'OTHER'
+};
 
-  const baseLayout = closed === 0 && open === 0 && generic > 0 ? GENERIC_HAT_LAYOUT : SPLIT_HAT_LAYOUT;
-
-  if (claps === 0) {
-    return {
-      ...baseLayout,
-      roles: baseLayout.roles.map(role => (role === 'Clap' ? 'Snare' : role)),
-      preferences: baseLayout.preferences.map(prefs => {
-        if (prefs[0] === 'Clap') {
-          return ['Snare', ...prefs.slice(1).filter(p => p !== 'Snare')];
-        }
-        return prefs;
-      })
-    };
-  }
-
-  return baseLayout;
-}
+/** Shown before any folder is dropped, when there is nothing to derive a grid from. */
+const PLACEHOLDER_COLUMNS: Category[] = ['Kick', 'Snare', 'CHH', 'OHH'];
+export const NO_SAMPLES_GRID_ID = 'none';
 
 /**
  * Which pool a sample is drawn from, which is not always its own category.
  *
- * In the split layout an unqualified `Hat` counts as a closed hat — a hat named without
- * a qualifier is closed far more often than it is open — so generic hats join the `CHH`
- * pool and the closed pads draw from both at random. Ranking `Hat` below `CHH` in the
- * preference chain instead was not enough: `take` drains the `CHH` pool completely
- * before it looks at the next entry, so with three or more labelled closed hats the
- * generic ones were never reachable.
+ * An unqualified `Hat` counts as a closed hat — a hat named without a qualifier is
+ * closed far more often than it is open — and a `Crash` counts as percussion. Neither
+ * has a role of its own in any grid, so without this they would be unreachable.
  *
- * It applies to the split layout only. The generic and minimal layouts have real `Hat`
- * pads and need that pool left where it is.
- *
- * The open pads are deliberately not part of this: under the same assumption a generic
- * hat is the wrong sound for an open pad, so `OHH` chains fall through to `Other`.
+ * Choking is unaffected: `chokeGroupFor` reads the sample's real category, so crashes
+ * still choke each other in their own group rather than joining the percussion pads.
  */
-export function poolCategoryFor(sample: Sample, layout: PadLayout): Category {
-  return layout.id === 'split-hats' && sample.category === 'Hat' ? 'CHH' : sample.category;
+export function poolCategoryFor(sample: Sample): Category {
+  if (sample.category === 'Hat') return 'CHH';
+  if (sample.category === 'Crash') return 'Perc';
+  return sample.category;
 }
 
 /**
  * Whether a sample sitting on a pad counts as filling the role the pad asked for.
- * A generic hat on a closed pad in the split layout is the intended equivalence above,
- * not a substitution, and must not be reported as one.
+ * A generic hat on a closed-hat pad, or a crash on a percussion pad, is the intended
+ * pooling above rather than a substitution, and must not be reported as one.
  */
-export function satisfiesRole(category: Category, role: Category, layout: PadLayout): boolean {
+export function satisfiesRole(category: Category, role: Category): boolean {
   if (category === role) return true;
-  return layout.id === 'split-hats' && role === 'CHH' && category === 'Hat';
+  if (role === 'CHH' && category === 'Hat') return true;
+  return role === 'Perc' && category === 'Crash';
 }
+
+/** The categories the library can actually fill a pad with, highest rank first. */
+function presentCategories(samples: Sample[]): Category[] {
+  const present = new Set<Category>();
+  for (const sample of samples) {
+    if (sample.isExcluded) continue;
+    present.add(poolCategoryFor(sample));
+  }
+  return RANK.filter(category => present.has(category));
+}
+
+/**
+ * Fills the four columns when the library has fewer than four categories, by repeating
+ * what it does have in `DOUBLING_ORDER` — two kicks and two snares for a kick-and-snare
+ * pack, `k s s ch` once hats arrive.
+ */
+function fillColumns(present: Category[]): Category[] {
+  const columns = [...present];
+  const countOf = (category: Category) => columns.filter(c => c === category).length;
+
+  while (columns.length < 4) {
+    const fewest = Math.min(...present.map(countOf));
+    // Least-used first so the repeats spread evenly, DOUBLING_ORDER breaking the tie.
+    const next = DOUBLING_ORDER.find(c => present.includes(c) && countOf(c) === fewest);
+    // Unreachable while `present` is non-empty, but a wrong grid is worse than a throw.
+    if (!next) break;
+    columns.push(next);
+  }
+  return columns;
+}
+
+/** Sorts chosen columns for display, keeping repeats of one category adjacent. */
+function orderColumns(columns: Category[]): Category[] {
+  return [...columns].sort((a, b) => COLUMN_ORDER.indexOf(a) - COLUMN_ORDER.indexOf(b));
+}
+
+/**
+ * Splits the shared top row between the categories that did not win a column. Cells are
+ * handed out left to right in rank order, and a remainder goes to the highest-ranked, so
+ * two leftovers give `cl cl pc pc` and three give `cl cl pc ot`. Cell order is part of
+ * the grid id, so this has to be deterministic, not merely balanced.
+ */
+function shareTopRow(leftovers: Category[]): Category[] {
+  const contenders = leftovers.slice(0, 4);
+  const each = Math.floor(4 / contenders.length);
+  const remainder = 4 - each * contenders.length;
+  const row: Category[] = [];
+  contenders.forEach((category, index) => {
+    const cells = each + (index < remainder ? 1 : 0);
+    for (let i = 0; i < cells; i++) row.push(category);
+  });
+  return row;
+}
+
+const gridCode = (categories: Category[]) => categories.map(c => LETTER[c] ?? 'X').join('');
+
+function gridId(columns: Category[], topRow: Category[]): string {
+  // `_` rather than `+`: this string becomes part of a .ablpresetbundle directory name.
+  return topRow.length > 0 ? `${gridCode(columns)}_${gridCode(topRow)}` : gridCode(columns);
+}
+
+function gridLabel(columns: Category[], topRow: Category[]): string {
+  const names = (categories: Category[]) =>
+    categories.map(c => SHORT_LABEL[c] ?? String(c)).join(' ');
+  const uniqueTop = [...new Set(topRow)];
+  return topRow.length > 0
+    ? `${names(columns)} + ${names(uniqueTop)}`
+    : names(columns);
+}
+
+/**
+ * Builds the pad grid from whatever the library actually holds.
+ *
+ * Four columns, four rows. Up to four categories each take a full-height column. A fifth
+ * and beyond cannot, so the columns shorten to three rows and the top row is shared out
+ * between the categories that missed:
+ *
+ *   K,S           K,S,CHH       K,S,CL,CHH    K,S,CHH,OHH   +CL           +CL,PERC
+ *   k k s s       k s s ch      k s cl ch     k s ch oh     cl cl cl cl   cl cl pc pc
+ *   k k s s       k s s ch      k s cl ch     k s ch oh     k  s  ch oh   k  s  ch oh
+ *   k k s s       k s s ch      k s cl ch     k s ch oh     k  s  ch oh   k  s  ch oh
+ *   k k s s       k s s ch      k s cl ch     k s ch oh     k  s  ch oh   k  s  ch oh
+ *
+ * Note the grids are drawn as displayed — the top row is pad indices 12-15, because
+ * Move counts its 4x4 from the bottom left. `roles` below is in pad-index order, so the
+ * top row is written last.
+ *
+ * This replaced three hand-written layouts. They covered the libraries someone had
+ * thought of; every other pack fell through to whichever of the three matched least
+ * badly. A pack with no kicks reshaped nothing, because layout choice never looked at
+ * kicks at all.
+ */
+export function deriveLayout(samples: Sample[]): PadLayout {
+  const present = presentCategories(samples);
+
+  if (present.length === 0) {
+    const roles = Array.from({ length: PAD_COUNT }, (_, i) => PLACEHOLDER_COLUMNS[i % 4]);
+    return {
+      id: NO_SAMPLES_GRID_ID,
+      columnsId: NO_SAMPLES_GRID_ID,
+      label: 'No samples yet',
+      roles,
+      preferences: roles.map(role => [role, ...RANK.filter(c => c !== role)])
+    };
+  }
+
+  const chosen = present.slice(0, 4);
+  const leftovers = present.slice(4);
+  const columns = orderColumns(fillColumns(chosen));
+  const topRow = leftovers.length > 0 ? shareTopRow(leftovers) : [];
+
+  const roles: Category[] = [];
+  const columnRows = topRow.length > 0 ? 3 : 4;
+  for (let row = 0; row < columnRows; row++) roles.push(...columns);
+  roles.push(...topRow);
+
+  /**
+   * Every pad falls back through the rest of the library in rank order, so a pad whose
+   * own pool runs dry takes the next most sensible thing rather than dropping into
+   * `take`'s deepest-pool guess.
+   */
+  const preferences = roles.map(role => [role, ...RANK.filter(c => c !== role)]);
+
+  return {
+    id: gridId(columns, topRow),
+    columnsId: gridCode(columns),
+    label: gridLabel(columns, topRow),
+    roles,
+    preferences
+  };
+}
+
+/** Kept as the name the rest of the app calls; the grid is derived, never chosen. */
+export const chooseLayout = deriveLayout;
 
 const HAT_CATEGORIES: Category[] = ['CHH', 'OHH', 'Hat'];
 

@@ -1,5 +1,5 @@
 import {
-  chooseLayout, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole, SPLIT_HAT_LAYOUT
+  chooseLayout, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
 } from '../padLayout';
 import { Category, Sample } from '../types';
 
@@ -27,7 +27,7 @@ export interface KitResult {
 export function emptyKit(): KitResult {
   return {
     kit: new Array(PAD_COUNT).fill(null),
-    layout: SPLIT_HAT_LAYOUT,
+    layout: chooseLayout([]),
     substituted: [],
     empty: [],
     unavailableRoles: []
@@ -69,7 +69,7 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set
     if (!prefs || prefs.length === 0) return;
 
     const role = prefs[0];
-    if (satisfiesRole(sample.category, role, layout)) return;
+    if (satisfiesRole(sample.category, role)) return;
 
     // A role the library cannot fill is one fact about the library, not a per-pad
     // failure — a pack with no kicks would otherwise report every kick pad.
@@ -84,15 +84,15 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set
 }
 
 /**
- * The roles the library can fill, in pool terms — so a generic hat counts as closed-hat
- * availability in the split layout, matching where `poolCategoryFor` actually puts it.
+ * The roles the library can fill, in pool terms — a generic hat counts as closed-hat
+ * availability and a crash as percussion, matching where `poolCategoryFor` puts them.
  */
-function availableRoles(usable: Sample[], layout: PadLayout): Set<Category> {
+function availableRoles(usable: Sample[]): Set<Category> {
   const available = new Set<Category>();
   usable.forEach(s => {
     if (s.isExcluded) return;
     available.add(s.category);
-    available.add(poolCategoryFor(s, layout));
+    available.add(poolCategoryFor(s));
   });
   return available;
 }
@@ -120,7 +120,7 @@ export function generateRandomKit(
   usable.forEach(s => {
     const signature = `${s.name}-${s.file.size}`;
     if (!lockedIds.has(s.id) && !seenSignatures.has(signature) && !s.isExcluded) {
-      pools[poolCategoryFor(s, layout)].push(s);
+      pools[poolCategoryFor(s)].push(s);
       seenSignatures.add(signature);
     }
   });
@@ -152,7 +152,7 @@ export function generateRandomKit(
     kit[i] = take(i).sample;
   }
 
-  return { kit, layout, ...summarisePads(kit, layout, availableRoles(usable, layout)) };
+  return { kit, layout, ...summarisePads(kit, layout, availableRoles(usable)) };
 }
 
 /**
@@ -200,7 +200,7 @@ export function rerollSinglePad(
   usable.forEach(s => {
     const signature = `${s.name}-${s.file.size}`;
     if (!usedIds.has(s.id) && !usedSignatures.has(signature) && !s.isExcluded) {
-      pools[poolCategoryFor(s, layout)].push(s);
+      pools[poolCategoryFor(s)].push(s);
     }
   });
 
@@ -227,5 +227,5 @@ export function rerollSinglePad(
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;
 
-  return { kit: nextKit, layout, ...summarisePads(nextKit, layout, availableRoles(usable, layout)) };
+  return { kit: nextKit, layout, ...summarisePads(nextKit, layout, availableRoles(usable)) };
 }

@@ -1,12 +1,16 @@
 import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
-import { chokeGroupFor, chooseLayout, DISPLAY_INDICES, PAD_COUNT } from './padLayout';
+import {
+  chokeGroupFor, chooseLayout, DISPLAY_INDICES, NO_SAMPLES_GRID_ID, PAD_COUNT, poolCategoryFor
+} from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
-import { DEFAULT_PREFIX, generateKitName, prefixForFolders } from './utils/kitNaming';
+import {
+  DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders
+} from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
@@ -270,6 +274,19 @@ export default function App() {
   }, []);
 
   const kitOptions = { skipLoops };
+
+  /**
+   * The grid id travels in the exported kit name so a rack can be identified on the
+   * device. `columnsId` rather than `id`: Move shows roughly 9-11 characters, and
+   * `PRE-ksco-Suffix` keeps both identifying parts ahead of the cut while the full id
+   * would not fit. The id is dropped entirely while no samples are loaded.
+   */
+  const kitNameFor = (suffix: string, gridId: string) =>
+    gridId && gridId !== NO_SAMPLES_GRID_ID
+      ? `${kitPrefix}-${gridId}-${suffix}`
+      : `${kitPrefix}-${suffix}`;
+
+  const exportName = kitNameFor(kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
   const activeFoldersCount = useMemo(
     () => sourceFolders.filter(f => f.isEnabled !== false).length,
@@ -279,18 +296,6 @@ export default function App() {
     () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
     [samples, skipLoops]
   );
-  /**
-   * Derived from the sample list, not from `kitResult.layout`: `emptyKit` defaults to
-   * the split layout, so before the first generate that field is a placeholder rather
-   * than a decision about this library.
-   */
-  const activeLayout = useMemo(
-    () => chooseLayout(samples.filter(s => isUsableSample(s, { skipLoops }))),
-    [samples, skipLoops]
-  );
-  // In the split layout generic hats are drawn from the closed-hat pool, so listing them
-  // on their own row would report them as unused while they are sitting on CHH pads.
-  const hatsCountAsClosed = activeLayout.id === 'split-hats';
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
       Kick: { usable: 0, total: 0 },
@@ -304,21 +309,23 @@ export default function App() {
       Other: { usable: 0, total: 0 }
     };
     samples.forEach(s => {
-      const row = hatsCountAsClosed && s.category === 'Hat' ? 'CHH' : s.category;
+      // Counted under the pool the sample is actually drawn from: generic hats are
+      // closed hats and crashes are percussion, so rows for them would read as unused
+      // while their samples sit on CHH and Perc pads.
+      const row = poolCategoryFor(s);
       stats[row].total += 1;
       if (isUsableSample(s, { skipLoops })) {
         stats[row].usable += 1;
       }
     });
     return stats;
-  }, [samples, skipLoops, hatsCountAsClosed]);
+  }, [samples, skipLoops]);
 
-  const breakdownRows = useMemo<Category[]>(
-    () => (hatsCountAsClosed
-      ? ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Crash', 'Perc', 'Other']
-      : ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Hat', 'Crash', 'Perc', 'Other']),
-    [hatsCountAsClosed]
-  );
+  const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
+  const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
+    CHH: 'CHH + HAT',
+    Perc: 'PERC + CRASH'
+  };
 
   /**
    * Keeps the preset prefix in step with the folder that is actually loaded. Removing
@@ -570,16 +577,19 @@ export default function App() {
   };
 
   const buildBatch = () => {
-    const currentName = `${kitPrefix}-${kitSuffix}`;
-    const used = new Set([currentName]);
-    const kits = [{ kit: [...kit], name: currentName }];
+    const used = new Set([exportName]);
+    const kits = [{ kit: [...kit], name: exportName }];
 
     for (let i = 1; i < batchSize; i++) {
       const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
-      let name = `${kitPrefix}-${generateKitName('').suffix}`;
+      // Every kit in a batch is built from the same library, so they all share a grid
+      // and the id is the same for each — which is the point: a batch is swappable.
+      let name = kitNameFor(generateKitName('').suffix, next.layout.columnsId);
       // Fall back to a counter rather than appending repeatedly, which produced
       // names like NAME-Zap-3-3-3.
-      if (used.has(name)) name = `${kitPrefix}-${generateKitName('').suffix}-${i + 1}`;
+      if (used.has(name)) {
+        name = `${kitNameFor(generateKitName('').suffix, next.layout.columnsId)}-${i + 1}`;
+      }
       used.add(name);
       kits.push({ kit: next.kit, name });
     }
@@ -605,7 +615,7 @@ export default function App() {
     try {
       const report = batchSize > 1
         ? await exportBatchKits(buildBatch(), kitPrefix, { trimSilence, onProgress })
-        : await exportKitZip(kit, `${kitPrefix}-${kitSuffix}`, { trimSilence, onProgress });
+        : await exportKitZip(kit, exportName, { trimSilence, onProgress });
 
       if (report.trimFailures > 0) {
         setNotice(`${report.trimFailures} sample(s) could not be trimmed and were exported unchanged.`);
@@ -731,16 +741,18 @@ export default function App() {
                     Breakdown by Type
                   </div>
                   <div className='flex flex-col space-y-1.5'>
-                    {breakdownRows.map(cat => {
+                    {BREAKDOWN_ROWS.map(cat => {
                       const { usable, total } = categoryStats[cat];
-                      const label = cat === 'CHH' && hatsCountAsClosed ? 'CHH + HAT' : cat;
+                      const label = BREAKDOWN_LABELS[cat] ?? cat;
                       return (
                         <div
                           key={cat}
                           className='flex justify-between text-sm uppercase font-medium'
-                          title={cat === 'CHH' && hatsCountAsClosed
+                          title={cat === 'CHH'
                             ? 'Hats with no open/closed qualifier are treated as closed hats'
-                            : undefined}
+                            : cat === 'Perc'
+                              ? 'Crashes are drawn from the percussion pool'
+                              : undefined}
                         >
                           <span className={total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}>
                             {label}
@@ -848,8 +860,8 @@ export default function App() {
                     setPrefixEdited(true);
                   }}
                   className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright uppercase'
-                  placeholder='PREFIX'
-                  maxLength={12}
+                  placeholder='PRE'
+                  maxLength={PREFIX_LENGTH}
                   aria-label='Preset name prefix'
                 />
                 <span className='text-text-muted-dark'>-</span>
@@ -862,6 +874,9 @@ export default function App() {
                   maxLength={12}
                   aria-label='Preset name suffix'
                 />
+              </div>
+              <div className='text-sm text-text-muted-dark font-mono truncate' title={exportName}>
+                {exportName}
               </div>
             </div>
 
@@ -920,12 +935,14 @@ export default function App() {
               <div className='flex justify-between text-sm'><span>Layout</span><span className='text-accent-yellow'>{kitResult.layout.label}</span></div>
               <div className='flex justify-between text-sm'><span>Filled Pads</span><span className='text-accent-yellow'>{filledPads} / {PAD_COUNT}</span></div>
               <div className='flex justify-between text-sm'><span>Source Audio</span><span className='text-accent-yellow'>{formatMb(kitSizeBytes(kit))}</span></div>
+              <div className='flex justify-between text-sm'><span>Grid ID</span><span className='text-accent-yellow font-mono'>{kitResult.layout.id}</span></div>
               <p className='text-sm text-text-muted-dark pt-3 leading-relaxed'>
-                {kitResult.layout.id === 'minimal-layout'
-                  ? 'Only generic hats, kicks and snares were found, so each row is Kick, Snare, Snare, Hat.'
-                  : kitResult.layout.id === 'generic-hats'
-                    ? 'No closed or open hats were found, so hats share one column and the bottom row is all percussion.'
-                    : 'Closed and open hats each get their own column.'}
+                The grid is built from the categories this library actually holds. Kits
+                sharing a Grid ID lay their pads out identically, so one can replace the
+                other on the device. The exported name carries the column half of the ID
+                {kitResult.layout.id !== kitResult.layout.columnsId
+                  ? ` (${kitResult.layout.columnsId}) — the top row is left off to fit the display on the device.`
+                  : '.'}
               </p>
               <p className='text-sm text-text-muted-dark pt-2 leading-relaxed'>
                 Samples keep the format of the files you dropped. Nothing is converted

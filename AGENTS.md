@@ -182,37 +182,80 @@ real packs.
 
 ## Pads, layout and choking
 
-- **Three layouts, chosen from what the library contains** (`padLayout.ts`):
-  - `split-hats` — the default, when closed and open hats can be told apart.
-  - `generic-hats` — no CHH and no OHH but some generic hats: `K S Cl Hat` rows over a
-    percussion row. A single closed hat is enough to keep the split layout.
-  - `minimal-layout` — only kicks, snares and generic hats, with no claps, percussion
-    or crashes: `K S S Hat` on every row.
+- **The grid is derived from the library, not chosen from a list** (`deriveLayout` in
+  `padLayout.ts`). Four columns, four rows:
+  - Categories are ranked `Kick, Snare, CHH, OHH, Clap, Perc, Other` (`RANK`). The top
+    four take a column each.
+  - **Four or fewer present** — columns run the full four rows. Fewer than four
+    categories repeat one to fill the grid, in `DOUBLING_ORDER` (`Snare`, then `Kick`,
+    then hats), least-used first. Fixed rather than by pool size: the same library must
+    always produce the same grid, or the id in the kit name would move as folders are
+    toggled.
+  - **Five or more** — columns shorten to three rows and the categories that missed
+    share the top row, cells handed out left to right in rank order with any remainder
+    to the highest-ranked. Two leftovers give `cl cl pc pc`, three give `cl cl pc ot`.
+  - Columns are then ordered for display by `COLUMN_ORDER`, which is deliberately *not*
+    `RANK`: a clap sits between snare and hats (`k s cl ch`), but when both hat kinds
+    are present they take the two right-hand columns and the clap moves to the top row.
 
-  On top of that, **if there are no clap samples at all, Clap pads become Snare pads**
-  in whichever layout was chosen. The active layout is named in the settings panel so
-  the grid never reshapes silently.
-- **In the split layout an unqualified `Hat` is a closed hat.** `poolCategoryFor` files
-  generic hats into the `CHH` pool, so the closed pads draw from labelled and generic
-  hats together, and neither hat chain lists `Hat` any more. Ranking `Hat` below `CHH`
-  in the chain was the earlier attempt and did nothing: `take` drains the `CHH` pool
-  completely before it reads the next entry, so a library with three or more labelled
-  closed hats could never reach its generic ones. The open pads are deliberately left
-  out — under the same assumption a generic hat is the wrong sound for an open pad, so
-  `OHH` falls through to `Other`.
+  This replaced three hand-written layouts (`split-hats`, `generic-hats`,
+  `minimal-layout`) and the "no claps, so Clap pads become Snare pads" rule, which is
+  now automatic — an absent category simply never gets a column. The fixed three covered
+  the libraries someone had thought of; everything else fell through to whichever
+  matched least badly, and layout choice never looked at kicks or snares at all, so a
+  percussion-only pack got a Kick/Snare/CHH/OHH grid and filled it by fallback.
+- **The grid id is a fingerprint of the arrangement.** One letter per category —
+  `k`ick, `s`nare, c`l`ap, `c`losed, `o`pen, `p`erc, `x` for other — as four column
+  letters, then `_` and four top-row letters if there is a shared row: `ksco`, `kssc`,
+  `ksco_llpp`. Equal ids mean every pad advertises the same role, which is the condition
+  for swapping one drum rack for another on the device.
 
-  **Consequence, accepted deliberately:** labelled and generic hats are now equal
-  citizens in one pool. A library with 3 CHH and 25 generic hats will usually show
-  generic hats on all three closed pads. If that ever needs to change, bias the draw —
-  do not put `Hat` back in the preference chain, it does not work.
+  **Lowercase deliberately:** Move renders lowercase glyphs in fewer pixels than
+  capitals, so a lowercase id survives further into a preset-name display that shows
+  roughly 9-11 characters. Do not "tidy" it to uppercase. The prefix stays uppercase —
+  it is the part that can afford to be cut.
+- **The exported name carries `columnsId`, not `id`.** Move shows roughly 9-11
+  characters of a preset name, so the shared top row is left out and a kit exports as
+  `PRE-ksco-Suffix` (13 characters, which truncates into the decorative suffix rather
+  than into either identifying part). **`columnsId` is therefore a deliberately weaker
+  fingerprint than `id`:** `ksco_llll` and `ksco_llpp` both name as `ksco`, so two kits
+  sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
+  worth the characters. Any check that two grids are genuinely identical must use `id`,
+  which is what the settings panel shows.
+- **The preset prefix is three characters** (`PREFIX_LENGTH` in `kitNaming.ts`), cut down
+  from four to make room for the grid id inside the same visible budget.
 
-  The promotion applies to the split layout only. `generic-hats` and `minimal-layout`
-  have real `Hat` pads and need that pool where it is.
-- **A role the library cannot fill is reported once, in `unavailableRoles` — not as
-  every pad being "substituted".** A percussion-only pack used to report all 16 pads,
-  which buried the pads that had genuinely lost a draw. `substituted` now means only
-  that: the pad's category existed in the library and the pad still did not get it.
-  `satisfiesRole` keeps the generic-hat-on-closed-pad equivalence out of both counts.
+  The separator is `_` and the alphabet is A-Z on purpose: this string becomes part of a
+  `.ablpresetbundle` directory name, and `+` is the kind of character that gets
+  URL-encoded or rejected by a device parser — next door to the `encodeURIComponent`
+  landmine in `exporter.ts`. **Name length and character set are unverified on Move
+  hardware.** Two tests pin the id: one asserts it is injective across all 127 non-empty
+  category subsets, one asserts it matches `/^[a-z]{4}(_[a-z]{4})?$/`.
+- **`NO_SAMPLES_GRID_ID` (`none`) is the grid before any folder is dropped.** The pads
+  show a Kick/Snare/CHH/OHH placeholder so the empty app does not read as broken, and
+  the id is dropped from the kit name rather than exported as a lie.
+- **An unqualified `Hat` is a closed hat, and a `Crash` is percussion.**
+  `poolCategoryFor` files them into the `CHH` and `Perc` pools, so neither is ever a role
+  in its own right and both are reachable. Ranking `Hat` below `CHH` in the preference
+  chain was the earlier attempt and did nothing: `take` drains the `CHH` pool completely
+  before it reads the next entry, so a library with three or more labelled closed hats
+  could never reach its generic ones. Open pads are deliberately left out of the hat
+  pooling — under the same assumption a generic hat is the wrong sound for an open pad.
+
+  **Choking is unaffected.** `chokeGroupFor` reads the sample's real category, so a
+  crash sitting on a percussion pad still chokes in group 2, not with the percussion.
+
+  **Consequence, accepted deliberately:** labelled and generic hats are equal citizens
+  in one pool. A library with 3 CHH and 25 generic hats will usually show generic hats
+  on every closed pad. If that ever needs to change, bias the draw — do not put `Hat`
+  back in the preference chain, it does not work.
+- **`substituted` means the pad's category existed and the pad still did not get it.**
+  `satisfiesRole` keeps the generic-hat-on-closed-pad and crash-on-percussion-pad
+  equivalences out of the count. `unavailableRoles` reports a role the library cannot
+  fill at all, once rather than per pad — with derived grids it is empty in practice,
+  since a grid only advertises what the library holds, but it is kept as the honest
+  answer if that ever stops being true (a locked pad surviving its folder's removal is
+  the case to watch).
 - **The sample pool dedupe key is `name + byte size` (`kitGenerator.ts`), deliberately a
   heuristic.** Nothing reads the audio. Two same-named files of identical length from a
   fixed-length pack collide, and because the set is rebuilt per generate in folder
@@ -271,12 +314,10 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 - **Font Sizes & Lock/Shuffle Buttons:** Lock and Shuffle buttons use `text-pad-action` (12px, decreased by 2px from `text-sm`). Other text elements across the UI maintain a 14px (`text-sm`) minimum for legibility without breaking grid or panel layouts.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 
-  **The Hat row folds into a "CHH + HAT" row whenever the split layout is active**,
-  because that is where those samples are actually drawn from. A separate Hat row would
-  read as unused while its samples sit on closed pads. The merge is decided by running
-  `chooseLayout` over the current sample list, *not* by reading `kitResult.layout` —
-  `emptyKit` defaults that field to the split layout, so before the first generate it is
-  a placeholder rather than a decision about this library.
+  **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because
+  that is where those samples are drawn from. Separate Hat and Crash rows would read as
+  unused while their samples sit on closed-hat and percussion pads. The card also has no
+  row for a category that is not a role.
 - **The pad warning block is currently wrapped in `hidden`** ("Hidden UI container: code
   logic preserved" in `App.tsx`). `substituted`, `empty` and `unavailableRoles` are all
   computed and rendered, but nothing reaches the user until that wrapper comes off. Do
