@@ -12,6 +12,38 @@ interface PadReadyDetail {
   sampleId: string;
 }
 
+/**
+ * Resolves on the first animation frame where the element has actually advanced past
+ * zero — the closest cheap proxy for sound leaving the speakers.
+ *
+ * `play()` resolving means playback was *initiated*, not that anything is audible: the
+ * spec fires `playing` and resolves the pending play promises in one task, so both land
+ * before the output stream has produced a sample. Preview spacing is measured from
+ * `pad-started`, so dispatching that on play() resolution let a pad whose onset lagged
+ * pull the next pad in too early. `timeupdate` is throttled around 250ms — the same
+ * order as the lag being corrected — so this polls frames instead.
+ *
+ * Capped: a pad that never progresses must not stall the sequence.
+ */
+const ONSET_POLL_TIMEOUT_MS = 400;
+
+const firstAudibleProgress = (audio: HTMLAudioElement) =>
+  new Promise<void>(resolve => {
+    if (audio.currentTime > 0) {
+      resolve();
+      return;
+    }
+    const deadline = performance.now() + ONSET_POLL_TIMEOUT_MS;
+    const poll = () => {
+      if (audio.paused || audio.currentTime > 0 || performance.now() >= deadline) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  });
+
 const PAD_HOTKEYS: Record<number, string> = {
   12: '1', 13: '2', 14: '3', 15: '4',
   8: 'Q', 9: 'W', 10: 'E', 11: 'R',
@@ -148,10 +180,12 @@ export const Pad: React.FC<PadProps> = ({
         new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
       );
     }
-    audioRef.current.currentTime = 0;
+    const audio = audioRef.current;
+    audio.currentTime = 0;
     setIsPlaying(true);
     try {
-      await audioRef.current.play();
+      await audio.play();
+      await firstAudibleProgress(audio);
       window.dispatchEvent(new CustomEvent<number>('pad-started', { detail: index }));
     } catch (error) {
       console.error('Audio playback error:', error);
