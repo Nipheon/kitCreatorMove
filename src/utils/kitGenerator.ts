@@ -1,14 +1,27 @@
-import { chooseLayout, PAD_COUNT, PadLayout, SPLIT_HAT_LAYOUT } from '../padLayout';
+import {
+  chooseLayout, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole, SPLIT_HAT_LAYOUT
+} from '../padLayout';
 import { Category, Sample } from '../types';
 
 export interface KitResult {
   kit: (Sample | null)[];
   /** Which pad layout the sample library selected. */
   layout: PadLayout;
-  /** Pads filled from a category other than the one the pad asks for. */
+  /**
+   * Pads filled from a category other than the one the pad asks for, counted only where
+   * the library actually held that category. A role no library sample could ever fill is
+   * reported once in `unavailableRoles`, not once per pad.
+   */
   substituted: number[];
   /** Pads left empty because the pools ran dry. */
   empty: number[];
+  /**
+   * Roles the library cannot fill at all — a pack with no kicks reports `['Kick']`, once,
+   * however many kick pads the layout has. This used to surface as every one of those
+   * pads being "substituted", so a percussion-only pack reported all 16 pads and drowned
+   * out the pads that had genuinely lost a draw.
+   */
+  unavailableRoles: Category[];
 }
 
 export function emptyKit(): KitResult {
@@ -16,7 +29,8 @@ export function emptyKit(): KitResult {
     kit: new Array(PAD_COUNT).fill(null),
     layout: SPLIT_HAT_LAYOUT,
     substituted: [],
-    empty: []
+    empty: [],
+    unavailableRoles: []
   };
 }
 
@@ -41,9 +55,10 @@ export function isUsableSample(sample: Sample, { skipLoops = true }: KitOptions 
  * shuffle. They used to compute this differently — a full generate skipped locked pads
  * — so shuffling an unrelated pad made the banner jump from 2 pads to 3.
  */
-function summarisePads(kit: (Sample | null)[], layout: PadLayout) {
+function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set<Category>) {
   const substituted: number[] = [];
   const empty: number[] = [];
+  const unavailableRoles: Category[] = [];
 
   kit.forEach((sample, idx) => {
     if (!sample) {
@@ -51,10 +66,35 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout) {
       return;
     }
     const prefs = layout.preferences[idx];
-    if (prefs && prefs.length > 0 && sample.category !== prefs[0]) substituted.push(idx);
+    if (!prefs || prefs.length === 0) return;
+
+    const role = prefs[0];
+    if (satisfiesRole(sample.category, role, layout)) return;
+
+    // A role the library cannot fill is one fact about the library, not a per-pad
+    // failure — a pack with no kicks would otherwise report every kick pad.
+    if (!available.has(role)) {
+      if (!unavailableRoles.includes(role)) unavailableRoles.push(role);
+      return;
+    }
+    substituted.push(idx);
   });
 
-  return { substituted, empty };
+  return { substituted, empty, unavailableRoles };
+}
+
+/**
+ * The roles the library can fill, in pool terms — so a generic hat counts as closed-hat
+ * availability in the split layout, matching where `poolCategoryFor` actually puts it.
+ */
+function availableRoles(usable: Sample[], layout: PadLayout): Set<Category> {
+  const available = new Set<Category>();
+  usable.forEach(s => {
+    if (s.isExcluded) return;
+    available.add(s.category);
+    available.add(poolCategoryFor(s, layout));
+  });
+  return available;
 }
 
 export function generateRandomKit(
@@ -80,7 +120,7 @@ export function generateRandomKit(
   usable.forEach(s => {
     const signature = `${s.name}-${s.file.size}`;
     if (!lockedIds.has(s.id) && !seenSignatures.has(signature) && !s.isExcluded) {
-      pools[s.category].push(s);
+      pools[poolCategoryFor(s, layout)].push(s);
       seenSignatures.add(signature);
     }
   });
@@ -112,7 +152,7 @@ export function generateRandomKit(
     kit[i] = take(i).sample;
   }
 
-  return { kit, layout, ...summarisePads(kit, layout) };
+  return { kit, layout, ...summarisePads(kit, layout, availableRoles(usable, layout)) };
 }
 
 /**
@@ -131,7 +171,8 @@ export function rerollSinglePad(
       kit: [...currentKit],
       layout: chooseLayout(samples.filter(s => isUsableSample(s, options))),
       substituted: [],
-      empty: []
+      empty: [],
+      unavailableRoles: []
     };
   }
 
@@ -159,7 +200,7 @@ export function rerollSinglePad(
   usable.forEach(s => {
     const signature = `${s.name}-${s.file.size}`;
     if (!usedIds.has(s.id) && !usedSignatures.has(signature) && !s.isExcluded) {
-      pools[s.category].push(s);
+      pools[poolCategoryFor(s, layout)].push(s);
     }
   });
 
@@ -186,5 +227,5 @@ export function rerollSinglePad(
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;
 
-  return { kit: nextKit, layout, ...summarisePads(nextKit, layout) };
+  return { kit: nextKit, layout, ...summarisePads(nextKit, layout, availableRoles(usable, layout)) };
 }

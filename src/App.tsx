@@ -95,7 +95,7 @@ export default function App() {
    * calls setKitResult and startPreview in the same tick, so the state read here would
    * still be the previous kit.
    */
-  const startPreview = React.useCallback((kitToPreview: (Sample | null)[], isAutoPreview: boolean = false) => {
+  const startPreview = React.useCallback((kitToPreview: (Sample | null)[]) => {
     stopPreview();
     setIsPreviewing(true);
 
@@ -157,16 +157,21 @@ export default function App() {
     const isReady = (sample: Sample | null, index: number) =>
       !sample || readyPads.current.get(index) === sample.id;
 
-    // PREVIEW_LEAD_IN_MS is used only for auto preview. Manual preview button clicks
-    // start immediately (0ms lead-in).
-    const startSequence = () => {
-      const leadInMs = isAutoPreview ? PREVIEW_LEAD_IN_MS : 0;
+    /**
+     * The lead-in is keyed on whether the audio was cold, not on who asked. Keying it on
+     * auto-vs-manual gave manual preview a 0ms start even when it had just waited on the
+     * gate — pressing Preview Kit straight after a generate put pad 01 back exactly where
+     * this whole fix started. Pads already buffered need no lead-in whoever asked, and
+     * auto preview always arrives cold, so its behaviour is unchanged in practice.
+     */
+    const startSequence = (waitedForBuffering: boolean) => {
+      const leadInMs = waitedForBuffering ? PREVIEW_LEAD_IN_MS : 0;
       const leadInTimerId = window.setTimeout(playNextStep, leadInMs);
       previewTimerIds.current.push(leadInTimerId);
     };
 
     if (kitToPreview.every(isReady)) {
-      startSequence();
+      startSequence(false);
       return;
     }
 
@@ -174,7 +179,7 @@ export default function App() {
       if (!kitToPreview.every(isReady)) return;
       readyWaitCleanup.current?.();
       readyWaitCleanup.current = null;
-      startSequence();
+      startSequence(true);
     };
 
     window.addEventListener('pad-ready', beginWhenReady);
@@ -182,7 +187,7 @@ export default function App() {
     const ceilingTimerId = window.setTimeout(() => {
       readyWaitCleanup.current?.();
       readyWaitCleanup.current = null;
-      startSequence();
+      startSequence(true);
     }, 2000);
     previewTimerIds.current.push(ceilingTimerId);
 
@@ -229,7 +234,7 @@ export default function App() {
   const kit = kitResult.kit;
 
   useEffect(() => {
-    if (kitResult.substituted.length > 0 || kitResult.empty.length > 0) {
+    if (kitResult.substituted.length > 0 || kitResult.empty.length > 0 || kitResult.unavailableRoles.length > 0) {
       setShowWarning(true);
       const timer = setTimeout(() => setShowWarning(false), 5000);
       return () => clearTimeout(timer);
@@ -274,6 +279,18 @@ export default function App() {
     () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
     [samples, skipLoops]
   );
+  /**
+   * Derived from the sample list, not from `kitResult.layout`: `emptyKit` defaults to
+   * the split layout, so before the first generate that field is a placeholder rather
+   * than a decision about this library.
+   */
+  const activeLayout = useMemo(
+    () => chooseLayout(samples.filter(s => isUsableSample(s, { skipLoops }))),
+    [samples, skipLoops]
+  );
+  // In the split layout generic hats are drawn from the closed-hat pool, so listing them
+  // on their own row would report them as unused while they are sitting on CHH pads.
+  const hatsCountAsClosed = activeLayout.id === 'split-hats';
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
       Kick: { usable: 0, total: 0 },
@@ -287,13 +304,21 @@ export default function App() {
       Other: { usable: 0, total: 0 }
     };
     samples.forEach(s => {
-      stats[s.category].total += 1;
+      const row = hatsCountAsClosed && s.category === 'Hat' ? 'CHH' : s.category;
+      stats[row].total += 1;
       if (isUsableSample(s, { skipLoops })) {
-        stats[s.category].usable += 1;
+        stats[row].usable += 1;
       }
     });
     return stats;
-  }, [samples, skipLoops]);
+  }, [samples, skipLoops, hatsCountAsClosed]);
+
+  const breakdownRows = useMemo<Category[]>(
+    () => (hatsCountAsClosed
+      ? ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Crash', 'Perc', 'Other']
+      : ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Hat', 'Crash', 'Perc', 'Other']),
+    [hatsCountAsClosed]
+  );
 
   /**
    * Keeps the preset prefix in step with the folder that is actually loaded. Removing
@@ -425,7 +450,8 @@ export default function App() {
         kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
         layout: chooseLayout(remaining),
         substituted: [],
-        empty: []
+        empty: [],
+        unavailableRoles: []
       };
 
     setSourceFolders(updated);
@@ -464,7 +490,8 @@ export default function App() {
           kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
           layout: chooseLayout(remaining),
           substituted: [],
-          empty: []
+          empty: [],
+          unavailableRoles: []
         }
     );
     syncPrefix(updated);
@@ -482,7 +509,7 @@ export default function App() {
     setKitResult(
       remaining.length > 0
         ? generateRandomKit(remaining, survivors, kitOptions)
-        : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [] }
+        : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] }
     );
     if (padIndex !== undefined) {
       setAudition(prev => ({ index: padIndex, token: prev.token + 1 }));
@@ -498,7 +525,7 @@ export default function App() {
       setKitResult(next);
 
       if (autoPreview) {
-        startPreview(next.kit, true);
+        startPreview(next.kit);
       } else {
         // All pads start spinning simultaneously
         setSpinningPads(new Array(PAD_COUNT).fill(true));
@@ -704,15 +731,19 @@ export default function App() {
                     Breakdown by Type
                   </div>
                   <div className='flex flex-col space-y-1.5'>
-                    {(['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Hat', 'Crash', 'Perc', 'Other'] as Category[]).map(cat => {
+                    {breakdownRows.map(cat => {
                       const { usable, total } = categoryStats[cat];
+                      const label = cat === 'CHH' && hatsCountAsClosed ? 'CHH + HAT' : cat;
                       return (
                         <div
                           key={cat}
                           className='flex justify-between text-sm uppercase font-medium'
+                          title={cat === 'CHH' && hatsCountAsClosed
+                            ? 'Hats with no open/closed qualifier are treated as closed hats'
+                            : undefined}
                         >
                           <span className={total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}>
-                            {cat}
+                            {label}
                           </span>
                           <span className={usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}>
                             {usable.toLocaleString()} / {total.toLocaleString()}
@@ -748,8 +779,11 @@ export default function App() {
 
           {/* Hidden UI container: code logic preserved */}
           <div className='hidden h-10 mb-2 flex-col items-center justify-center shrink-0'>
-            {showWarning && (kitResult.substituted.length > 0 || kitResult.empty.length > 0) && (
+            {showWarning && (kitResult.substituted.length > 0 || kitResult.empty.length > 0 || kitResult.unavailableRoles.length > 0) && (
               <div className='text-sm text-warning-amber uppercase tracking-wider text-center space-y-1 transition-opacity duration-500'>
+                {kitResult.unavailableRoles.length > 0 && (
+                  <div>No {kitResult.unavailableRoles.join(', ')} samples in this library</div>
+                )}
                 {kitResult.substituted.length > 0 && (
                   <div>{kitResult.substituted.length} pad(s) filled from a different category</div>
                 )}

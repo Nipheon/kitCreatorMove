@@ -158,12 +158,34 @@ await test('locked pads survive a regenerate', () => {
   }
 });
 
-await test('substituted and empty pads are reported', () => {
+await test('a role the library cannot fill is reported once, not per pad', () => {
+  // This used to assert `substituted.length > 0` for the kicks on snare and hat pads.
+  // A library with no snares at all is one fact about the library, not a per-pad
+  // failure, so those pads now report through unavailableRoles instead and
+  // "substituted" is reserved for a pad that lost a draw against a pool that existed.
   const kicksOnly = Array.from({ length: 3 }, (_, i) => makeSample(`k${i}.wav`, 'Kick'));
   const result = generateRandomKit(kicksOnly);
   assert.equal(result.kit.filter(Boolean).length, 3);
   assert.equal(result.empty.length, PAD_COUNT - 3);
-  assert.ok(result.substituted.length > 0, 'kicks on snare/hat pads should count as substituted');
+  assert.equal(result.substituted.length, 0, 'no pool existed to lose a draw against');
+  assert.ok(result.unavailableRoles.length > 0, 'the roles this library cannot fill');
+  assert.ok(!result.unavailableRoles.includes('Kick'), 'kicks are available');
+  assert.deepEqual(
+    result.unavailableRoles,
+    [...new Set(result.unavailableRoles)],
+    'each role reported once however many pads ask for it'
+  );
+});
+
+await test('a pad that loses a draw against a pool that exists still counts as substituted', () => {
+  // One kick for three kick pads: the role is fillable, the pool just ran dry.
+  const lopsided = [
+    makeSample('k0.wav', 'Kick'),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`s${i}.wav`, 'Snare'))
+  ];
+  const result = generateRandomKit(lopsided);
+  assert.ok(result.substituted.length > 0, 'kick pads filled from another pool');
+  assert.ok(!result.unavailableRoles.includes('Kick'), 'kicks exist, they just ran out');
 });
 
 await test('generic hat filenames are not mistaken for open or closed hats', () => {
@@ -599,6 +621,58 @@ await test('one closed hat is enough to keep the split layout', () => {
     ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'))
   ];
   assert.equal(generateRandomKit(almost).layout.id, 'split-hats');
+});
+
+await test('generic hats reach the closed pads in the split layout', () => {
+  // Ranking Hat below CHH in the preference chain was not enough: take() drains the
+  // CHH pool before it looks at the next entry, so with three labelled closed hats the
+  // generic ones were unreachable on every generate.
+  const CLOSED_PADS = [2, 6, 10];
+  const OPEN_PADS = [3, 7, 11];
+  const library: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`closed hat ${i}.wav`, 'CHH')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`open hat ${i}.wav`, 'OHH')),
+    ...Array.from({ length: 20 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'))
+  ];
+
+  let genericOnClosed = 0;
+  for (let run = 0; run < 40; run++) {
+    const { kit, layout, substituted } = generateRandomKit(library);
+    assert.equal(layout.id, 'split-hats');
+
+    for (const pad of CLOSED_PADS) {
+      const category = kit[pad]?.category;
+      assert.ok(category === 'CHH' || category === 'Hat', `pad ${pad} held ${category}`);
+      if (category === 'Hat') genericOnClosed++;
+      // The equivalence is intended, so it must not be reported as a substitution.
+      assert.ok(!substituted.includes(pad), `pad ${pad} reported as substituted`);
+    }
+
+    // An unqualified hat is assumed closed, so it is the wrong sound for an open pad.
+    for (const pad of OPEN_PADS) {
+      assert.notEqual(kit[pad]?.category, 'Hat', `generic hat landed on open pad ${pad}`);
+    }
+  }
+
+  assert.ok(genericOnClosed > 0, 'generic hats never reached a closed pad in 40 kits');
+});
+
+await test('generic hats stay in their own pool outside the split layout', () => {
+  // The generic and minimal layouts have real Hat pads; promoting there would empty
+  // the pool those pads exist to draw from.
+  const genericOnly: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`perc${i}.wav`, 'Perc'))
+  ];
+  const { kit, layout } = generateRandomKit(genericOnly);
+  assert.equal(layout.id, 'generic-hats');
+  for (const pad of [3, 7, 11]) {
+    assert.equal(kit[pad]?.category, 'Hat', `hat pad ${pad} held ${kit[pad]?.category}`);
+  }
 });
 
 await test('no hats at all keeps the split layout', () => {

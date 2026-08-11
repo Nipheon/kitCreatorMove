@@ -30,9 +30,9 @@ export const SPLIT_HAT_LAYOUT: PadLayout = {
     'Clap', 'Clap', 'Perc', 'Perc'
   ],
   preferences: [
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Hat', 'Other'], ['OHH', 'Hat', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Hat', 'Other'], ['OHH', 'Hat', 'Other'],
-    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Hat', 'Other'], ['OHH', 'Hat', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
+    ['Kick', 'Other'], ['Snare', 'Other'], ['CHH', 'Other'], ['OHH', 'Other'],
     ['Clap', 'Perc', 'Crash', 'Other', 'Kick'],
     ['Clap', 'Perc', 'Crash', 'Other', 'Snare'],
     ['Perc', 'Crash', 'Clap', 'Other', 'CHH'],
@@ -130,6 +130,36 @@ export function chooseLayout(samples: Sample[]): PadLayout {
   }
 
   return baseLayout;
+}
+
+/**
+ * Which pool a sample is drawn from, which is not always its own category.
+ *
+ * In the split layout an unqualified `Hat` counts as a closed hat — a hat named without
+ * a qualifier is closed far more often than it is open — so generic hats join the `CHH`
+ * pool and the closed pads draw from both at random. Ranking `Hat` below `CHH` in the
+ * preference chain instead was not enough: `take` drains the `CHH` pool completely
+ * before it looks at the next entry, so with three or more labelled closed hats the
+ * generic ones were never reachable.
+ *
+ * It applies to the split layout only. The generic and minimal layouts have real `Hat`
+ * pads and need that pool left where it is.
+ *
+ * The open pads are deliberately not part of this: under the same assumption a generic
+ * hat is the wrong sound for an open pad, so `OHH` chains fall through to `Other`.
+ */
+export function poolCategoryFor(sample: Sample, layout: PadLayout): Category {
+  return layout.id === 'split-hats' && sample.category === 'Hat' ? 'CHH' : sample.category;
+}
+
+/**
+ * Whether a sample sitting on a pad counts as filling the role the pad asked for.
+ * A generic hat on a closed pad in the split layout is the intended equivalence above,
+ * not a substitution, and must not be reported as one.
+ */
+export function satisfiesRole(category: Category, role: Category, layout: PadLayout): boolean {
+  if (category === role) return true;
+  return layout.id === 'split-hats' && role === 'CHH' && category === 'Hat';
 }
 
 const HAT_CATEGORIES: Category[] = ['CHH', 'OHH', 'Hat'];
