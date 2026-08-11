@@ -266,6 +266,10 @@ export default function App() {
 
   const kitOptions = { skipLoops };
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
+  const activeFoldersCount = useMemo(
+    () => sourceFolders.filter(f => f.isEnabled !== false).length,
+    [sourceFolders]
+  );
   const usableCount = useMemo(
     () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
     [samples, skipLoops]
@@ -659,7 +663,10 @@ export default function App() {
               <div className='text-sm text-text-muted-dark text-center mt-4'>No folders loaded</div>
             )}
           </div>
-          <div className='mt-auto'>
+          <div className='mt-auto space-y-2'>
+            <div className='text-xs text-text-muted uppercase tracking-wider font-medium px-1'>
+              {sourceFolders.length > 0 ? `${activeFoldersCount} folder(s) used` : 'Waiting for samples'}
+            </div>
             <div className='p-4 bg-surface-card rounded-lg border border-border-dark'>
               <div className='flex justify-between text-sm mb-2 text-text-muted uppercase'>
                 <span>Usable Samples</span>
@@ -873,11 +880,6 @@ export default function App() {
           </div>
         </aside>
       </main>
-
-      <footer className='bg-surface-header border-t border-border-dark px-8 py-2.5 flex justify-between items-center text-sm text-text-muted-dark uppercase tracking-widest shrink-0'>
-        <div>Kit Creator for Ableton Move</div>
-        <div>{sourceFolders.length > 0 ? `${sourceFolders.length} folder(s) loaded` : 'Waiting for samples'}</div>
-      </footer>
 
       {isHelpOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto'>
