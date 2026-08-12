@@ -24,7 +24,8 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
 }
 
 import {
-  CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, DRUM_CELL_COLOR, PAD_COUNT
+  CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, DRUM_CELL_COLOR,
+  NO_SAMPLES_GRID_ID, PAD_COUNT
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
@@ -943,6 +944,66 @@ await test('a percussion-only pack gets a percussion grid', () => {
   assert.ok(layout.roles.every(r => r === 'Perc'));
   assert.equal(substituted.length, 0);
   assert.deepEqual(unavailableRoles, []);
+});
+
+await test('a disabled type leaves the pools, the grid and the usable count', () => {
+  // Deep enough that the three survivors can still fill all sixteen pads, so an empty
+  // pad below would mean the disabled type took something with it.
+  const library: Sample[] = [
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`ohh${i}.wav`, 'OHH'))
+  ];
+
+  const on = generateRandomKit(library);
+  assert.equal(on.layout.id, 'ksho');
+
+  // Switched off before the layout is chosen, so the type loses its column rather than
+  // keeping one it can never fill — the same ordering loops already rely on.
+  const off = generateRandomKit(library, [], { disabledTypes: new Set<Category>(['OHH']) });
+  assert.ok(!off.layout.roles.includes('OHH'), 'a disabled type must not keep a column');
+  assert.ok(off.kit.every(s => s === null || s.category !== 'OHH'));
+  assert.deepEqual(off.empty, [], 'the remaining types should still fill the grid');
+
+  // isUsableSample is the single definition, which is what keeps the sidebar count and
+  // the pools from disagreeing.
+  const usable = library.filter(s => isUsableSample(s, { disabledTypes: new Set<Category>(['OHH']) }));
+  assert.equal(usable.length, 18);
+});
+
+await test('disabling a type takes its pooled categories with it', () => {
+  // The rows are pools, not categories: CHH covers generic Hat and Perc covers Crash.
+  // Matching on the raw category would leave a row reading as off while its samples
+  // carried on filling pads.
+  const hats: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`hat${i}.wav`, 'Hat')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash'))
+  ];
+
+  const noChh = new Set<Category>(['CHH']);
+  assert.equal(hats.filter(s => isUsableSample(s, { disabledTypes: noChh })).length, 12);
+  const kit = generateRandomKit(hats, [], { disabledTypes: noChh });
+  assert.ok(kit.kit.every(s => s === null || s.category !== 'Hat'), 'generic hats go too');
+
+  const noPerc = new Set<Category>(['Perc']);
+  assert.equal(hats.filter(s => isUsableSample(s, { disabledTypes: noPerc })).length, 12);
+  const noCrashes = generateRandomKit(hats, [], { disabledTypes: noPerc });
+  assert.ok(noCrashes.kit.every(s => s === null || s.category !== 'Crash'), 'crashes go too');
+});
+
+await test('disabling every type empties the kit rather than throwing', () => {
+  const library: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'))
+  ];
+  const result = generateRandomKit(library, [], {
+    disabledTypes: new Set<Category>(['Kick', 'Snare'])
+  });
+  assert.ok(result.kit.every(s => s === null));
+  assert.equal(result.layout.id, NO_SAMPLES_GRID_ID);
 });
 
 await test('perc and other draw from one another without being merged', () => {

@@ -259,9 +259,21 @@ real packs.
   folder is still a kick.
 - **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
   makes a generic-hat library look like it has real split hats.
-- **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`) and excluded
-  samples (`sample.isExcluded`).** Both toggles default to on. This is also what keeps the
-  "Usable Samples" card count in step when a sample is excluded from the UI.
+- **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), types the
+  user switched off (`disabledTypes`) and excluded samples (`sample.isExcluded`).** Both
+  toggles default to on. This is also what keeps the "Usable Samples" card count in step
+  when a sample is excluded from the UI.
+- **`disabledTypes` holds *pool* categories, not raw ones.** The breakdown rows are pools,
+  so switching off `CHH` has to take generic `Hat` samples with it and `Perc` has to take
+  crashes — matching on the raw category would leave a row reading as off while its
+  samples carried on filling pads. `isUsableSample` compares against `poolCategoryFor`,
+  which is one line and the whole of the rule.
+
+  Because the filtering happens in `isUsableSample`, a disabled type is gone **before
+  `chooseLayout` runs**, so it loses its column rather than keeping one nothing can fill —
+  the same ordering loops already depend on. Switching off every type is a supported
+  state: the grid falls back to `NO_SAMPLES_GRID_ID` and the kit is empty. A test covers
+  each of those three.
 
 ## Pads, layout and choking
 
@@ -509,6 +521,13 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   that is where those samples are drawn from. Separate Hat and Crash rows would read as
   unused while their samples sit on closed-hat and percussion pads. The card also has no
   row for a category that is not a role.
+
+  **Each row carries an eye toggle that switches the whole type off**, the same control
+  and the same idea as disabling a source folder, writing into `disabledTypes`. It
+  regenerates on click for the reason the other filters do — a toggle that changes nothing
+  visible reads as broken — and passes the new set explicitly rather than reading state
+  back, which would still hold the old one in that tick. The toggle is disabled on a row
+  with no samples: there is nothing to switch off, and the row already reads as absent.
 
   **`PERC + CRASH` and `OTHER` stay separate rows even though they share a draw.** They
   are separate *roles*: each has its own column and its own letter in the grid id, so a

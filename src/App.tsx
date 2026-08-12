@@ -59,6 +59,11 @@ export default function App() {
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
   const [skipNonDrums, setSkipNonDrums] = useState(true);
+  /**
+   * Types switched off in the breakdown card, as pool categories. A `Set` rather than
+   * flags so the count of them is never a thing that can disagree with the rows.
+   */
+  const [disabledTypes, setDisabledTypes] = useState<ReadonlySet<Category>>(new Set());
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
@@ -287,7 +292,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  const kitOptions = { skipLoops, skipNonDrums };
+  const kitOptions = { skipLoops, skipNonDrums, disabledTypes };
 
   /**
    * The grid id travels in the exported kit name so a rack can be identified on the
@@ -309,7 +314,7 @@ export default function App() {
   );
   const usableCount = useMemo(
     () => samples.filter(s => isUsableSample(s, kitOptions)).length,
-    [samples, skipLoops, skipNonDrums]
+    [samples, skipLoops, skipNonDrums, disabledTypes]
   );
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
@@ -334,7 +339,7 @@ export default function App() {
       }
     });
     return stats;
-  }, [samples, skipLoops, skipNonDrums]);
+  }, [samples, skipLoops, skipNonDrums, disabledTypes]);
 
   const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
   const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
@@ -597,6 +602,25 @@ export default function App() {
     }
   };
 
+  /**
+   * Switches a whole type off. Regenerates immediately for the same reason the other
+   * filters do — a toggle that changes nothing visible reads as broken — and the new set
+   * is passed explicitly rather than read back from state, which would still hold the old
+   * one this tick.
+   */
+  const toggleType = (category: Category) => {
+    const next = new Set(disabledTypes);
+    if (next.has(category)) {
+      next.delete(category);
+    } else {
+      next.add(category);
+    }
+    setDisabledTypes(next);
+    if (samples.length > 0) {
+      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, disabledTypes: next }));
+    }
+  };
+
   const toggleLock = (index: number) => {
     setLockedPads(prev => {
       const next = [...prev];
@@ -773,20 +797,34 @@ export default function App() {
                     {BREAKDOWN_ROWS.map(cat => {
                       const { usable, total } = categoryStats[cat];
                       const label = BREAKDOWN_LABELS[cat] ?? cat;
+                      const isOff = disabledTypes.has(cat);
                       return (
                         <div
                           key={cat}
-                          className='flex justify-between text-sm uppercase font-medium'
+                          className={`flex justify-between items-center gap-2 text-sm uppercase font-medium ${isOff ? 'opacity-50' : ''}`}
                           title={cat === 'CHH'
                             ? 'Hats with no open/closed qualifier are treated as closed hats'
                             : cat === 'Perc'
                               ? 'Crashes are drawn from the percussion pool'
                               : undefined}
                         >
-                          <span className={total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}>
-                            {label}
-                          </span>
-                          <span className={usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}>
+                          <div className='flex items-center gap-2 min-w-0'>
+                            <button
+                              type='button'
+                              onClick={() => toggleType(cat)}
+                              disabled={total === 0}
+                              aria-pressed={isOff}
+                              className='text-text-subtle hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
+                              title={isOff ? `Use ${label} samples again` : `Leave ${label} samples out of every kit`}
+                              aria-label={isOff ? `Enable ${label}` : `Disable ${label}`}
+                            >
+                              {isOff ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                            <span className={`truncate ${total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}`}>
+                              {label}
+                            </span>
+                          </div>
+                          <span className={`shrink-0 ${usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}`}>
                             {usable.toLocaleString()} / {total.toLocaleString()}
                           </span>
                         </div>
@@ -1071,6 +1109,7 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm. A file that says "break" or "breakbeat" in its own name also counts, but only if it could not be categorised — a snare called "Break Snare" is still a snare, and a pack named "Breaks Vol 2" keeps all of its one-shots.</li>
+                  <li><strong className='text-text-bright'>Disable a Type:</strong> Each row of the Breakdown by Type card has an eye icon. Switching a type off leaves every sample of it out of generation, exactly like disabling a source folder, and the grid drops that column. Closed hats take generic hats with them, and percussion takes crashes.</li>
                   <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
                   <li><strong className='text-text-bright'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
                 </ul>

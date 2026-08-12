@@ -50,14 +50,21 @@ export interface KitOptions {
    * its vocal chants and riser effects on pads.
    */
   skipNonDrums?: boolean;
+  /**
+   * Types the user has switched off in the breakdown card, held as **pool** categories —
+   * switching off `CHH` has to take generic `Hat` samples with it, and `Perc` has to take
+   * crashes, or a row that reads as off still fills pads.
+   */
+  disabledTypes?: ReadonlySet<Category>;
 }
 
 export function isUsableSample(
   sample: Sample,
-  { skipLoops = true, skipNonDrums = true }: KitOptions = {}
+  { skipLoops = true, skipNonDrums = true, disabledTypes }: KitOptions = {}
 ): boolean {
   if (skipLoops && sample.isLoop) return false;
   if (skipNonDrums && sample.isNonDrum) return false;
+  if (disabledTypes?.has(poolCategoryFor(sample))) return false;
   return !sample.isExcluded;
 }
 
