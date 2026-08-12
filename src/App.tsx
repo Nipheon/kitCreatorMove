@@ -1083,6 +1083,8 @@ export default function App() {
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
+                  <li><strong className='text-text-bright'>Hide a Folder:</strong> The eye icon next to a loaded folder takes it out of the pool without unloading it. The kit re-rolls immediately without those samples, the folder dims in the list, and the eye brings it straight back — handy for auditioning one pack against another. Locked pads keep what they are holding even if its folder is hidden.</li>
+                  <li><strong className='text-text-bright'>Remove a Folder:</strong> The cross unloads it for good. Hiding is the reversible one.</li>
                 </ul>
               </section>
 
