@@ -3,13 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kit Creator for Ableton Move</title>
+    <title>Kit Creator for Ableton Move — Drum Kit Builder</title>
+    <meta name="description" content="Turn folders of drum samples into Ableton Move preset bundles in your browser. Drop a sample pack, get a 16-pad kit with hats, claps and percussion sorted onto the right pads, and export an .ablpresetbundle straight to your Move." />
+    <link rel="canonical" href="https://move-kit-creator.vercel.app/" />
+    <meta name="theme-color" content="#1B1733" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kit Creator for Ableton Move" />
+    <meta property="og:title" content="Kit Creator for Ableton Move — Drum Kit Builder" />
+    <meta property="og:description" content="Turn folders of drum samples into Ableton Move preset bundles in your browser. Drop a sample pack, get a 16-pad kit with hats, claps and percussion sorted onto the right pads, and export an .ablpresetbundle straight to your Move." />
+    <meta property="og:url" content="https://move-kit-creator.vercel.app/" />
+    <meta property="og:image" content="https://move-kit-creator.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kit Creator for Ableton Move — Drum Kit Builder" />
+    <meta name="twitter:description" content="Turn folders of drum samples into Ableton Move preset bundles in your browser. Drop a sample pack, get a 16-pad kit with hats, claps and percussion sorted onto the right pads, and export an .ablpresetbundle straight to your Move." />
+    <meta name="twitter:image" content="https://move-kit-creator.vercel.app/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Kit Creator for Ableton Move",
+        "url": "https://move-kit-creator.vercel.app/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any browser",
+        "description": "Turn folders of drum samples into Ableton Move preset bundles in your browser. Drop a sample pack, get a 16-pad kit with hats, claps and percussion sorted onto the right pads, and export an .ablpresetbundle straight to your Move.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Reads WAV and AIFF sample folders in the browser",
+          "Sorts kicks, snares, hats, claps and percussion onto a 16-pad grid",
+          "Trims silence and exports .ablpresetbundle files for Ableton Move",
+          "Batch export of up to 10 randomised kits"
+        ]
+      }
+    </script>
     <!-- The drum emoji drawn as SVG text: same glyph as the header, and no icon file to
          keep in step with it. Percent-encoded so the data URI survives any parser. -->
     <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%A5%81%3C%2Ftext%3E%3C%2Fsvg%3E" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Replaced by the app on mount. Present so a crawler that executes no JavaScript,
+           and anyone on a slow connection, still gets the gist rather than a blank page.
+           Keep it saying what the app actually does — it is the same claim as the meta
+           description, and it must not become a place to stuff words. -->
+      <main style="max-width:44rem;margin:0 auto;padding:4rem 1.5rem;color:#CFC9F0;background:#1B1733;font-family:system-ui,sans-serif;line-height:1.6">
+        <h1 style="font-size:1.5rem;letter-spacing:.08em;text-transform:uppercase">Kit Creator for Ableton Move</h1>
+        <p>Turn folders of drum samples into Ableton Move preset bundles, in your browser.
+          Drop a sample pack, get a 16-pad kit with kicks, snares, hats, claps and
+          percussion sorted onto the right pads, and export an
+          <code>.ablpresetbundle</code> straight to your Move.</p>
+        <p>Nothing is uploaded: the samples stay on your machine and the kit is built in
+          the page. Loading the app…</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "ae73ad252b9847f5ac311fe28d235aac"}'></script><!-- End Cloudflare Web Analytics -->
   </body>

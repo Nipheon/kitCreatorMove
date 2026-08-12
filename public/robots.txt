@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://move-kit-creator.vercel.app/sitemap.xml

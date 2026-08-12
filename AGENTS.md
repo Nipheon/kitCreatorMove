@@ -594,6 +594,19 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   `.pad-lock-active`. That fallback always wins, because it is emitted after anything
   hand-written in the same rule. Do not move them out of the block.
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
+- **`index.html` carries the whole SEO surface**: description, canonical, Open Graph and
+  Twitter tags, and a `WebApplication` JSON-LD block. The app is client-rendered, so a
+  crawler that runs no JavaScript sees only what is in that file — before this it saw a
+  title and an empty `<div id="root">`.
+
+  **The static block inside `#root` is not decoration.** React replaces it on mount, so it
+  exists for crawlers that execute nothing and for anyone on a slow connection. It must
+  keep saying what the app actually does, in the same words as the meta description: the
+  moment it drifts into keywords the page is cloaking, and it is the kind of thing nobody
+  notices because the app hides it a heartbeat later.
+
+  `public/` holds `robots.txt`, `sitemap.xml` and `og-image.png` (1200x630, a real
+  screenshot). Vite copies that directory to the root of the build.
 - **The header icon and the favicon are the same drum emoji**, the header as a `<span>`
   and the favicon as an SVG `<text>` in a percent-encoded data URI in `index.html`. No
   icon file, so the two cannot drift apart. It replaced a yellow tile holding a rotated
