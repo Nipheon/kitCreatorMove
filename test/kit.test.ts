@@ -190,6 +190,29 @@ await test('a pad that loses a draw against a pool that exists still counts as s
   assert.ok(!result.unavailableRoles.includes('Kick'), 'kicks exist, they just ran out');
 });
 
+await test('camelCase names are split into words', () => {
+  // Found by running 58 real packs through the pipeline. A whole collection named this
+  // way read as Other: the name is one token, and `hat` is three characters so it only
+  // matches a token outright. The pack looked fine because a sibling "OpenHats" folder
+  // covered for it — until the same files appeared under "DrumKits" too, the dedupe kept
+  // that copy, and all 87 open hats vanished from the pool.
+  assert.equal(categorizeSample('BohmSlappAltOpenHat.wav'), 'OHH');
+  assert.equal(categorizeSample('BohmSlappOpenHat.wav'), 'OHH');
+  assert.equal(categorizeSample('TightSnare.wav'), 'Snare');
+  assert.equal(categorizeSample('BigKick.wav'), 'Kick');
+  assert.equal(categorizeSample('ClosedHat3.wav'), 'CHH');
+
+  // The same file must read the same wherever it sits, which is what the bug broke.
+  for (const dir of ['/Pack/DrumKits', '/Pack/OpenHats', '/Pack/Misc']) {
+    assert.equal(categorizeSample('BohmSlappOpenHat.wav', dir), 'OHH', dir);
+  }
+
+  // And the split must not invent words: these still resolve as before.
+  assert.equal(categorizeSample('WhatEver.wav'), 'Other');
+  assert.equal(categorizeSample('CHat.wav'), 'CHH');
+  assert.equal(categorizeSample('OHat.wav'), 'OHH');
+});
+
 await test('generic hat filenames are not mistaken for open or closed hats', () => {
   // These all used to come back as OHH because /hat.*o/ matched any later "o",
   // which would have kept the split layout for a library of generic hats.

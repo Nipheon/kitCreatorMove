@@ -96,6 +96,12 @@ function tokenize(name: string): string[] {
     .replace(/\.[a-z0-9]+$/i, '')          // drop the extension
     .replace(/([a-z])(\d)/gi, '$1 $2')     // BD01 -> BD 01
     .replace(/(\d)([a-z])/gi, '$1 $2')     // 808bass -> 808 bass
+    // BohmSlappAltOpenHat -> Bohm Slapp Alt Open Hat. Without this the whole name is one
+    // token, and `hat` is three characters so it only ever matches a token outright: an
+    // entire pack of camelCase names read as Other. It was invisible because such packs
+    // usually also have a folder saying "OpenHats", which covered for it — until the same
+    // file appeared in a second folder that did not, and the dedupe kept that copy.
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean);

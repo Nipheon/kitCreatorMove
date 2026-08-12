@@ -212,6 +212,18 @@ real packs.
   one-shot.
 - **A tempo must say `bpm`.** A bare bracketed number is not evidence — `[120]` is as
   likely an index or a catalogue number, and `beat [128].wav` is not a loop.
+- **`tokenize` splits camelCase.** `BohmSlappAltOpenHat.wav` was one token, and `hat` is
+  three characters so it only ever matches a token outright — an entire collection read as
+  `Other`. It hid for a long time because such packs usually also have a folder called
+  `OpenHats`, which covered for the filename; the failure only surfaced when the same
+  files also appeared under `DrumKits`, the name+size dedupe kept *that* copy, and all 87
+  open hats disappeared from the pool. Found by running 58 real packs through the
+  pipeline, not by reading the code.
+
+  The dedupe keeping the first occurrence rather than the best-categorised one is the
+  second half of that bug and is still there. It is defensible now that both copies
+  categorise identically, but a file that only one folder can explain is still at the
+  mercy of list order.
 - **Plurals of the two- and three-letter abbreviations are listed explicitly** (`bds`,
   `kds`, `sds`, `sns`, `snrs`, `rims`, `kiks`, `hhs`, `chhs`, `ohhs`). The glue rule only
   applies from four characters up, so these matched nothing and fell through to `Other` —
