@@ -164,18 +164,19 @@ await test('locked pads survive a regenerate', () => {
   }
 });
 
-await test('the grid only advertises roles the library can fill', () => {
-  // Derived grids cannot ask for what is not there: a kicks-only library gets kick
-  // columns, so there is nothing to report as substituted or unavailable. The earlier
-  // fixed layouts asked every library for kicks, snares and hats regardless.
+await test('a thin library gets the same grid, filled by fallback', () => {
+  // No reshaping: a kicks-only pack lays out like everything else and the pads it
+  // cannot fill honestly are reported rather than hidden by a smaller grid.
   const kicksOnly = Array.from({ length: 3 }, (_, i) => makeSample(`k${i}.wav`, 'Kick'));
   const result = generateRandomKit(kicksOnly);
-  assert.equal(result.layout.id, 'kkkk');
-  assert.ok(result.layout.roles.every(r => r === 'Kick'), 'every pad asks for a kick');
+  assert.equal(result.layout.id, 'kssh');
+  assert.deepEqual(result.layout.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'CHH']);
   assert.equal(result.kit.filter(Boolean).length, 3);
   assert.equal(result.empty.length, PAD_COUNT - 3);
-  assert.equal(result.substituted.length, 0);
-  assert.deepEqual(result.unavailableRoles, []);
+  assert.ok(
+    result.unavailableRoles.length > 0,
+    'the roles this library cannot fill are reported once each'
+  );
 });
 
 await test('a pad that loses a draw against a pool that exists still counts as substituted', () => {
@@ -551,8 +552,13 @@ await test('skipNonDrums keeps non-drums out of the pools, and can be turned off
     'a chant reached a pad with skipNonDrums on'
   );
 
+  // Other is never a column now, so opting in shows up as non-drums reaching pads
+  // rather than as a grid that reshaped around them.
   const included = generateRandomKit(library, [], { skipNonDrums: false });
-  assert.ok(included.layout.roles.includes('Other'), 'opting in should earn the column');
+  assert.ok(
+    included.kit.some(s => s?.isNonDrum),
+    'opting in should let non-drums reach the pads'
+  );
 
   assert.equal(isUsableSample({ ...library[6] }), false);
   assert.equal(isUsableSample({ ...library[6] }, { skipNonDrums: false }), true);
@@ -733,95 +739,118 @@ await test('the filename beats the folder when both say something', () => {
   assert.equal(categorizeSample('Open Hat.wav', '/Pack/Kicks'), 'OHH');
 });
 
-await test('a category thinner than a column does not get one', () => {
-  // Reported case: twelve kicks, nineteen snares, ten hats and a single conga. The conga
-  // took a whole column — four pads it could fill one of — while the ten hats got no
-  // more, because the grid was chosen from which categories were present and never
-  // looked at how deep each pool was.
+await test('one open hat still holds the open-hat column', () => {
+  // Consistency is worth a repeat: the column stays where it always is and the pads
+  // above the single open hat fall back to closed hats rather than reshaping the grid.
   const library: Sample[] = [
     ...Array.from({ length: 12 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
-    ...Array.from({ length: 19 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
-    ...Array.from({ length: 10 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
-    makeSample('conga.wav', 'Perc')
+    ...Array.from({ length: 11 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 12 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    makeSample('open hat.wav', 'OHH')
   ];
 
-  const { layout, kit, substituted } = generateRandomKit(library);
-  assert.equal(layout.id, 'kssh_kssp');
-
-  // One sample, one pad — and it is the top right, pad 16.
-  const percPads = layout.roles.flatMap((role, i) => (role === 'Perc' ? [i] : []));
-  assert.deepEqual(percPads, [15]);
-  assert.equal(kit[15]?.category, 'Perc');
-
-  // The freed column goes to a category that can fill it, and nothing is left short.
-  assert.ok(layout.roles.filter(r => r === 'Snare').length > 4, 'snares take the spare column');
-  assert.deepEqual(substituted, []);
-  assert.deepEqual(layout.roles.filter(r => r === 'CHH').length, 3);
+  const { kit, layout } = generateRandomKit(library);
+  assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
+  assert.equal(kit[3]?.category, 'OHH', 'the one open hat sits on pad 4');
+  for (const pad of [7, 11]) {
+    assert.equal(kit[pad]?.category, 'CHH', `pad ${pad + 1} falls back to a closed hat`);
+  }
 });
 
-await test('a scarce category gets one pad per sample, taken from the right', () => {
+await test('the top row will not take a core sound while any extra is left', () => {
+  // Reported: with one clap in the library the second clap pad took a snare, the
+  // nearest sound. Right answer for a column pad, wrong one for the top row, which
+  // exists to hold what the beat is not.
   const library: Sample[] = [
-    ...Array.from({ length: 12 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
-    ...Array.from({ length: 19 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
-    ...Array.from({ length: 10 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
-    ...Array.from({ length: 3 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc'))
+    ...Array.from({ length: 13 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 11 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 12 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    makeSample('open hat.wav', 'OHH'),
+    makeSample('clap.wav', 'Clap'),
+    makeSample('conga.wav', 'Perc'),
+    ...Array.from({ length: 5 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
   ];
 
-  const { layout } = generateRandomKit(library);
-  const percPads = layout.roles.flatMap((role, i) => (role === 'Perc' ? [i] : []));
-  assert.deepEqual(percPads, [13, 14, 15], 'three samples, the three right-hand top pads');
+  for (let run = 0; run < 60; run++) {
+    const { kit } = generateRandomKit(library);
+    for (const pad of [12, 13, 14, 15]) {
+      const category = kit[pad]?.category;
+      assert.ok(
+        category === 'Clap' || category === 'Perc' || category === 'Other',
+        `pad ${pad + 1} held ${category}`
+      );
+    }
+  }
 });
 
-await test('the seven grids from the specification', () => {
-  // Each case is written as it displays — top row first — while `roles` is in pad-index
-  // order, so the expectations below are read bottom row first.
-  const kicks = Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick'));
-  const snares = Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'));
-  const closed = Array.from({ length: 4 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH'));
-  const open = Array.from({ length: 4 }, (_, i) => makeSample(`ohh${i}.wav`, 'OHH'));
-  const claps = Array.from({ length: 4 }, (_, i) => makeSample(`clap${i}.wav`, 'Clap'));
-  const perc = Array.from({ length: 4 }, (_, i) => makeSample(`perc${i}.wav`, 'Perc'));
-  const generic = Array.from({ length: 4 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'));
+await test('core sounds reach the top row only when there is no extra at all', () => {
+  const core: Sample[] = [
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH'))
+  ];
+  const { kit, layout } = generateRandomKit(core);
+  assert.equal(layout.id, 'kssh');
+  assert.ok(kit.slice(12).every(Boolean), 'the top row still fills, from the columns');
+});
 
+await test('the four canonical grids', () => {
+  // Presence-based on purpose. Sizing columns by pool depth fitted each library and
+  // moved the layout every time the library changed, which is the opposite of what a
+  // kit builder is for: pad 3 should be a hat in every kit from every pack.
+  const many = (n: number, category: Sample['category'], prefix: string) =>
+    Array.from({ length: n }, (_, i) => makeSample(`${prefix}${i}.wav`, category));
+  const core = [...many(13, 'Kick', 'k'), ...many(11, 'Snare', 's'), ...many(12, 'CHH', 'h')];
   const gridOf = (library: Sample[]) => generateRandomKit(library).layout;
 
-  //  k k s s  x4
-  const kickSnare = gridOf([...kicks, ...snares]);
-  assert.equal(kickSnare.id, 'kkss');
-  assert.deepEqual(kickSnare.roles.slice(0, 4), ['Kick', 'Kick', 'Snare', 'Snare']);
+  //  c c p p  over  k s h o
+  const everything = gridOf([
+    ...core, ...many(1, 'OHH', 'o'), ...many(1, 'Clap', 'c'),
+    ...many(1, 'Perc', 'p'), ...many(5, 'Other', 'x')
+  ]);
+  assert.equal(everything.id, 'ksho_ccpp');
+  assert.deepEqual(everything.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
+  assert.deepEqual(everything.roles.slice(12), ['Clap', 'Clap', 'Perc', 'Perc']);
 
-  //  k s s ch  x4   — a generic hat is a closed hat
-  const withGeneric = gridOf([...kicks, ...snares, ...generic]);
-  assert.equal(withGeneric.id, 'kssh');
-  assert.deepEqual(withGeneric.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'CHH']);
+  //  p p p p  over  k s c h
+  const noOpenHats = gridOf([...core, ...many(2, 'Clap', 'c'), ...many(3, 'Other', 'x')]);
+  assert.equal(noOpenHats.id, 'ksch_pppp');
+  assert.deepEqual(noOpenHats.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
 
-  //  k s cl ch  x4
-  const withClap = gridOf([...kicks, ...snares, ...claps, ...generic]);
-  assert.equal(withClap.id, 'ksch');
-  assert.deepEqual(withClap.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
+  //  p p p p  over  k s s h
+  const noClaps = gridOf([...core, ...many(3, 'Perc', 'p')]);
+  assert.equal(noClaps.id, 'kssh_pppp');
+  assert.deepEqual(noClaps.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'CHH']);
 
-  //  k s ch oh  x4
-  const splitHats = gridOf([...kicks, ...snares, ...closed, ...open]);
-  assert.equal(splitHats.id, 'ksho');
-  assert.deepEqual(splitHats.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
+  //  k s s h  on every row
+  const plain = gridOf(core);
+  assert.equal(plain.id, 'kssh');
+  assert.deepEqual(plain.roles.slice(12), ['Kick', 'Snare', 'Snare', 'CHH']);
 
-  //  cl cl cl cl over k s ch oh
-  const clapRow = gridOf([...kicks, ...snares, ...closed, ...open, ...claps]);
-  assert.equal(clapRow.id, 'ksho_cccc');
-  assert.deepEqual(clapRow.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
-  assert.deepEqual(clapRow.roles.slice(12), ['Clap', 'Clap', 'Clap', 'Clap']);
+  // Open hats keep column 4 even with no claps; the clap cells become more perc.
+  const openNoClap = gridOf([...core, ...many(1, 'OHH', 'o'), ...many(2, 'Perc', 'p')]);
+  assert.equal(openNoClap.id, 'ksho_pppp');
 
-  //  perc x4 over k s cl ch
-  const percRow = gridOf([...kicks, ...snares, ...claps, ...generic, ...perc]);
-  assert.equal(percRow.id, 'ksch_pppp');
-  assert.deepEqual(percRow.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
-  assert.deepEqual(percRow.roles.slice(12), ['Perc', 'Perc', 'Perc', 'Perc']);
+  // Claps with nothing else to put up there take the whole row.
+  const clapsOnly = gridOf([...core, ...many(1, 'OHH', 'o'), ...many(2, 'Clap', 'c')]);
+  assert.equal(clapsOnly.id, 'ksho_cccc');
+});
 
-  //  cl cl perc perc over k s ch oh
-  const shared = gridOf([...kicks, ...snares, ...closed, ...open, ...claps, ...perc]);
-  assert.equal(shared.id, 'ksho_ccpp');
-  assert.deepEqual(shared.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
-  assert.deepEqual(shared.roles.slice(12), ['Clap', 'Clap', 'Perc', 'Perc']);
+await test('the grid does not move when the library does', () => {
+  // The point of the whole scheme: two packs holding the same kinds of sound lay out
+  // identically, however differently sized their pools are.
+  const many = (n: number, category: Sample['category'], prefix: string) =>
+    Array.from({ length: n }, (_, i) => makeSample(`${prefix}${i}.wav`, category));
+  const thin = [
+    ...many(2, 'Kick', 'k'), ...many(1, 'Snare', 's'), ...many(1, 'CHH', 'h'),
+    ...many(1, 'OHH', 'o'), ...many(1, 'Clap', 'c'), ...many(1, 'Perc', 'p')
+  ];
+  const fat = [
+    ...many(90, 'Kick', 'K'), ...many(40, 'Snare', 'S'), ...many(70, 'CHH', 'H'),
+    ...many(30, 'OHH', 'O'), ...many(25, 'Clap', 'C'), ...many(60, 'Perc', 'P')
+  ];
+  assert.equal(generateRandomKit(thin).layout.id, generateRandomKit(fat).layout.id);
+  assert.deepEqual(generateRandomKit(thin).layout.roles, generateRandomKit(fat).layout.roles);
 });
 
 await test('a grid id identifies the arrangement, and nothing else', () => {
@@ -895,9 +924,9 @@ await test('generic hats take the closed-hat column, never one of their own', ()
   ];
   const { layout, kit } = generateRandomKit(genericPool);
   assert.ok(!layout.roles.includes('Hat'), 'Hat is never a role');
-  assert.equal(layout.id, 'kshp');
+  assert.equal(layout.id, 'kssh_pppp');
   const onClosedPads = kit.filter((_, i) => layout.roles[i] === 'CHH');
-  assert.equal(onClosedPads.length, 4, 'one full-height closed column');
+  assert.equal(onClosedPads.length, 3, 'the hat column, with the top row given to extras');
   assert.ok(onClosedPads.every(s => s?.category === 'Hat'), 'generic hats fill the CHH column');
 });
 
@@ -1044,26 +1073,27 @@ await test('crashes are drawn from the percussion pool', () => {
   });
 });
 
-await test('no hats at all gives the snare the spare column', () => {
+await test('no hats at all still leaves the hat column where it belongs', () => {
   const noHats = [
     ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 3 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
     ...Array.from({ length: 3 }, (_, i) => makeSample(`clap${i}.wav`, 'Clap'))
   ];
   const { layout } = generateRandomKit(noHats);
-  assert.equal(layout.id, 'kssc');
-  assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'Clap']);
+  assert.equal(layout.id, 'ksch');
+  assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
 });
 
-await test('a percussion-only pack gets a percussion grid', () => {
-  // The old fixed layouts never looked at kicks or snares, so this pack got a
-  // Kick/Snare/CHH/OHH grid and filled all 16 pads through the deepest-pool fallback.
+await test('a percussion-only pack keeps the canonical grid', () => {
+  // It used to derive a grid of nothing but percussion. Consistency wins now: the pads
+  // sit where they always do and percussion fills them in pad order until it runs out.
   const percOnly = Array.from({ length: 8 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc'));
-  const { layout, substituted, unavailableRoles } = generateRandomKit(percOnly);
-  assert.equal(layout.id, 'pppp');
-  assert.ok(layout.roles.every(r => r === 'Perc'));
-  assert.equal(substituted.length, 0);
-  assert.deepEqual(unavailableRoles, []);
+  const { layout, kit, unavailableRoles } = generateRandomKit(percOnly);
+  assert.equal(layout.id, 'kssh_pppp');
+  assert.deepEqual(layout.roles.slice(12), ['Perc', 'Perc', 'Perc', 'Perc']);
+  assert.equal(kit.filter(Boolean).length, 8, 'eight samples, eight pads');
+  assert.ok(kit.filter(Boolean).every(s => s?.category === 'Perc'));
+  assert.ok(unavailableRoles.includes('Kick'), 'and it says what it could not fill');
 });
 
 await test('a disabled type leaves the pools, the grid and the usable count', () => {
@@ -1127,61 +1157,50 @@ await test('disabling every type empties the kit rather than throwing', () => {
 });
 
 await test('perc and other draw from one another without being merged', () => {
-  // Separate roles, one draw. The pooling that Hat and Crash get would collapse Other
-  // into Perc and cost it its column; these two keep theirs.
-  const library: Sample[] = [
-    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
-    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
-    ...Array.from({ length: 6 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc')),
-    ...Array.from({ length: 6 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
-  ];
-
-  const { layout } = generateRandomKit(library);
-  // Still four distinct columns, and both letters still in the id: not grouped.
-  assert.equal(layout.id, 'kspx');
-  assert.ok(layout.roles.includes('Perc') && layout.roles.includes('Other'));
-
-  const percPads = layout.roles.flatMap((r, i) => (r === 'Perc' ? [i] : []));
-  const otherPads = layout.roles.flatMap((r, i) => (r === 'Other' ? [i] : []));
-  assert.ok(percPads.length > 0 && otherPads.length > 0);
-
-  // A preference chain would drain one pool before touching the next, so a percussion
-  // pad would only ever see Other once the percussion ran out. Both must show up on
-  // both kinds of pad across repeated draws.
-  const seen = { perc: new Set<string>(), other: new Set<string>() };
-  for (let run = 0; run < 200; run++) {
-    const { kit, substituted } = generateRandomKit(library);
-    percPads.forEach(i => kit[i] && seen.perc.add(kit[i]!.category));
-    otherPads.forEach(i => kit[i] && seen.other.add(kit[i]!.category));
-    // Neither is a lost draw, so neither may be reported as a substitution.
-    assert.deepEqual(substituted, [], 'drawing across the group is not a substitution');
-  }
-
-  assert.deepEqual([...seen.perc].sort(), ['Other', 'Perc'], 'perc pads see both');
-  assert.deepEqual([...seen.other].sort(), ['Other', 'Perc'], 'other pads see both');
-});
-
-await test('a crash reaches an other pad, and choking is still its own', () => {
-  // Crash pools into Perc, and Perc draws with Other, so a crash can legitimately sit on
-  // an Other pad. It must still choke as a crash — pooling is about which pad a sample
-  // can reach, choking reads the real category.
+  // One draw, two categories. Other has no column of its own under the canonical grids,
+  // but it must still reach the percussion pads rather than being stranded, and it keeps
+  // its own breakdown row and its own hue.
   const library: Sample[] = [
     ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
-    ...Array.from({ length: 6 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash')),
-    ...Array.from({ length: 2 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    makeSample('conga.wav', 'Perc'),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
   ];
 
-  let sawCrashOnOtherPad = false;
-  for (let run = 0; run < 200 && !sawCrashOnOtherPad; run++) {
+  let sawOther = false;
+  for (let run = 0; run < 60; run++) {
     const { kit, layout, substituted } = generateRandomKit(library);
     layout.roles.forEach((role, i) => {
-      if (role === 'Other' && kit[i]?.category === 'Crash') sawCrashOnOtherPad = true;
+      if (role !== 'Perc') return;
+      const category = kit[i]?.category;
+      assert.ok(category === 'Perc' || category === 'Other', `perc pad held ${category}`);
+      if (category === 'Other') sawOther = true;
+      // Drawing from the group is intended, so it is not a substitution.
+      assert.ok(!substituted.includes(i));
     });
-    assert.deepEqual(substituted, []);
   }
-  assert.ok(sawCrashOnOtherPad, 'a crash should be able to reach an other pad');
-  assert.equal(chokeGroupFor(makeSample('crash.wav', 'Crash')), CHOKE_CRASHES);
+  assert.ok(sawOther, 'six others and one conga: others must reach the percussion pads');
+});
+
+await test('a crash reaches a percussion pad, and choking is still its own', () => {
+  // Crash pools into Perc, so it fills percussion pads. It must still choke as a crash:
+  // pooling decides which pad a sample can reach, choking reads the real category.
+  const library: Sample[] = [
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash'))
+  ];
+
+  const { kit, layout, substituted } = generateRandomKit(library);
+  const percPads = layout.roles.flatMap((r, i) => (r === 'Perc' ? [i] : []));
+  assert.ok(percPads.length > 0, 'crashes give the library a top row');
+  for (const pad of percPads) {
+    assert.equal(kit[pad]?.category, 'Crash', `pad ${pad + 1} held ${kit[pad]?.category}`);
+    assert.ok(!substituted.includes(pad), 'a crash on a perc pad is not a substitution');
+  }
+  assert.equal(chokeGroupFor(kit[percPads[0]]), CHOKE_CRASHES);
 });
 
 await test('excluded hats do not influence the grid', () => {

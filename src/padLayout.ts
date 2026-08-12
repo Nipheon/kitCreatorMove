@@ -38,21 +38,6 @@ export interface PadLayout {
 const RANK: Category[] = ['Kick', 'Snare', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
 
 /**
- * Left-to-right order once the columns are chosen, which is deliberately not `RANK`.
- * A clap sits between the snare and the hats (`k s cl ch`), but when open and closed
- * hats are both present they take the two right-hand columns and the clap moves to the
- * shared top row instead (`k s ch oh` + `cl cl pc pc`).
- */
-const COLUMN_ORDER: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
-
-/**
- * Which category doubles up when fewer than four are present. Fixed rather than driven
- * by pool size: the same library must always produce the same grid, or the id in the kit
- * name would change as folders are toggled and swapping would stop meaning anything.
- */
-const DOUBLING_ORDER: Category[] = ['Snare', 'Kick', 'CHH', 'OHH', 'Clap', 'Perc', 'Other'];
-
-/**
  * One character per category, so the grid id stays short enough to live in a kit name.
  *
  * Lowercase because Move renders lowercase glyphs in fewer pixels than capitals, and the
@@ -229,37 +214,6 @@ export function satisfiesRole(category: Category, role: Category): boolean {
   return pooled === role || drawGroupFor(role).includes(pooled);
 }
 
-/** The categories the library can actually fill a pad with, highest rank first. */
-function poolSizes(samples: Sample[]): Map<Category, number> {
-  const counts = new Map<Category, number>();
-  for (const sample of samples) {
-    if (sample.isExcluded) continue;
-    const pool = poolCategoryFor(sample);
-    counts.set(pool, (counts.get(pool) ?? 0) + 1);
-  }
-  return counts;
-}
-
-/**
- * Where a category sits in the top row when it could not fill a column. Cells are taken
- * from the right, one per sample, so a library with a single conga puts it on pad 16
- * rather than handing it four pads it can fill one of. Guests are laid out in rank order
- * left to right, matching every other ordering in the grid.
- */
-function seatGuests(topRow: Category[], guests: Category[], counts: Map<Category, number>) {
-  const row = [...topRow];
-  let cursor = row.length - 1;
-  for (const guest of [...guests].reverse()) {
-    let cells = Math.min(counts.get(guest) ?? 0, cursor + 1);
-    while (cells > 0 && cursor >= 0) {
-      row[cursor] = guest;
-      cursor--;
-      cells--;
-    }
-  }
-  return row;
-}
-
 const sameRow = (a: Category[], b: Category[]) =>
   a.length === b.length && a.every((category, i) => category === b[i]);
 
@@ -270,49 +224,6 @@ function presentCategories(samples: Sample[]): Category[] {
     present.add(poolCategoryFor(sample));
   }
   return RANK.filter(category => present.has(category));
-}
-
-/**
- * Fills the four columns when the library has fewer than four categories, by repeating
- * what it does have in `DOUBLING_ORDER` — two kicks and two snares for a kick-and-snare
- * pack, `k s s ch` once hats arrive.
- */
-function fillColumns(present: Category[]): Category[] {
-  const columns = [...present];
-  const countOf = (category: Category) => columns.filter(c => c === category).length;
-
-  while (columns.length < 4) {
-    const fewest = Math.min(...present.map(countOf));
-    // Least-used first so the repeats spread evenly, DOUBLING_ORDER breaking the tie.
-    const next = DOUBLING_ORDER.find(c => present.includes(c) && countOf(c) === fewest);
-    // Unreachable while `present` is non-empty, but a wrong grid is worse than a throw.
-    if (!next) break;
-    columns.push(next);
-  }
-  return columns;
-}
-
-/** Sorts chosen columns for display, keeping repeats of one category adjacent. */
-function orderColumns(columns: Category[]): Category[] {
-  return [...columns].sort((a, b) => COLUMN_ORDER.indexOf(a) - COLUMN_ORDER.indexOf(b));
-}
-
-/**
- * Splits the shared top row between the categories that did not win a column. Cells are
- * handed out left to right in rank order, and a remainder goes to the highest-ranked, so
- * two leftovers give `cl cl pc pc` and three give `cl cl pc ot`. Cell order is part of
- * the grid id, so this has to be deterministic, not merely balanced.
- */
-function shareTopRow(leftovers: Category[]): Category[] {
-  const contenders = leftovers.slice(0, 4);
-  const each = Math.floor(4 / contenders.length);
-  const remainder = 4 - each * contenders.length;
-  const row: Category[] = [];
-  contenders.forEach((category, index) => {
-    const cells = each + (index < remainder ? 1 : 0);
-    for (let i = 0; i < cells; i++) row.push(category);
-  });
-  return row;
 }
 
 const gridCode = (categories: Category[]) => categories.map(c => LETTER[c] ?? 'X').join('');
@@ -353,10 +264,54 @@ function gridLabel(columns: Category[], topRow: Category[]): string {
  * badly. A pack with no kicks reshaped nothing, because layout choice never looked at
  * kicks at all.
  */
-export function deriveLayout(samples: Sample[]): PadLayout {
-  const present = presentCategories(samples);
+/**
+ * The four canonical grids, keyed on which *kinds* of sound the library holds.
+ *
+ * Deliberately presence-based, never depth-based. An earlier version sized columns by
+ * how deep each pool was, which fitted each library beautifully and moved the layout
+ * every time the library changed — the opposite of what a kit builder is for. Muscle
+ * memory and rack swapping both want pad 3 to be a hat in every kit from every pack,
+ * even when that means repeating a sample or standing in a closed hat for an open one.
+ *
+ * Columns run the bottom three rows; the top row is its own thing, fed by the sounds
+ * that are not part of the core beat.
+ *
+ *   open hats          no open hats,      no open hats,      only kicks,
+ *   and claps          claps              no claps           snares, hats
+ *   c c p p            p p p p            p p p p            k s s h
+ *   k s h o            k s c h            k s s h            k s s h
+ *   k s h o            k s c h            k s s h            k s s h
+ *   k s h o            k s c h            k s s h            k s s h
+ *
+ * Drawn as displayed: the top row is pad indices 12-15, because Move counts its 4x4
+ * from the bottom left. `roles` is in pad-index order, so the top row is written last.
+ */
+const CORE_WITH_OPEN_HATS: Category[] = ['Kick', 'Snare', 'CHH', 'OHH'];
+const CORE_WITH_CLAPS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH'];
+const CORE_PLAIN: Category[] = ['Kick', 'Snare', 'Snare', 'CHH'];
 
-  if (present.length === 0) {
+/** The sounds the top row is for: never part of a column unless the library is thin. */
+const EXTRAS: Category[] = ['Clap', 'Perc', 'Other'];
+
+/**
+ * A top-row pad reaches for the other extras before it will touch a kick, snare or hat.
+ *
+ * With one clap in the library, the second clap pad used to take a snare — the nearest
+ * sound, and the right answer for a *column* pad. Up here it is the wrong one: the top
+ * row exists to hold what the beat is not, and filling it with a fourth snare defeats
+ * the point. Core sounds stay in the chain as a last resort, for a library with no
+ * extras at all.
+ */
+function topRowChain(role: Category): Category[] {
+  const extras = EXTRAS.filter(c => c !== role);
+  const core = preferenceChain(role).filter(c => c !== role && !extras.includes(c));
+  return [role, ...extras, ...core];
+}
+
+export function deriveLayout(samples: Sample[]): PadLayout {
+  const present = new Set(presentCategories(samples));
+
+  if (present.size === 0) {
     const roles = Array.from({ length: PAD_COUNT }, (_, i) => PLACEHOLDER_COLUMNS[i % 4]);
     return {
       id: NO_SAMPLES_GRID_ID,
@@ -367,45 +322,31 @@ export function deriveLayout(samples: Sample[]): PadLayout {
     };
   }
 
-  /**
-   * A category owns a column only if it can fill one. Twelve kicks, nineteen snares, ten
-   * hats and a single conga used to give the conga a column of its own — four pads it
-   * could fill one of, while the ten hats got no more — because the grid was chosen from
-   * which categories were *present* and never looked at how deep each pool was.
-   *
-   * The bar is the height of the column being claimed, so it drops to three once a
-   * shared top row shortens them. Whatever cannot clear it becomes a guest on the top
-   * row instead, one pad per sample, taken from the right.
-   */
-  const counts = poolSizes(samples);
-  const deepEnough = (rows: number) => present.filter(c => (counts.get(c) ?? 0) >= rows);
+  const hasClap = present.has('Clap');
+  // `Perc` covers crashes and `Other` is drawn with it, so either one feeds the top row.
+  const hasExtras = present.has('Perc') || present.has('Other');
 
-  let candidates = deepEnough(4);
-  if (candidates.length > 4) candidates = deepEnough(3);
-  // A library where nothing fills a column still needs a grid: fall back to presence.
-  if (candidates.length === 0) candidates = present;
+  const columns = present.has('OHH')
+    ? CORE_WITH_OPEN_HATS
+    : hasClap ? CORE_WITH_CLAPS : CORE_PLAIN;
 
-  const chosen = candidates.slice(0, 4);
-  const displaced = candidates.slice(4);
-  const guests = present.filter(c => !chosen.includes(c) && !displaced.includes(c));
-
-  const columns = orderColumns(fillColumns(chosen));
-  const sharedTop = displaced.length > 0 ? shareTopRow(displaced) : [];
-  // The top row is always spelled out — as the shared row when categories were displaced
-  // by rank, otherwise as the columns simply continuing. Guests overwrite it from the
-  // right either way, so a scarce category costs exactly as many pads as it has samples.
-  const topRow = seatGuests(sharedTop.length > 0 ? sharedTop : columns, guests, counts);
+  // A clap already holding a column does not also take the top row; with nothing else
+  // to put up there the columns simply continue, which is the kicks-snares-hats grid.
+  const clapIsFree = hasClap && !columns.includes('Clap');
+  const topRow: Category[] =
+    hasExtras && clapIsFree ? ['Clap', 'Clap', 'Perc', 'Perc']
+      : hasExtras ? ['Perc', 'Perc', 'Perc', 'Perc']
+        : clapIsFree ? ['Clap', 'Clap', 'Clap', 'Clap']
+          : [...columns];
 
   const roles: Category[] = [];
   for (let row = 0; row < 3; row++) roles.push(...columns);
   roles.push(...topRow);
 
-  /**
-   * Every pad falls back through the rest of the library nearest-sound first, so a pad
-   * whose own pool runs dry takes the closest thing rather than dropping into `take`'s
-   * deepest-pool guess.
-   */
-  const preferences = roles.map(preferenceChain);
+  const isTopRow = (index: number) => index >= PAD_COUNT - 4;
+  const preferences = roles.map((role, index) =>
+    isTopRow(index) && EXTRAS.includes(role) ? topRowChain(role) : preferenceChain(role)
+  );
 
   return {
     id: gridId(columns, topRow),

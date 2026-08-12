@@ -291,46 +291,35 @@ real packs.
 
 ## Pads, layout and choking
 
-- **A category owns a column only if it can fill one.** Twelve kicks, nineteen snares,
-  ten hats and one conga used to give the conga a column — four pads it could fill one
-  of — while the ten hats got no more, because columns were chosen from which categories
-  were *present* and pool depth never entered into it. The bar is the height of the
-  column being claimed: four, dropping to three once a shared top row shortens them.
+- **Four canonical grids, chosen by which kinds of sound the library holds — never by
+  how many of each.** Columns run the bottom three rows; the top row is its own thing.
 
-  Whatever cannot clear it becomes a **guest** on the top row: one pad per sample, taken
-  from the right, so a lone conga lands on pad 16. Cells no guest claims continue the
-  column beneath them, which is why the top row is now always spelled out and the columns
-  always run three rows. `seatGuests` places guests in rank order left to right, matching
-  every other ordering in the grid.
+  ```
+  open hats + claps   no open hats,      no open hats,      only kicks,
+                      claps              no claps           snares, hats
+  c c p p             p p p p            p p p p            k s s h
+  k s h o             k s c h            k s s h            k s s h
+  k s h o             k s c h            k s s h            k s s h
+  k s h o             k s c h            k s s h            k s s h
+  ```
 
-  **If nothing clears the bar the rule stands down** and columns fall back to presence —
-  a library of three kicks and three snares still gets a grid rather than four guest pads
-  and nothing underneath.
+  Open hats keep column 4 whenever they exist, even from a single sample — the pads above
+  it fall back to closed hats. With claps but no perc, crash or other, the top row is all
+  claps; with neither, it continues the columns, which is the fourth grid.
 
-  The grid id spells the top row only when it differs from the columns, so a uniform grid
-  stays `ksho` while the conga case reads `kssh_kssp`.
-- **The grid is derived from the library, not chosen from a list** (`deriveLayout` in
-  `padLayout.ts`). Four columns, four rows:
-  - Categories are ranked `Kick, Snare, CHH, OHH, Clap, Perc, Other` (`RANK`). The top
-    four take a column each.
-  - **Four or fewer present** — columns run the full four rows. Fewer than four
-    categories repeat one to fill the grid, in `DOUBLING_ORDER` (`Snare`, then `Kick`,
-    then hats), least-used first. Fixed rather than by pool size: the same library must
-    always produce the same grid, or the id in the kit name would move as folders are
-    toggled.
-  - **Five or more** — columns shorten to three rows and the categories that missed
-    share the top row, cells handed out left to right in rank order with any remainder
-    to the highest-ranked. Two leftovers give `cl cl pc pc`, three give `cl cl pc ot`.
-  - Columns are then ordered for display by `COLUMN_ORDER`, which is deliberately *not*
-    `RANK`: a clap sits between snare and hats (`k s cl ch`), but when both hat kinds
-    are present they take the two right-hand columns and the clap moves to the top row.
-
-  This replaced three hand-written layouts (`split-hats`, `generic-hats`,
-  `minimal-layout`) and the "no claps, so Clap pads become Snare pads" rule, which is
-  now automatic — an absent category simply never gets a column. The fixed three covered
-  the libraries someone had thought of; everything else fell through to whichever
-  matched least badly, and layout choice never looked at kicks or snares at all, so a
-  percussion-only pack got a Kick/Snare/CHH/OHH grid and filled it by fallback.
+  **This replaced a grid derived from pool depth**, which sized every column to the
+  library in front of it. It fitted each pack beautifully and moved the layout whenever
+  the pack changed — the opposite of what the tool is for. Pad 3 is a hat in every kit
+  from every source, and two kits are swappable because they are laid out identically
+  rather than because an id says they happen to match. Repeating a sample or standing in
+  a closed hat for an open one is the accepted price. Do not reintroduce depth-aware
+  columns, guests, doubling or a shared leftover row: `git log` has all four, and each was
+  removed for this reason.
+- **The top row will not take a kick, snare or hat while any extra remains**
+  (`topRowChain`). With one clap in the library the second clap pad used to take a snare —
+  the nearest sound, and correct for a column pad, but the top row exists to hold what the
+  beat is not. Core sounds stay at the end of the chain for a library with no extras at
+  all, which is the only way they legitimately appear up there.
 - **The grid id is a fingerprint of the arrangement.** One letter per category —
   `k`ick, `s`nare, `c`lap, closed `h`at, `o`pen, `p`erc, `x` for other — as four column
   letters, then `_` and four top-row letters if there is a shared row: `ksho`, `kssh`,
