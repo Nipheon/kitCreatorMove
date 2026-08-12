@@ -34,6 +34,9 @@ const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
  */
 const PREVIEW_LEAD_IN_MS = 150;
 
+/** How long the warning toast stays up before dismissing itself. */
+const WARNING_TOAST_MS = 5000;
+
 const enabledSamples = (folders: SourceFolder[]) =>
   folders.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
 
@@ -78,6 +81,8 @@ export default function App() {
     window.addEventListener('pad-ready', onPadReady);
     return () => window.removeEventListener('pad-ready', onPadReady);
   }, []);
+
+  const dismissWarning = React.useCallback(() => setShowWarning(false), []);
 
   const stopSpinAnimation = React.useCallback(() => {
     spinTimerIds.current.forEach(id => clearTimeout(id));
@@ -238,10 +243,15 @@ export default function App() {
   const samples = useMemo(() => enabledSamples(sourceFolders), [sourceFolders]);
   const kit = kitResult.kit;
 
+  /**
+   * The only place the warning toast is timed. `Toast` is presentational: it ran a
+   * second 5s timer of its own, which never reliably fired because its `onClose` prop
+   * is a fresh closure each render and sat in the effect's dependency list.
+   */
   useEffect(() => {
     if (kitResult.substituted.length > 0 || kitResult.empty.length > 0 || kitResult.unavailableRoles.length > 0) {
       setShowWarning(true);
-      const timer = setTimeout(() => setShowWarning(false), 5000);
+      const timer = setTimeout(() => setShowWarning(false), WARNING_TOAST_MS);
       return () => clearTimeout(timer);
     } else {
       setShowWarning(false);
@@ -795,7 +805,7 @@ export default function App() {
             unavailableRoles={kitResult.unavailableRoles}
             substitutedCount={kitResult.substituted.length}
             emptyCount={kitResult.empty.length}
-            onClose={() => setShowWarning(false)}
+            onClose={dismissWarning}
           />
 
           <div className='flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
