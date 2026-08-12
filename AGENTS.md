@@ -291,6 +291,24 @@ real packs.
 
 ## Pads, layout and choking
 
+- **A category owns a column only if it can fill one.** Twelve kicks, nineteen snares,
+  ten hats and one conga used to give the conga a column — four pads it could fill one
+  of — while the ten hats got no more, because columns were chosen from which categories
+  were *present* and pool depth never entered into it. The bar is the height of the
+  column being claimed: four, dropping to three once a shared top row shortens them.
+
+  Whatever cannot clear it becomes a **guest** on the top row: one pad per sample, taken
+  from the right, so a lone conga lands on pad 16. Cells no guest claims continue the
+  column beneath them, which is why the top row is now always spelled out and the columns
+  always run three rows. `seatGuests` places guests in rank order left to right, matching
+  every other ordering in the grid.
+
+  **If nothing clears the bar the rule stands down** and columns fall back to presence —
+  a library of three kicks and three snares still gets a grid rather than four guest pads
+  and nothing underneath.
+
+  The grid id spells the top row only when it differs from the columns, so a uniform grid
+  stays `ksho` while the conga case reads `kssh_kssp`.
 - **The grid is derived from the library, not chosen from a list** (`deriveLayout` in
   `padLayout.ts`). Four columns, four rows:
   - Categories are ranked `Kick, Snare, CHH, OHH, Clap, Perc, Other` (`RANK`). The top

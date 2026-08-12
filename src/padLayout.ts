@@ -230,6 +230,39 @@ export function satisfiesRole(category: Category, role: Category): boolean {
 }
 
 /** The categories the library can actually fill a pad with, highest rank first. */
+function poolSizes(samples: Sample[]): Map<Category, number> {
+  const counts = new Map<Category, number>();
+  for (const sample of samples) {
+    if (sample.isExcluded) continue;
+    const pool = poolCategoryFor(sample);
+    counts.set(pool, (counts.get(pool) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Where a category sits in the top row when it could not fill a column. Cells are taken
+ * from the right, one per sample, so a library with a single conga puts it on pad 16
+ * rather than handing it four pads it can fill one of. Guests are laid out in rank order
+ * left to right, matching every other ordering in the grid.
+ */
+function seatGuests(topRow: Category[], guests: Category[], counts: Map<Category, number>) {
+  const row = [...topRow];
+  let cursor = row.length - 1;
+  for (const guest of [...guests].reverse()) {
+    let cells = Math.min(counts.get(guest) ?? 0, cursor + 1);
+    while (cells > 0 && cursor >= 0) {
+      row[cursor] = guest;
+      cursor--;
+      cells--;
+    }
+  }
+  return row;
+}
+
+const sameRow = (a: Category[], b: Category[]) =>
+  a.length === b.length && a.every((category, i) => category === b[i]);
+
 function presentCategories(samples: Sample[]): Category[] {
   const present = new Set<Category>();
   for (const sample of samples) {
@@ -286,16 +319,16 @@ const gridCode = (categories: Category[]) => categories.map(c => LETTER[c] ?? 'X
 
 function gridId(columns: Category[], topRow: Category[]): string {
   // `_` rather than `+`: this string becomes part of a .ablpresetbundle directory name.
-  return topRow.length > 0 ? `${gridCode(columns)}_${gridCode(topRow)}` : gridCode(columns);
+  // A top row that merely continues its columns is not worth spelling out.
+  return sameRow(columns, topRow) ? gridCode(columns) : `${gridCode(columns)}_${gridCode(topRow)}`;
 }
 
 function gridLabel(columns: Category[], topRow: Category[]): string {
   const names = (categories: Category[]) =>
     categories.map(c => SHORT_LABEL[c] ?? String(c)).join(' ');
-  const uniqueTop = [...new Set(topRow)];
-  return topRow.length > 0
-    ? `${names(columns)} + ${names(uniqueTop)}`
-    : names(columns);
+  // Only what the top row adds: cells continuing their own column are already named.
+  const extras = [...new Set(topRow)].filter(category => !columns.includes(category));
+  return extras.length > 0 ? `${names(columns)} + ${names(extras)}` : names(columns);
 }
 
 /**
@@ -334,14 +367,37 @@ export function deriveLayout(samples: Sample[]): PadLayout {
     };
   }
 
-  const chosen = present.slice(0, 4);
-  const leftovers = present.slice(4);
+  /**
+   * A category owns a column only if it can fill one. Twelve kicks, nineteen snares, ten
+   * hats and a single conga used to give the conga a column of its own — four pads it
+   * could fill one of, while the ten hats got no more — because the grid was chosen from
+   * which categories were *present* and never looked at how deep each pool was.
+   *
+   * The bar is the height of the column being claimed, so it drops to three once a
+   * shared top row shortens them. Whatever cannot clear it becomes a guest on the top
+   * row instead, one pad per sample, taken from the right.
+   */
+  const counts = poolSizes(samples);
+  const deepEnough = (rows: number) => present.filter(c => (counts.get(c) ?? 0) >= rows);
+
+  let candidates = deepEnough(4);
+  if (candidates.length > 4) candidates = deepEnough(3);
+  // A library where nothing fills a column still needs a grid: fall back to presence.
+  if (candidates.length === 0) candidates = present;
+
+  const chosen = candidates.slice(0, 4);
+  const displaced = candidates.slice(4);
+  const guests = present.filter(c => !chosen.includes(c) && !displaced.includes(c));
+
   const columns = orderColumns(fillColumns(chosen));
-  const topRow = leftovers.length > 0 ? shareTopRow(leftovers) : [];
+  const sharedTop = displaced.length > 0 ? shareTopRow(displaced) : [];
+  // The top row is always spelled out — as the shared row when categories were displaced
+  // by rank, otherwise as the columns simply continuing. Guests overwrite it from the
+  // right either way, so a scarce category costs exactly as many pads as it has samples.
+  const topRow = seatGuests(sharedTop.length > 0 ? sharedTop : columns, guests, counts);
 
   const roles: Category[] = [];
-  const columnRows = topRow.length > 0 ? 3 : 4;
-  for (let row = 0; row < columnRows; row++) roles.push(...columns);
+  for (let row = 0; row < 3; row++) roles.push(...columns);
   roles.push(...topRow);
 
   /**

@@ -733,6 +733,45 @@ await test('the filename beats the folder when both say something', () => {
   assert.equal(categorizeSample('Open Hat.wav', '/Pack/Kicks'), 'OHH');
 });
 
+await test('a category thinner than a column does not get one', () => {
+  // Reported case: twelve kicks, nineteen snares, ten hats and a single conga. The conga
+  // took a whole column — four pads it could fill one of — while the ten hats got no
+  // more, because the grid was chosen from which categories were present and never
+  // looked at how deep each pool was.
+  const library: Sample[] = [
+    ...Array.from({ length: 12 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 19 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 10 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    makeSample('conga.wav', 'Perc')
+  ];
+
+  const { layout, kit, substituted } = generateRandomKit(library);
+  assert.equal(layout.id, 'kssh_kssp');
+
+  // One sample, one pad — and it is the top right, pad 16.
+  const percPads = layout.roles.flatMap((role, i) => (role === 'Perc' ? [i] : []));
+  assert.deepEqual(percPads, [15]);
+  assert.equal(kit[15]?.category, 'Perc');
+
+  // The freed column goes to a category that can fill it, and nothing is left short.
+  assert.ok(layout.roles.filter(r => r === 'Snare').length > 4, 'snares take the spare column');
+  assert.deepEqual(substituted, []);
+  assert.deepEqual(layout.roles.filter(r => r === 'CHH').length, 3);
+});
+
+await test('a scarce category gets one pad per sample, taken from the right', () => {
+  const library: Sample[] = [
+    ...Array.from({ length: 12 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 19 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 10 }, (_, i) => makeSample(`hat${i}.wav`, 'CHH')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc'))
+  ];
+
+  const { layout } = generateRandomKit(library);
+  const percPads = layout.roles.flatMap((role, i) => (role === 'Perc' ? [i] : []));
+  assert.deepEqual(percPads, [13, 14, 15], 'three samples, the three right-hand top pads');
+});
+
 await test('the seven grids from the specification', () => {
   // Each case is written as it displays — top row first — while `roles` is in pad-index
   // order, so the expectations below are read bottom row first.
@@ -878,11 +917,13 @@ await test('kicks, snares and generic hats give k s s ch', () => {
 });
 
 await test('one labelled closed hat does not conjure an open-hat column', () => {
+  // Deep pools on purpose: a category thinner than a column no longer earns one, and
+  // that rule is tested separately — this is about open hats not being invented.
   const almost: Sample[] = [
-    makeSample('kick.wav', 'Kick'),
-    makeSample('snare.wav', 'Snare'),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
     makeSample('closed hat.wav', 'CHH'),
-    ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'))
+    ...Array.from({ length: 5 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'))
   ];
   const { layout } = generateRandomKit(almost);
   assert.ok(!layout.roles.includes('OHH'), 'no open hats in the library');
@@ -896,7 +937,12 @@ await test('a pad short of its own category falls back to the nearest sound', ()
     ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
     ...Array.from({ length: 8 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH')),
-    makeSample('clap only.wav', 'Clap')
+    // Four clap files, but three are the same file: the pool is deep enough to earn a
+    // column and still cannot fill it once the name+size dedupe collapses them.
+    makeSample('clap one.wav', 'Clap'),
+    makeSample('clap dup.wav', 'Clap'),
+    makeSample('clap dup.wav', 'Clap'),
+    makeSample('clap dup.wav', 'Clap')
   ];
 
   for (let run = 0; run < 40; run++) {
@@ -943,7 +989,7 @@ await test('labelled and generic closed hats share the closed column', () => {
   // generic ones were unreachable on every generate.
   const library: Sample[] = [
     ...Array.from({ length: 3 }, (_, i) => makeSample(`closed hat ${i}.wav`, 'CHH')),
-    ...Array.from({ length: 3 }, (_, i) => makeSample(`open hat ${i}.wav`, 'OHH')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`open hat ${i}.wav`, 'OHH')),
     ...Array.from({ length: 20 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
     ...Array.from({ length: 6 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 6 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare'))
@@ -1120,8 +1166,8 @@ await test('a crash reaches an other pad, and choking is still its own', () => {
   // an Other pad. It must still choke as a crash — pooling is about which pad a sample
   // can reach, choking reads the real category.
   const library: Sample[] = [
-    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
-    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
     ...Array.from({ length: 6 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash')),
     ...Array.from({ length: 2 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
   ];
