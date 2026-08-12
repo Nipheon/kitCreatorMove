@@ -917,7 +917,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className='space-y-2'>
+            <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
@@ -927,13 +927,9 @@ export default function App() {
                 />
                 Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
-                Leaves out files whose name or folder marks them as a loop — "loop",
-                a bar count, or a tempo like 128bpm.
-              </p>
             </div>
 
-            <div className='space-y-2'>
+            <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
@@ -943,14 +939,9 @@ export default function App() {
                 />
                 Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
-                Leaves out uncategorised files that look like effects, vocals, scratches
-                or melodic material. Anything the app recognised as a drum is kept, so a
-                sample called "Bass Kick" is unaffected.
-              </p>
             </div>
 
-            <div className='space-y-2'>
+            <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
@@ -960,10 +951,6 @@ export default function App() {
                 />
                 Trim silence (start & end)
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
-                Re-encodes trimmed samples at their original sample rate and bit depth.
-                Turn off to copy every sample byte-for-byte.
-              </p>
             </div>
 
             <div className='pt-6 border-t border-border-dark space-y-1.5'>
@@ -1070,14 +1057,22 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-white'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
-                  <li><strong className='text-white'>Silence Trimming:</strong> Trims leading and trailing silence (&lt; -60 dBFS) while keeping exact bit depth and sample rate.</li>
                   <li><strong className='text-white'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
                   <li><strong className='text-white'>Device Transfer:</strong> Copy exported <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-white'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm.</li>
+                  <li><strong className='text-white'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
+                  <li><strong className='text-white'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
+                </ul>
+              </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a
