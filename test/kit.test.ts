@@ -27,7 +27,9 @@ import { CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, PAD_COUNT } 
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
-import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
+import {
+  categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
+} from '../src/utils/fileReader';
 import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
@@ -268,9 +270,12 @@ await test('multi-word names are read as phrases', () => {
   assert.equal(categorizeSample('Hi Hat 2.wav'), 'Hat');
 });
 
-await test('808s stay Other so the Sub Osc rule can still find them', () => {
-  assert.equal(categorizeSample('808 Bass.wav'), 'Other');
-  assert.equal(categorizeSample('808bass.wav'), 'Other');
+await test('an 808 is a kick and still gets the Sub Osc effect', () => {
+  // This used to assert 808s stayed Other, purely so the preset's Sub Osc rule — which
+  // required category 'Other' — could find them. The rule now reads the sample name, so
+  // the categoriser is free to say what an 808 actually is: the kick voice.
+  assert.equal(categorizeSample('808 Bass.wav'), 'Kick');
+  assert.equal(categorizeSample('808bass.wav'), 'Kick');
 });
 
 // The cases below are real paths taken from tidalcycles/Dirt-Samples, the Sonic Pi
@@ -448,6 +453,80 @@ await test('isUsableSample filters out loops and excluded samples', () => {
   assert.equal(isUsableSample(excluded), false);
   assert.equal(isUsableSample(excludedLoop), false);
   assert.equal(isUsableSample(excludedLoop, { skipLoops: false }), false);
+});
+
+await test('plural abbreviations resolve like their singulars', () => {
+  // Under the four-character glue threshold, so only the exact token matched and the
+  // plural fell through to Other: 162 files in a 70k-file survey.
+  assert.equal(categorizeSample('RIMS 01.wav'), 'Snare');
+  assert.equal(categorizeSample('kit.wav', '/Pack/03-RIMS'), 'Snare');
+  assert.equal(categorizeSample('kit.wav', '/Pack/Distorted BDs'), 'Kick');
+  assert.equal(categorizeSample('BDS_04.wav'), 'Kick');
+  assert.equal(categorizeSample('SDS 2.wav'), 'Snare');
+  assert.equal(categorizeSample('HHS 9.wav'), 'Hat');
+  assert.equal(categorizeSample('CHHS 1.wav'), 'CHH');
+});
+
+await test('timpani is percussion', () => {
+  assert.equal(categorizeSample('High_Timp_A.wav'), 'Perc');
+  assert.equal(categorizeSample('timpani.wav'), 'Perc');
+  assert.equal(categorizeSample('roll.wav', '/Pack/Pitched Timpanies'), 'Perc');
+});
+
+await test('a bare 808 is a kick, but never beats a real category', () => {
+  assert.equal(categorizeSample('808.wav'), 'Kick');
+  assert.equal(categorizeSample('808 Bass.wav'), 'Kick');
+  assert.equal(categorizeSample('JJ-AY-808.wav'), 'Kick');
+  assert.equal(categorizeSample('01.wav', '/Pack/Trap 808s'), 'Kick');
+  // Anything that says what it is keeps its own category.
+  assert.equal(categorizeSample('808 clap.wav'), 'Clap');
+  assert.equal(categorizeSample('808 snare.wav'), 'Snare');
+  assert.equal(categorizeSample('808 open hat.wav'), 'OHH');
+  // A number that is not a lone token must not fire it.
+  assert.equal(categorizeSample('vox1808x.wav'), 'Other');
+});
+
+await test('non-drum detection never overrides a real category', () => {
+  // The guard that matters: plenty of good drums have "bass" or "sub" in the name.
+  assert.equal(looksNonDrum('Kick', 'Bass Kick.wav'), false);
+  assert.equal(looksNonDrum('Kick', 'Sub Kick 03.wav'), false);
+  assert.equal(looksNonDrum('Snare', 'vocal snare.wav'), false);
+  assert.equal(looksNonDrum('Perc', 'guitar perc hit.wav'), false);
+
+  // Unclassifiable and clearly not a drum.
+  assert.equal(looksNonDrum('Other', 'JJ - SayWhat.wav', '/Pack/Trap Chants'), true);
+  assert.equal(looksNonDrum('Other', 'SPICY DRUM FX (1).wav', '/Pack/fx'), true);
+  assert.equal(looksNonDrum('Other', 'DJ scratch 2.wav'), true);
+  assert.equal(looksNonDrum('Other', 'Custom Candyland Rise FX.wav'), true);
+  assert.equal(looksNonDrum('Other', 'Guitar Elementz 3.wav'), true);
+
+  // Unclassifiable but with nothing marking it as non-drum: kept.
+  assert.equal(looksNonDrum('Other', 'Sound (139).wav'), false);
+  assert.equal(looksNonDrum('Other', 'A08_a08_C_Reg.wav'), false);
+});
+
+await test('skipNonDrums keeps non-drums out of the pools, and can be turned off', () => {
+  const library: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...makeSample(`vox chant ${i}.wav`, 'Other' as const),
+      isNonDrum: true
+    }))
+  ];
+
+  const skipped = generateRandomKit(library);
+  assert.ok(!skipped.layout.roles.includes('Other'), 'chants must not earn a column');
+  assert.ok(
+    skipped.kit.every(s => !s?.isNonDrum),
+    'a chant reached a pad with skipNonDrums on'
+  );
+
+  const included = generateRandomKit(library, [], { skipNonDrums: false });
+  assert.ok(included.layout.roles.includes('Other'), 'opting in should earn the column');
+
+  assert.equal(isUsableSample({ ...library[6] }), false);
+  assert.equal(isUsableSample({ ...library[6] }, { skipNonDrums: false }), true);
 });
 
 await test('a pack name does not decide what its samples are', () => {

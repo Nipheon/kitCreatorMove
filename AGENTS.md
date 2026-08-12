@@ -176,10 +176,37 @@ real packs.
   one-shot.
 - **A tempo must say `bpm`.** A bare bracketed number is not evidence — `[120]` is as
   likely an index or a catalogue number, and `beat [128].wav` is not a loop.
+- **Plurals of the two- and three-letter abbreviations are listed explicitly** (`bds`,
+  `kds`, `sds`, `sns`, `snrs`, `rims`, `kiks`, `hhs`, `chhs`, `ohhs`). The glue rule only
+  applies from four characters up, so these matched nothing and fell through to `Other` —
+  162 files in a 70k-file survey, `rims` alone accounting for 126. `chhs`/`ohhs` also
+  need listing in the bare-token fallback at the end of `classify`, which is reached
+  before the hat family test for names like `CHHS 1.wav`.
+- **`timp` covers timpani.** Four characters, so the glue rule reaches `timpani` and
+  `timpanies` without listing them.
+- **A bare `808` token classifies as Kick**, checked last so anything that says what it
+  is — `808 clap`, `808 snare`, `808 open hat` — keeps its own category. Whole token
+  only, so a catalogue number glued into a word cannot fire it.
+
+  **This is load-bearing for the preset's Sub Osc effect.** That rule used to require
+  `category === 'Other'`, which worked only because the categoriser deliberately left
+  808s unclassified. It now reads the sample name instead (`ablPresetTemplate.ts`), so
+  808s keep their sub oscillator while living on kick pads. Do not put the category check
+  back.
+- **`looksNonDrum` is only ever consulted for samples that came back as `Other`.** That
+  guard is the whole design: `bass`, `sub`, `vocal` and friends appear in perfectly good
+  drum names, and filtering on the words alone would throw away a kick called
+  "Bass Kick.wav". If the categoriser placed it, it stays. In a 70k-file survey this
+  flagged 4,601 files — effects, vocal chants, scratches, risers, guitar and melodic
+  material, roughly half of everything that could not be placed.
+
+  It matters more than it used to: `Other` competes for a column of its own, so without
+  the filter a trap pack puts its vocal chants and riser effects on pads.
 - **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
   makes a generic-hat library look like it has real split hats.
-- **`isUsableSample` filters out both loops (when `skipLoops` is enabled) and excluded samples (`sample.isExcluded`).**
-  This ensures the "Usable Samples" card count updates immediately when a user excludes a sample via the UI button.
+- **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`) and excluded
+  samples (`sample.isExcluded`).** Both toggles default to on. This is also what keeps the
+  "Usable Samples" card count in step when a sample is excluded from the UI.
 
 ## Pads, layout and choking
 

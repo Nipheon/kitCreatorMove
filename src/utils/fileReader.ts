@@ -101,8 +101,16 @@ function tokenize(name: string): string[] {
     .filter(Boolean);
 }
 
-const KICK = ['kick', 'kicks', 'kik', 'bd', 'kd', 'bassdrum'];
-const SNARE = ['snare', 'snares', 'snr', 'sn', 'sd', 'rim', 'rimshot', 'rs', 'sidestick'];
+/**
+ * Plurals of the two- and three-letter abbreviations are listed explicitly. The glue
+ * rule only applies from four characters up, so `bds` and `rims` matched nothing and
+ * fell through to `Other` — 162 files across a 70k-file survey.
+ */
+const KICK = ['kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum'];
+const SNARE = [
+  'snare', 'snares', 'snr', 'snrs', 'sn', 'sns', 'sd', 'sds',
+  'rim', 'rims', 'rimshot', 'rs', 'sidestick'
+];
 const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
 /**
  * Crashes get their own choke group, so they are their own category. Rides and bare
@@ -117,6 +125,8 @@ const PERC = [
   'clave', 'claves', 'cabasa', 'guiro', 'triangle', 'timbale', 'timbales',
   'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'maraca', 'maracas',
   'tabla', 'udu', 'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cy',
+  // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
+  'timp', 'timpani',
   // TR-808 style: high/mid/low toms, cowbell, claves, maracas.
   'ht', 'mt', 'lt', 'cb', 'cl', 'clv', 'cr',
   // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
@@ -124,9 +134,9 @@ const PERC = [
   'hc', 'mc', 'lc'
 ];
 
-const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh'];
-const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
-const OPEN = ['ohh', 'oh', 'open', 'opn', 'o'];
+const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
+const CLOSED = ['chh', 'chhs', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
+const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
 
 /**
  * "CHat"/"OHat" written without a separator. Matched as whole tokens only — they are
@@ -184,11 +194,20 @@ function classify(text: string): Category | null {
     return 'Hat';
   }
   // Bare "CH01" / "OH03" with no hat word — in drum packs these are always hats.
-  if (tokens.includes('chh') || tokens.includes('ch')) return 'CHH';
-  if (tokens.includes('ohh') || tokens.includes('oh')) return 'OHH';
+  if (tokens.includes('chh') || tokens.includes('chhs') || tokens.includes('ch')) return 'CHH';
+  if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return 'OHH';
 
   if (has(CRASH)) return 'Crash';
   if (has(PERC)) return 'Perc';
+
+  /**
+   * An 808 with nothing else to go on is the kick voice — that is what the name means in
+   * every trap pack. Checked last so "808 clap" and "808 snare" keep their own category,
+   * and only on a bare token, so it cannot fire on a stray year or catalogue number that
+   * happens to sit next to a real word.
+   */
+  if (tokens.includes('808')) return 'Kick';
+
   return null;
 }
 
@@ -242,6 +261,38 @@ function textLooksLikeLoop(text: string): boolean {
     }
     return false;
   });
+}
+
+/**
+ * Content a drum kit has no use for: effects, vocal snippets, scratches, risers, and
+ * melodic material. In a 70k-file survey these were 4,472 files — nearly half of
+ * everything the categoriser could not place.
+ *
+ * Only ever consulted for samples that came back as `Other`. A kick called
+ * "Bass Kick.wav" matches `bass` here, and filtering on that alone would throw away a
+ * perfectly good kick; if the categoriser placed it, it stays.
+ */
+const NON_DRUM_WORDS = [
+  'fx', 'sfx', 'efx', 'vox', 'vocal', 'vocals', 'chant', 'chants', 'phrase', 'phrases',
+  'scratch', 'scratches', 'riser', 'risers', 'rise', 'swell', 'swells', 'downlifter',
+  'uplifter', 'chop', 'chops', 'guitar', 'guitars', 'bass', 'sub', 'lead', 'leads',
+  'synth', 'synths', 'pad', 'pads', 'string', 'strings', 'horn', 'horns', 'brass',
+  'piano', 'keys', 'melody', 'melodic', 'stab', 'stabs', 'atmos', 'ambient', 'drone',
+  'zap', 'zaps', 'chirp', 'chirps', 'noise', 'texture', 'foley', 'speech', 'talk'
+];
+
+/**
+ * Whether a sample the categoriser could not place looks like something other than a
+ * drum. Takes the category so the answer can never contradict a successful match.
+ */
+export function looksNonDrum(category: Category, name: string, directory = ''): boolean {
+  if (category !== 'Other') return false;
+  const matches = (text: string) => {
+    const tokens = tokenize(text);
+    return tokens.some(t => NON_DRUM_WORDS.includes(t));
+  };
+  if (matches(name)) return true;
+  return folderCandidates(directory).some(matches);
 }
 
 export function looksLikeLoop(name: string, directory = ''): boolean {

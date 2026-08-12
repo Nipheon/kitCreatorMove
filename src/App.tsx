@@ -7,7 +7,9 @@ import {
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
-import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
+import {
+  categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
+} from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import {
   DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders
@@ -56,6 +58,7 @@ export default function App() {
   const [batchSize, setBatchSize] = useState(1);
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
+  const [skipNonDrums, setSkipNonDrums] = useState(true);
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
@@ -284,7 +287,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  const kitOptions = { skipLoops };
+  const kitOptions = { skipLoops, skipNonDrums };
 
   /**
    * The grid id travels in the exported kit name so a rack can be identified on the
@@ -299,13 +302,14 @@ export default function App() {
 
   const exportName = kitNameFor(kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
+  const nonDrumCount = useMemo(() => samples.filter(s => s.isNonDrum && !s.isLoop).length, [samples]);
   const activeFoldersCount = useMemo(
     () => sourceFolders.filter(f => f.isEnabled !== false).length,
     [sourceFolders]
   );
   const usableCount = useMemo(
-    () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
-    [samples, skipLoops]
+    () => samples.filter(s => isUsableSample(s, kitOptions)).length,
+    [samples, skipLoops, skipNonDrums]
   );
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
@@ -325,12 +329,12 @@ export default function App() {
       // while their samples sit on CHH and Perc pads.
       const row = poolCategoryFor(s);
       stats[row].total += 1;
-      if (isUsableSample(s, { skipLoops })) {
+      if (isUsableSample(s, kitOptions)) {
         stats[row].usable += 1;
       }
     });
     return stats;
-  }, [samples, skipLoops]);
+  }, [samples, skipLoops, skipNonDrums]);
 
   const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
   const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
@@ -386,12 +390,15 @@ export default function App() {
         for (const { file, path } of folder.files) {
           const url = URL.createObjectURL(file);
 
+          const category = categorizeSample(file.name, path);
+
           samples.push({
             id: newId('sample'),
             file,
             name: file.name,
-            category: categorizeSample(file.name, path),
+            category,
             isLoop: looksLikeLoop(file.name, path),
+            isNonDrum: looksNonDrum(category, file.name, path),
             url
           });
         }
@@ -575,7 +582,16 @@ export default function App() {
   const toggleSkipLoops = (next: boolean) => {
     setSkipLoops(next);
     if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), { skipLoops: next }));
+      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipLoops: next }));
+    }
+  };
+
+  const toggleSkipNonDrums = (next: boolean) => {
+    setSkipNonDrums(next);
+    if (samples.length > 0) {
+      setKitResult(
+        generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipNonDrums: next })
+      );
     }
   };
 
@@ -914,6 +930,23 @@ export default function App() {
               <p className='text-sm leading-snug text-text-muted-dark'>
                 Leaves out files whose name or folder marks them as a loop — "loop",
                 a bar count, or a tempo like 128bpm.
+              </p>
+            </div>
+
+            <div className='space-y-2'>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={skipNonDrums}
+                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
+              </label>
+              <p className='text-sm leading-snug text-text-muted-dark'>
+                Leaves out uncategorised files that look like effects, vocals, scratches
+                or melodic material. Anything the app recognised as a drum is kept, so a
+                sample called "Bass Kick" is unaffected.
               </p>
             </div>
 

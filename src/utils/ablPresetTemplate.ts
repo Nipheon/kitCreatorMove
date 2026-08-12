@@ -17,11 +17,15 @@ export function generateAblPreset(
 
     let effectType = "Stretch";
 
-    if (category) {
+    // The 808 check comes first and reads the name, not the category. It used to require
+    // `category === 'Other'`, which only worked because the categoriser deliberately left
+    // 808s unclassified; now that a bare 808 is a Kick, keying on the category would have
+    // silently swapped every 808 from Sub Osc to Punch.
+    if (sampleName.toLowerCase().includes('808')) {
+      effectType = "Sub Osc";
+    } else if (category) {
       if (category === 'Kick') {
         effectType = "Punch";
-      } else if (category === 'Other' && sampleName.toLowerCase().includes('808')) {
-        effectType = "Sub Osc";
       } else if (category === 'Snare' || category === 'Clap' || category === 'CHH' || category === 'OHH' || category === 'Hat') {
         effectType = "Noise";
       }

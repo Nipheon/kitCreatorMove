@@ -10,6 +10,11 @@ export interface Sample {
   isExcluded?: boolean;
   /** Looks like a bar of music rather than a one-shot — skipped unless asked for. */
   isLoop?: boolean;
+  /**
+   * Unclassifiable *and* looks like effects, vocals or melodic material rather than a
+   * drum — skipped unless asked for. Only ever set on `Other`.
+   */
+  isNonDrum?: boolean;
 }
 
 export interface SourceFolder {
