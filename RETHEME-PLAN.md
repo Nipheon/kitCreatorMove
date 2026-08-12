@@ -80,14 +80,16 @@ Each chain in `Preset.ablpreset` already carried a `color` field, hardcoded to `
 every pad. It is now the category's colour, from `categoryColorIndex` in `padLayout.ts`,
 sitting next to the UI hue table so a correction to one prompts a look at the other.
 
-**Unverified.** The indices read Ableton's 14x5 palette row-major and were picked as the
-nearest palette entry to each UI hue. The palette may be ordered column-major, and Move's
-palette may not hold Live's colours; either would give consistently coloured pads in the
-wrong colours. Neither breaks an import.
+**The first attempt broke the import.** Indices spread across Ableton's 14x5 palette
+(17, 12, 29, 21, 24, 18, 51) were rejected by the device — the bundle would not load. The
+assumption that any value in `0..69` was as good as any other was wrong, and no test in a
+Node suite could have caught it.
 
-One observation settles the ordering and has not been made: every kit this app has
-exported used `color: 5`. Row-major puts that at bright green `#32FD42`, column-major at
-orange `#FDA43A`. Look at a Move, then fix the table if needed.
+The range is now 1-8, skipping `5` so it stays the empty-pad marker. That is a probe
+around the single known-good value, not a designed palette: `5` is the only index with
+evidence behind it, because every kit shipped before pad colouring used it. If 1-8
+imports, the accepted range is wider than one value; if it does not, `color` is not the
+variable and every pad goes back to `5`.
 
 **The UI hues were deliberately left alone rather than realigned to the palette.** Aligning
 them would assert that the app and the device show the same colour, and that assertion

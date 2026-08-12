@@ -148,24 +148,32 @@ to match new behaviour unless the behaviour change is the point of the task.
   rack's own chain and its `returnChains` keep the original `5` — they are not pads — and
   so does a pad with no sample, which has no category to colour it by.
 
-  **The indices are an assumption and are unverified on hardware.** They read Ableton's
-  14x5 palette row-major, `index = (row - 1) * 14 + (column - 1)`, and each was picked as
-  the nearest palette entry to that category's UI hue. Two things could be wrong on their
-  own: the palette may be ordered column-major, and Move's palette may not hold Live's
-  colours. Either would give pads that are consistently coloured but not the colours the
-  app shows — neither breaks an import, and the fix is one line in that table.
+  **The indices are 1-8 because a Move refused to import the bundle when they were not.**
+  The first attempt spread them across Ableton's 14x5 palette — 17, 12, 29, 21, 24, 18,
+  51 — read row-major and picked as the nearest palette entry to each category's UI hue,
+  on the assumption that any value in `0..69` was as acceptable to the device as any
+  other. The import failed. This entry previously said the worst case was "pads in the
+  wrong colours"; that was wrong, and the wrongness only showed on hardware.
 
-  The discriminating observation is cheap and has not been made: every kit this app has
-  ever exported shipped `color: 5`, so the colour those kits show on a Move settles the
-  ordering. Row-major puts 5 at bright green `#32FD42`; column-major puts it at orange
-  `#FDA43A`. **Do not write the palette mapping into this file as fact until someone has
-  looked at a Move.** Two tests pin what is checkable without one: every category maps
-  inside `0..69` with no collisions, and a generated preset's chains carry the index
-  matching each pad.
-- **The UI hues were deliberately not realigned to the palette.** Matching them would
-  claim the two agree, and that claim rests on both assumptions above being right — a
-  wrong guess would have the app showing orange where the device shows green, which is
-  worse than not claiming it. The hues stay as chosen; the indices are a separate table.
+  What is known is one value: `5` imports, because every kit this app shipped before pad
+  colouring used it. The current range is a probe around that fact — seven consecutive
+  values either side of `5`, skipping `5` so it stays the empty-pad marker — and not a
+  designed palette. It makes no attempt to match the UI hues. **Do not widen it back
+  toward 69 on the theory that the palette has 70 entries.** That reasoning is what broke
+  the export, and nothing has established an upper bound since.
+
+  Whether 1-8 imports is itself unconfirmed at the time of writing. If it does, the
+  accepted range is wider than one value and the open question is how much wider. If it
+  does not, `color` is not the variable: put every pad back to `5` and look elsewhere.
+
+  Two tests pin what Node can see — every category inside `0..69` with no collisions, no
+  category claiming the empty-pad default, and a generated preset's chains carrying the
+  index matching each pad. **None of them can catch a value the device rejects**, which is
+  the whole lesson here: this field's contract lives on the hardware, not in the schema.
+- **The UI hues are deliberately not tied to the indices.** They were never realigned to
+  Ableton's palette, which turned out to be lucky rather than clever — with the indices
+  now a diagnostic range, any such claim would be nonsense. The hues stay as chosen and
+  the indices are a separate table; the app does not claim the two agree.
 
 ## Sample detection (`fileReader.ts`)
 

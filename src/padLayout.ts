@@ -133,26 +133,35 @@ export const DEFAULT_PAD_COLOR_INDEX = 5;
  * an obvious prompt to look at the other, and pooled the same way — `Hat` with `CHH`,
  * `Crash` with `Perc`.
  *
- * **The values are an assumption, not a fact.** They index Ableton's 14x5 colour palette
- * read row-major (index = (row - 1) * 14 + (column - 1)), and were chosen as the nearest
- * palette entry to each category's UI hue. Nothing here has been checked on hardware, and
- * two things could be wrong independently: the palette may be ordered column-major, and
- * Move's palette may not hold the same colours as Live's. Both would show as pads that
- * are consistently coloured but not the colours the app shows. Neither breaks an import.
+ * **These are 1-8 because a Move refused to import the kit when they were not.** The
+ * first attempt spread the categories across Ableton's 14x5 palette (17, 12, 29, 21, 24,
+ * 18, 51), chosen as the nearest palette entry to each category's UI hue on the
+ * assumption that any index in `0..69` was as good as any other. Importing that bundle
+ * failed on the device. The assumption was wrong, and this comment used to say the worst
+ * case was "pads in the wrong colours" — it was not.
  *
- * The single fact available is that every kit this app has exported used index 5 — so the
- * colour those kits show on a Move is what settles the ordering.
+ * What is actually known: `5` imports, because every kit this app shipped before pad
+ * colouring used it. Nothing else is known. This range is a probe around that one fact,
+ * not a designed palette: seven consecutive values either side of `5`, no attempt to
+ * match the UI hues. If 1-8 imports, the accepted range is wider than one value and the
+ * next question is how much wider. If it still fails, `color` is not the variable — put
+ * every pad back to `5` and look elsewhere.
+ *
+ * `5` itself is skipped so it stays the empty-pad marker; a test pins that.
+ *
+ * **Do not widen this range on the theory that the palette has 70 entries.** That is
+ * exactly the reasoning that broke the export.
  */
 const CATEGORY_COLOR_INDEX: Record<Category, number> = {
-  Kick: 17,
-  Snare: 12,
-  Clap: 29,
-  CHH: 21,
-  Hat: 21,
-  OHH: 24,
-  Perc: 18,
-  Crash: 18,
-  Other: 51
+  Kick: 1,
+  Snare: 2,
+  Clap: 3,
+  CHH: 4,
+  Hat: 4,
+  OHH: 6,
+  Perc: 7,
+  Crash: 7,
+  Other: 8
 };
 
 export function categoryColorIndex(category: string | null): number {
