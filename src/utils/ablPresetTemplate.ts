@@ -1,4 +1,4 @@
-import { categoryColorIndex } from '../padLayout';
+import { DRUM_CELL_COLOR } from '../padLayout';
 
 export function generateAblPreset(
   kitName: string,
@@ -35,10 +35,9 @@ export function generateAblPreset(
 
     return {
       "name": "",
-      // One colour per drum category, so the grid reads on the device the way it reads
-      // in the app. The rack's own chain and its return chains stay at the original 5:
-      // they are not pads. An empty pad has no category and keeps 5 as well.
-      "color": categoryColorIndex(category),
+      // 5 on every chain, and there is no point varying it: Move ignores this field for
+      // pad display. See the entry in AGENTS.md before trying to colour pads through it.
+      "color": DRUM_CELL_COLOR,
       "devices": [
         {
           "presetUri": null,

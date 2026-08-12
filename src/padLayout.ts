@@ -121,54 +121,22 @@ export function categoryAccent(category: string): string {
 }
 
 /**
- * What every drum cell shipped as before pads were coloured, and still the colour of a
- * pad whose category is unknown — an empty pad has no category to colour it by.
+ * The `color` every drum cell ships with, and the only value with evidence behind it.
+ *
+ * **Pads cannot be coloured through this field. Tested on hardware, twice.** Colouring
+ * each cell by its category was tried and abandoned:
+ *
+ * - Indices spread across Ableton's 14x5 palette (17, 12, 29, 21, 24, 18, 51), picked as
+ *   the nearest palette entry to each category's UI hue, made the bundle **fail to
+ *   import**. So the field is validated, and `0..69` is not the accepted range.
+ * - Indices 1-8 imported cleanly and changed **nothing** — every pad rendered the same
+ *   colour on the device. So the field is accepted and then ignored for pad display.
+ *
+ * Together those say there is no value of this field that colours a pad. Do not reopen it
+ * by picking different numbers; the two results above already bracket the behaviour. The
+ * category hues live in the browser only (`categoryAccent`), which is where they work.
  */
-export const DEFAULT_PAD_COLOR_INDEX = 5;
-
-/**
- * The same idea as `CATEGORY_ACCENT_VAR`, for the device rather than the browser. Each
- * chain in the preset carries a `color`, so the categories can be as legible on the Move
- * as they are in the grid here. Kept adjacent to the hues above so a correction to one is
- * an obvious prompt to look at the other, and pooled the same way — `Hat` with `CHH`,
- * `Crash` with `Perc`.
- *
- * **These are 1-8 because a Move refused to import the kit when they were not.** The
- * first attempt spread the categories across Ableton's 14x5 palette (17, 12, 29, 21, 24,
- * 18, 51), chosen as the nearest palette entry to each category's UI hue on the
- * assumption that any index in `0..69` was as good as any other. Importing that bundle
- * failed on the device. The assumption was wrong, and this comment used to say the worst
- * case was "pads in the wrong colours" — it was not.
- *
- * What is actually known: `5` imports, because every kit this app shipped before pad
- * colouring used it. Nothing else is known. This range is a probe around that one fact,
- * not a designed palette: seven consecutive values either side of `5`, no attempt to
- * match the UI hues. If 1-8 imports, the accepted range is wider than one value and the
- * next question is how much wider. If it still fails, `color` is not the variable — put
- * every pad back to `5` and look elsewhere.
- *
- * `5` itself is skipped so it stays the empty-pad marker; a test pins that.
- *
- * **Do not widen this range on the theory that the palette has 70 entries.** That is
- * exactly the reasoning that broke the export.
- */
-const CATEGORY_COLOR_INDEX: Record<Category, number> = {
-  Kick: 1,
-  Snare: 2,
-  Clap: 3,
-  CHH: 4,
-  Hat: 4,
-  OHH: 6,
-  Perc: 7,
-  Crash: 7,
-  Other: 8
-};
-
-export function categoryColorIndex(category: string | null): number {
-  if (!category) return DEFAULT_PAD_COLOR_INDEX;
-  const index = CATEGORY_COLOR_INDEX[category as Category];
-  return index ?? DEFAULT_PAD_COLOR_INDEX;
-}
+export const DRUM_CELL_COLOR = 5;
 
 /**
  * Whether a sample sitting on a pad counts as filling the role the pad asked for.

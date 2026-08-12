@@ -142,38 +142,25 @@ to match new behaviour unless the behaviour change is the point of the task.
   `59.9999885559082`, `-11.999999046325684`, `0.12015999853610992`. They are float32
   round-trips from a real `.ablpreset` export, not typos.
 - Device names are `Reverb` and `Saturator`. They ship into the user's Ableton UI.
-- **Each drum cell's `color` is its category's colour** (`categoryColorIndex` in
-  `padLayout.ts`), so a kit is as readable on the device as it is in the grid here. Pooled
-  the way the pads are: `Hat` takes the `CHH` colour, `Crash` takes the `Perc` colour. The
-  rack's own chain and its `returnChains` keep the original `5` — they are not pads — and
-  so does a pad with no sample, which has no category to colour it by.
+- **Every drum cell ships `color: 5` (`DRUM_CELL_COLOR`), and pads cannot be coloured
+  through that field.** Tried, tested on hardware twice, abandoned:
 
-  **The indices are 1-8 because a Move refused to import the bundle when they were not.**
-  The first attempt spread them across Ableton's 14x5 palette — 17, 12, 29, 21, 24, 18,
-  51 — read row-major and picked as the nearest palette entry to each category's UI hue,
-  on the assumption that any value in `0..69` was as acceptable to the device as any
-  other. The import failed. This entry previously said the worst case was "pads in the
-  wrong colours"; that was wrong, and the wrongness only showed on hardware.
+  - Indices spread across Ableton's 14x5 palette — 17, 12, 29, 21, 24, 18, 51, read
+    row-major and picked as the nearest palette entry to each category's UI hue — made the
+    bundle **fail to import**. So the field is validated, and `0..69` is not the accepted
+    range whatever the palette holds.
+  - Indices 1-8 **imported cleanly and did nothing**: every pad rendered the same colour on
+    the device.
 
-  What is known is one value: `5` imports, because every kit this app shipped before pad
-  colouring used it. The current range is a probe around that fact — seven consecutive
-  values either side of `5`, skipping `5` so it stays the empty-pad marker — and not a
-  designed palette. It makes no attempt to match the UI hues. **Do not widen it back
-  toward 69 on the theory that the palette has 70 entries.** That reasoning is what broke
-  the export, and nothing has established an upper bound since.
+  Together those bracket the behaviour — accepted but ignored for pad display — so there is
+  no value that colours a pad. **Do not reopen this by picking different numbers.** The
+  category hues live in the browser only, where they work.
 
-  Whether 1-8 imports is itself unconfirmed at the time of writing. If it does, the
-  accepted range is wider than one value and the open question is how much wider. If it
-  does not, `color` is not the variable: put every pad back to `5` and look elsewhere.
-
-  Two tests pin what Node can see — every category inside `0..69` with no collisions, no
-  category claiming the empty-pad default, and a generated preset's chains carrying the
-  index matching each pad. **None of them can catch a value the device rejects**, which is
-  the whole lesson here: this field's contract lives on the hardware, not in the schema.
-- **The UI hues are deliberately not tied to the indices.** They were never realigned to
-  Ableton's palette, which turned out to be lucky rather than clever — with the indices
-  now a diagnostic range, any such claim would be nonsense. The hues stay as chosen and
-  the indices are a separate table; the app does not claim the two agree.
+  The reasoning that failed is worth more than the result: the first attempt assumed a
+  70-entry palette meant a 70-value contract, and the code comment said the worst case was
+  "pads in the wrong colours". A Node test cannot catch a value the device rejects — this
+  field's contract lives on the hardware, not in the schema. A test now pins `5` on all 16
+  chains so a re-attempt fails in the suite instead of on a Move.
 
 ## Sample detection (`fileReader.ts`)
 
@@ -478,6 +465,10 @@ in a browser. Everything below is confirmed on real hardware — treat it as set
 - **Pad order is right.** Pad 1 in the UI is the bottom-left pad on the device;
   `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index` is correct.
 - **Choke groups work.** Hats cut each other, crashes cut each other, rides ring through.
+- **A drum cell's `color` is validated on import but ignored for pad display.** Palette
+  indices 17/12/29/21/24/18/51 were rejected — the bundle would not import. Indices 1-8
+  imported and left every pad the same colour. `5` is what ships. Per-pad colour on the
+  device is not reachable through this field.
 - **Trimming is clean, at both ends.** Trimmed samples match their source apart from
   the removed silence. `0.001` (-60 dBFS) is below audibility for a decay tail, so
   trailing trim does not clip percussion.

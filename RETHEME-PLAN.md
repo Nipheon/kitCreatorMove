@@ -74,27 +74,26 @@ in before the palette could move at all, because each is tuned for a near-black 
 - `bg-text-bright` used as a background → its own surface token
 - `shadow-[0_0_15px_rgba(232,229,216,0.2)]` → accent-derived glow
 
-## Pad colour on the device
+## Pad colour on the device: tried, does not work
 
-Each chain in `Preset.ablpreset` already carried a `color` field, hardcoded to `5` for
-every pad. It is now the category's colour, from `categoryColorIndex` in `padLayout.ts`,
-sitting next to the UI hue table so a correction to one prompts a look at the other.
+Each chain in `Preset.ablpreset` carries a `color`, hardcoded to `5`. Colouring it per
+category looked free. It is not possible, and the two hardware tests that established
+that are worth keeping:
 
-**The first attempt broke the import.** Indices spread across Ableton's 14x5 palette
-(17, 12, 29, 21, 24, 18, 51) were rejected by the device — the bundle would not load. The
-assumption that any value in `0..69` was as good as any other was wrong, and no test in a
-Node suite could have caught it.
+1. **Palette indices (17, 12, 29, 21, 24, 18, 51) — import failed.** Picked as the nearest
+   entry to each UI hue in Ableton's 14x5 palette. The bundle would not load at all. So
+   the field is validated and `0..69` is not the accepted range.
+2. **Indices 1-8 — imported, no effect.** Every pad rendered the same colour on the
+   device. So the field is accepted and then ignored for pad display.
 
-The range is now 1-8, skipping `5` so it stays the empty-pad marker. That is a probe
-around the single known-good value, not a designed palette: `5` is the only index with
-evidence behind it, because every kit shipped before pad colouring used it. If 1-8
-imports, the accepted range is wider than one value; if it does not, `color` is not the
-variable and every pad goes back to `5`.
+Accepted-but-ignored brackets the behaviour: no value colours a pad. Reverted to `5`
+everywhere, with a test pinning it so a re-attempt fails in the suite rather than on a
+Move.
 
-**The UI hues were deliberately left alone rather than realigned to the palette.** Aligning
-them would assert that the app and the device show the same colour, and that assertion
-rests entirely on the two guesses above. Showing orange where the device shows green is
-worse than not claiming a match at all.
+The mistake worth remembering is the first one. A 70-entry palette was treated as a
+70-value contract, and the code comment asserted the worst case was "pads in the wrong
+colours" — a claim about hardware written without hardware. Category colour stays in the
+browser, which is where it works.
 
 ## Out of scope, deliberately
 
