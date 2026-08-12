@@ -1187,7 +1187,16 @@ export default function App() {
                   for providing great insights on how to create ablpreset files.
                 </p>
                 <p className='text-text-light'>
-                  The drum icon is from{' '}
+                  Drum icon by{' '}
+                  <a
+                    href='https://www.magnific.com/author/iconfromus/icons'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    iconfromus
+                  </a>{' '}
+                  from{' '}
                   <a
                     href='https://www.magnific.com/icon/drum_8584847'
                     target='_blank'
@@ -1195,7 +1204,7 @@ export default function App() {
                     className='text-accent-yellow hover:underline font-medium'
                   >
                     Magnific
-                  </a>.
+                  </a>, used under its attribution licence.
                 </p>
                 <p className='text-text-light'>Other tools for kit creation:</p>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>

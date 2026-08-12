@@ -101,6 +101,13 @@ test/
 
 Developed with the assistance of **Google Gemini** and **Anthropic Claude** AI models for architecture, design, test-driven implementation, and optimization.
 
+## Credits
+
+Drum icon by [iconfromus](https://www.magnific.com/author/iconfromus/icons) from
+[Magnific](https://www.magnific.com/icon/drum_8584847), used under its attribution
+licence. It ships in this repository as `public/icon.png` and is **not** covered by the
+licence below.
+
 ## License
 
 [BSD Zero Clause License](LICENSE) (`0BSD`) — do whatever you like with this. No
