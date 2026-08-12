@@ -1,6 +1,7 @@
 import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
+import { Toast } from './components/Toast';
 import {
   chokeGroupFor, chooseLayout, DISPLAY_INDICES, NO_SAMPLES_GRID_ID, PAD_COUNT, poolCategoryFor
 } from './padLayout';
@@ -789,22 +790,13 @@ export default function App() {
             ))}
           </div>
 
-          {/* Hidden UI container: code logic preserved */}
-          <div className='hidden h-10 mb-2 flex-col items-center justify-center shrink-0'>
-            {showWarning && (kitResult.substituted.length > 0 || kitResult.empty.length > 0 || kitResult.unavailableRoles.length > 0) && (
-              <div className='text-sm text-warning-amber uppercase tracking-wider text-center space-y-1 transition-opacity duration-500'>
-                {kitResult.unavailableRoles.length > 0 && (
-                  <div>No {kitResult.unavailableRoles.join(', ')} samples in this library</div>
-                )}
-                {kitResult.substituted.length > 0 && (
-                  <div>{kitResult.substituted.length} pad(s) filled from a different category</div>
-                )}
-                {kitResult.empty.length > 0 && (
-                  <div>{kitResult.empty.length} pad(s) left empty — not enough samples</div>
-                )}
-              </div>
-            )}
-          </div>
+          <Toast
+            isVisible={showWarning}
+            unavailableRoles={kitResult.unavailableRoles}
+            substitutedCount={kitResult.substituted.length}
+            emptyCount={kitResult.empty.length}
+            onClose={() => setShowWarning(false)}
+          />
 
           <div className='flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
             <button

@@ -22,7 +22,7 @@ src/
   main.tsx
   types.ts
   padLayout.ts
-  components/Pad.tsx
+  components/{Pad,Toast}.tsx
   utils/{ablPresetTemplate,audioTrimmer,exporter,fileReader,
          kitGenerator,kitNaming,wavStripper}.ts
 test/kit.test.ts
@@ -318,10 +318,7 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   that is where those samples are drawn from. Separate Hat and Crash rows would read as
   unused while their samples sit on closed-hat and percussion pads. The card also has no
   row for a category that is not a role.
-- **The pad warning block is currently wrapped in `hidden`** ("Hidden UI container: code
-  logic preserved" in `App.tsx`). `substituted`, `empty` and `unavailableRoles` are all
-  computed and rendered, but nothing reaches the user until that wrapper comes off. Do
-  not conclude the counts are unused.
+- **Pad warning messages are rendered in a Toast component (`src/components/Toast.tsx`).** `substituted`, `empty` and `unavailableRoles` warning messages are displayed in a floating toast notification in the middle of the top bar with automatic 5-second auto-dismiss and manual close controls when active.
 - **The UI must not state things the app does not know.** Hardcoded device status, firmware version, bit depth and sample rate were all removed because none of them were ever read from anything. The panel reports only what the app actually knows: filled pads, source audio size, the active layout, usable samples against the total. Keep it that way.
 
 ---
