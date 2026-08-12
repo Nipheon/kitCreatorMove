@@ -11,23 +11,33 @@
   --color-accent-teal: var(--accent-teal);
 
   /*
-   * Surfaces & Backgrounds. Deep indigo rather than near-black: the app read as bland
+   * Surfaces & Backgrounds. Muted indigo rather than near-black: the app read as bland
    * and mysterious at #090909, and a mid-dark base carries colour without giving up the
    * glow language the pads depend on. Keep the ladder monotonic — each step up is a
    * lighter surface, and several places stack two of them (a card inside a panel, the
    * pad's bottom bar over the pad).
+   *
+   * **Every value here is the original indigo at half saturation**, hue and HSL lightness
+   * untouched, so the ladder keeps its spacing. Only the backgrounds were desaturated —
+   * the text ramp, the borders and the accents are deliberately still fully saturated,
+   * which is what keeps the app from reading grey.
+   *
+   * Desaturating raises luminance at a fixed `L`: grey is brighter than saturated indigo.
+   * Anything whose contrast was computed against a surface has to be recomputed when a
+   * surface moves — see the note on the pad ink mix, which dropped from 65% to 48%
+   * because of exactly this.
    */
-  --color-surface-darkest: #1E1B34;
-  --color-surface-panel: #272348;
-  --color-surface-header: #221F3E;
-  --color-surface-modal: #272348;
-  --color-surface-card: #2E2955;
-  --color-surface-modal-header: #322C5E;
-  --color-surface-pad: #332C5C;
-  --color-surface-hover: #3D3670;
-  --color-surface-btn-hover: #453D7D;
+  --color-surface-darkest: #23212E;
+  --color-surface-panel: #2E2C3F;
+  --color-surface-header: #282736;
+  --color-surface-modal: #2E2C3F;
+  --color-surface-card: #36344A;
+  --color-surface-modal-header: #3C3952;
+  --color-surface-pad: #3C3850;
+  --color-surface-hover: #484562;
+  --color-surface-btn-hover: #514D6D;
   /* The Export button's solid fill. Was `bg-white`; near-white on indigo is a hole. */
-  --color-surface-solid: #EDEBFB;
+  --color-surface-solid: #F0EFF7;
   --color-surface-solid-hover: #FFFFFF;
 
   /* Borders */
@@ -53,8 +63,8 @@
   --color-text-inverse: #1A1730;
 
   /* Scrims. Tuned to the indigo base; a black scrim over indigo reads as mud. */
-  --color-overlay-strong: rgba(16, 13, 32, 0.85);
-  --color-overlay-soft: rgba(16, 13, 32, 0.6);
+  --color-overlay-strong: rgba(19, 18, 27, 0.85);
+  --color-overlay-soft: rgba(19, 18, 27, 0.6);
 
   /* Alert & Warning colors */
   --color-warning-amber: #F0B429;
@@ -113,7 +123,7 @@
  * indigo toward plum on the right so the title end of the header is the darker one.
  */
 .header-gradient {
-  background-image: linear-gradient(100deg, #221F3E 0%, #2B2450 55%, #342A5E 100%);
+  background-image: linear-gradient(100deg, #282736 0%, #332F45 55%, #3C3751 100%);
 }
 
 /*
@@ -140,9 +150,14 @@
  *
  * The raw hue is not usable here. At 14px bold the threshold is 4.5:1 (14px bold is not
  * WCAG large text — that starts at 18.66px), and snare pink, open-hat violet and the
- * "other" periwinkle all land near 3.7:1 on their own tinted pad. Mixed 65% toward the
- * text ramp they clear it while staying obviously that category's colour. Recompute if a
- * hue changes; those three are the ones with no headroom.
+ * "other" periwinkle all land near 3.3:1 on their own tinted pad.
+ *
+ * **48%, down from 65% when the surfaces were desaturated.** Desaturating a colour at a
+ * fixed HSL lightness raises its luminance — grey is brighter than saturated indigo at the
+ * same `L` — so every pad background got lighter and the mix that used to clear 4.5:1 fell
+ * to 3.98:1 on snare pink. Recompute this whenever a hue *or a surface* moves; it is the
+ * surface that caught us out, not the hue. Snare pink is the binding constraint at 4.54:1,
+ * checked against the tinted pad, the hover surface and the lock bar.
  */
 .pad-ink,
 .pad-category,
@@ -189,7 +204,7 @@
   .pad-choke-badge,
   .pad-lock-active,
   .pad-shuffle:hover {
-    color: color-mix(in srgb, var(--pad-accent) 65%, var(--color-text-light));
+    color: color-mix(in srgb, var(--pad-accent) 48%, var(--color-text-light));
   }
 
   .pad-choke-badge {

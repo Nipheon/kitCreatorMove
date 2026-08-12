@@ -363,11 +363,16 @@ real packs.
   build succeeds and every pad comes out untinted.
 
   **The hue is never printed as text at full strength** (`.pad-ink` and friends mix it
-  65% toward `--color-text-light`). At 14px bold the contrast threshold is 4.5:1 — 14px
+  48% toward `--color-text-light`). At 14px bold the contrast threshold is 4.5:1 — 14px
   bold is not WCAG large text, that starts at 18.66px — and snare pink, open-hat violet
-  and the "other" periwinkle all sit near 3.7:1 against their own tinted pad. The mix
+  and the "other" periwinkle all sit near 3.3:1 against their own tinted pad. The mix
   clears the threshold and still reads as that category. One mix serves every text use;
   the per-element ladder it replaced was three numbers to get wrong for no visible gain.
+
+  **It was 65% until the surfaces were desaturated**, which lifted every pad background
+  and dropped snare pink to 3.98:1. Snare pink is the binding constraint at 4.54:1 —
+  checked against the tinted pad, the hover surface and the lock bar, since the ink
+  appears on all three. Recompute when a hue *or* a surface moves.
 
   **`Hat` takes the CHH hue and `Crash` takes the Perc hue**, matching `poolCategoryFor`
   and the sidebar breakdown rows. A generic hat sitting on a closed-hat pad is the same
@@ -412,6 +417,17 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 ## UI, Dimensions & Design System
 
 - **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements. There are no raw `text-white`, `bg-black/60` or `text-red-400` left in the components; `text-inverse`, `overlay-*` and `danger-*` cover those. Reintroducing one is how a palette change breaks in a place nobody looks.
+- **Only the surfaces are desaturated.** Every `--color-surface-*`, the two scrims and the
+  header gradient are the original indigo at **half saturation**, hue and HSL lightness
+  untouched so the ladder keeps its spacing. The text ramp, the borders and the accents
+  are deliberately still fully saturated — desaturating those too is what would make the
+  app read grey.
+
+  **Desaturating raises luminance at a fixed `L`** — grey is brighter than saturated
+  indigo — so every contrast figure computed against a surface has to be recomputed when a
+  surface moves. That is not a theoretical note: this change alone pushed the pad ink mix
+  from passing to 3.98:1 on snare pink, and the mix had to drop from 65% to 48% to
+  recover. A colour change with no visible relationship to text can still break the text.
 - **The palette is mid-dark indigo, not near-black.** It was `#090909`-and-greys, which
   read as bland and mysterious; surfaces now run `#1E1B34` (darkest) up to `#332C5C`
   (pad). Two things follow from the base being a colour rather than an absence of one:
