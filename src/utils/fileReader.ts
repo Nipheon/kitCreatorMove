@@ -234,9 +234,11 @@ function folderCandidates(directory: string): string[] {
 /**
  * Words that mark a file as a phrase rather than a one-shot.
  *
- * "breaks" and "breakbeat" used to be here and were removed: they name a genre, not a
- * file. A pack called "70s Breakbeat" or "Breaks Vol 2" is full of one-shots, and
- * matching them discarded every sample in it.
+ * "breaks" and "breakbeat" are deliberately absent: they name a genre, not a file. A pack
+ * called "70s Breakbeat" or "Breaks Vol 2" is full of one-shots, and this list is matched
+ * against the folders too, so having them here discarded every sample in such a pack.
+ * They live in `BREAK_WORDS` instead, filename-only and `Other`-only. Do not move them
+ * back up here.
  */
 const LOOP_WORDS = ['loop', 'loops', 'bpm'];
 
@@ -325,8 +327,34 @@ export function looksNonDrum(category: Category, name: string, directory = ''): 
   });
 }
 
-export function looksLikeLoop(name: string, directory = ''): boolean {
+/**
+ * "break", "breaks", "breakbeat" — a loop marker, but only in a filename, and only for a
+ * sample the categoriser could not place.
+ *
+ * These were in `LOOP_WORDS` once and were removed, because `LOOP_WORDS` is matched
+ * against the folders too and a pack called `70s Breakbeats` or `Breaks Vol 2` is full of
+ * one-shots: every sample in it was discarded. That objection is entirely about folders,
+ * so the word is readmitted under the two guards that answer it.
+ *
+ * The `Other`-only guard is the same shape as `looksNonDrum`'s, and for the same reason:
+ * if the categoriser placed the file, it stays. `Break Snare.wav` is a snare.
+ */
+const BREAK_WORDS = ['break', 'breaks', 'breakbeat', 'breakbeats'];
+
+function nameLooksLikeBreak(name: string): boolean {
+  return tokenize(name).some(t => BREAK_WORDS.includes(t));
+}
+
+/**
+ * A loop is a bar of music, not a drum hit, so it has no business on a pad.
+ *
+ * `category` is optional and defaults to `Other`, which is the permissive reading: a
+ * caller that does not know the category gets the break rule applied. Every caller in the
+ * app passes it.
+ */
+export function looksLikeLoop(name: string, directory = '', category: Category = 'Other'): boolean {
   if (textLooksLikeLoop(name)) return true;
+  if (category === 'Other' && nameLooksLikeBreak(name)) return true;
   return folderCandidates(directory).some(textLooksLikeLoop);
 }
 

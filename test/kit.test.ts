@@ -397,12 +397,14 @@ await test('one-shots are not mistaken for loops', () => {
     ['Kick 01.wav', ''], ['hihat_short.wav', ''], ['Crash Cymbal.wav', ''],
     ['808 Bass.wav', ''], ['01.wav', '/Pack/Kicks'],
     // A bare number is not a tempo — it is just as likely an index or catalogue number.
-    ['beat [128].wav', ''], ['hit [12].wav', ''], ['kick 120.wav', ''], ['snare_808.wav', ''],
-    // "breaks" and "breakbeat" name a genre, not a file.
-    ['breaks125.wav', ''], ['breakbeat 01.wav', '']
+    ['beat [128].wav', ''], ['hit [12].wav', ''], ['kick 120.wav', ''], ['snare_808.wav', '']
   ] as [string, string][]) {
     assert.equal(looksLikeLoop(name, dir), false, `${dir}/${name}`);
   }
+
+  // `breaks125.wav` and `breakbeat 01.wav` were here, asserting the opposite. They now
+  // read as loops on purpose — see "a break is a loop by its own name". What that entry
+  // protected was folders, and the test above still pins that.
 });
 
 await test('loops are kept out of the kit unless asked for', () => {
@@ -573,6 +575,38 @@ await test('a pack name does not decide what its samples are', () => {
   assert.equal(categorizeSample('02.wav', '/Snare Attack/bits'), 'Other');
   assert.equal(looksLikeLoop('03.wav', '/Drum Loops Pack/hats'), false);
   assert.equal(looksLikeLoop('04.wav', '/128bpm Pack/hats'), false);
+});
+
+await test('a break is a loop by its own name, never by its folder', () => {
+  // "breaks" names a genre as often as a file, which is why it is not in LOOP_WORDS:
+  // that list is matched against folders too, and it emptied whole one-shot packs.
+  // Readmitted filename-only and Other-only, which is what those packs needed.
+  const breaks: [string, string][] = [
+    ['03 BBL BREAKS.wav', '/BBL/BONUS - Breaks'],
+    ['Break 04.wav', '/BBL/BONUS - Breaks'],
+    ['Amen Breakbeat.wav', '/Pack/Drums']
+  ];
+  for (const [name, dir] of breaks) {
+    assert.equal(looksLikeLoop(name, dir, categorizeSample(name, dir)), true, `${dir}/${name}`);
+  }
+
+  // The folder never fires it — the whole reason the word was removed the first time.
+  const keep: [string, string][] = [
+    ['snare 3.wav', '/Breaks Vol 2/one shots'],
+    ['kick 01.wav', '/70s Breakbeats/kicks'],
+    ['chh 02.wav', '/BBL/BONUS - Breaks']
+  ];
+  for (const [name, dir] of keep) {
+    assert.equal(looksLikeLoop(name, dir, categorizeSample(name, dir)), false, `${dir}/${name}`);
+  }
+
+  // Placed by the categoriser, so the break rule stays off it: same guard as looksNonDrum.
+  assert.equal(categorizeSample('Break Snare.wav', ''), 'Snare');
+  assert.equal(looksLikeLoop('Break Snare.wav', '', 'Snare'), false);
+
+  // Whole tokens only, so a longer word that merely starts with "break" is untouched.
+  assert.equal(looksLikeLoop('Breakfast.wav', '', 'Other'), false);
+  assert.equal(looksLikeLoop('breakdance vox.wav', '', 'Other'), false);
 });
 
 await test('a sole folder is still read, and deeper folders still win', () => {

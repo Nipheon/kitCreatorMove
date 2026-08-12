@@ -397,7 +397,9 @@ export default function App() {
             file,
             name: file.name,
             category,
-            isLoop: looksLikeLoop(file.name, path),
+            // The category is passed so the break rule can stay off anything the
+            // categoriser placed — a snare named "Break Snare" is still a snare.
+            isLoop: looksLikeLoop(file.name, path, category),
             isNonDrum: looksNonDrum(category, file.name, path),
             url
           });
@@ -1068,7 +1070,7 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm.</li>
+                  <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm. A file that says "break" or "breakbeat" in its own name also counts, but only if it could not be categorised — a snare called "Break Snare" is still a snare, and a pack named "Breaks Vol 2" keeps all of its one-shots.</li>
                   <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
                   <li><strong className='text-text-bright'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
                 </ul>

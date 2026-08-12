@@ -188,9 +188,25 @@ real packs.
 
 ## Loop filtering
 
-- **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** `breaks` and `breakbeat` were removed:
-  they name a genre, not a file, and packs called `70s Breakbeats` or `Breaks Vol 2`
-  are full of one-shots.
+- **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** `breaks` and `breakbeat` are not in it
+  and must not be put back: this list is matched against the *folders* too, and packs
+  called `70s Breakbeats` or `Breaks Vol 2` are full of one-shots, so every sample in one
+  was discarded.
+- **`BREAK_WORDS` is that word readmitted under two guards — filename only, and only for
+  a sample the categoriser could not place.** A file that says `BREAKS` in its own name
+  and could not be classified is a break; `03 BBL BREAKS.wav` in `BONUS - Breaks/` used to
+  land on a pad as `Other`, competing for a column with the actual drums.
+
+  Both guards are load-bearing and each answers a specific way this failed before. The
+  folder is never read, which is the entire objection recorded above — `Breaks Vol 2/one
+  shots/snare 3.wav` is still a snare. The `Other`-only guard is the same shape as
+  `looksNonDrum`'s and is there for the same reason: if the categoriser placed it, it
+  stays, so `Break Snare.wav` is a snare too. Matching is whole-token, so `Breakfast.wav`
+  and `breakdance vox.wav` are untouched.
+
+  **Two cases in `one-shots are not mistaken for loops` were inverted to land this** —
+  `breaks125.wav` and `breakbeat 01.wav` now read as loops on purpose. A test pins the new
+  behaviour together with all three guards.
 - **`loop` never matches as a prefix.** "Loopmasters" is a sample-pack vendor whose
   name appears in ordinary one-shots.
 - **A glued `loop` needs at least three characters in front of it**, so `bloop` stays a
