@@ -951,6 +951,9 @@ export default function App() {
                 />
                 Trim silence (start & end)
               </label>
+              <p className='text-sm leading-snug text-text-muted-dark'>
+                Applied on export only — pads always audition the original file.
+              </p>
             </div>
 
             <div className='pt-6 border-t border-border-dark space-y-1.5'>
