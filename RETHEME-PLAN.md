@@ -74,6 +74,26 @@ in before the palette could move at all, because each is tuned for a near-black 
 - `bg-text-bright` used as a background → its own surface token
 - `shadow-[0_0_15px_rgba(232,229,216,0.2)]` → accent-derived glow
 
+## Pad colour on the device
+
+Each chain in `Preset.ablpreset` already carried a `color` field, hardcoded to `5` for
+every pad. It is now the category's colour, from `categoryColorIndex` in `padLayout.ts`,
+sitting next to the UI hue table so a correction to one prompts a look at the other.
+
+**Unverified.** The indices read Ableton's 14x5 palette row-major and were picked as the
+nearest palette entry to each UI hue. The palette may be ordered column-major, and Move's
+palette may not hold Live's colours; either would give consistently coloured pads in the
+wrong colours. Neither breaks an import.
+
+One observation settles the ordering and has not been made: every kit this app has
+exported used `color: 5`. Row-major puts that at bright green `#32FD42`, column-major at
+orange `#FDA43A`. Look at a Move, then fix the table if needed.
+
+**The UI hues were deliberately left alone rather than realigned to the palette.** Aligning
+them would assert that the app and the device show the same colour, and that assertion
+rests entirely on the two guesses above. Showing orange where the device shows green is
+worse than not claiming a match at all.
+
 ## Out of scope, deliberately
 
 - **Font sizes.** AGENTS.md pins `text-sm` as the floor and calls the pad tile's 12px /

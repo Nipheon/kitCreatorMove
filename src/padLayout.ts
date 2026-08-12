@@ -121,6 +121,47 @@ export function categoryAccent(category: string): string {
 }
 
 /**
+ * What every drum cell shipped as before pads were coloured, and still the colour of a
+ * pad whose category is unknown — an empty pad has no category to colour it by.
+ */
+export const DEFAULT_PAD_COLOR_INDEX = 5;
+
+/**
+ * The same idea as `CATEGORY_ACCENT_VAR`, for the device rather than the browser. Each
+ * chain in the preset carries a `color`, so the categories can be as legible on the Move
+ * as they are in the grid here. Kept adjacent to the hues above so a correction to one is
+ * an obvious prompt to look at the other, and pooled the same way — `Hat` with `CHH`,
+ * `Crash` with `Perc`.
+ *
+ * **The values are an assumption, not a fact.** They index Ableton's 14x5 colour palette
+ * read row-major (index = (row - 1) * 14 + (column - 1)), and were chosen as the nearest
+ * palette entry to each category's UI hue. Nothing here has been checked on hardware, and
+ * two things could be wrong independently: the palette may be ordered column-major, and
+ * Move's palette may not hold the same colours as Live's. Both would show as pads that
+ * are consistently coloured but not the colours the app shows. Neither breaks an import.
+ *
+ * The single fact available is that every kit this app has exported used index 5 — so the
+ * colour those kits show on a Move is what settles the ordering.
+ */
+const CATEGORY_COLOR_INDEX: Record<Category, number> = {
+  Kick: 17,
+  Snare: 12,
+  Clap: 29,
+  CHH: 21,
+  Hat: 21,
+  OHH: 24,
+  Perc: 18,
+  Crash: 18,
+  Other: 51
+};
+
+export function categoryColorIndex(category: string | null): number {
+  if (!category) return DEFAULT_PAD_COLOR_INDEX;
+  const index = CATEGORY_COLOR_INDEX[category as Category];
+  return index ?? DEFAULT_PAD_COLOR_INDEX;
+}
+
+/**
  * Whether a sample sitting on a pad counts as filling the role the pad asked for.
  * A generic hat on a closed-hat pad, or a crash on a percussion pad, is the intended
  * pooling above rather than a substitution, and must not be reported as one.

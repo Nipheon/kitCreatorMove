@@ -142,6 +142,30 @@ to match new behaviour unless the behaviour change is the point of the task.
   `59.9999885559082`, `-11.999999046325684`, `0.12015999853610992`. They are float32
   round-trips from a real `.ablpreset` export, not typos.
 - Device names are `Reverb` and `Saturator`. They ship into the user's Ableton UI.
+- **Each drum cell's `color` is its category's colour** (`categoryColorIndex` in
+  `padLayout.ts`), so a kit is as readable on the device as it is in the grid here. Pooled
+  the way the pads are: `Hat` takes the `CHH` colour, `Crash` takes the `Perc` colour. The
+  rack's own chain and its `returnChains` keep the original `5` — they are not pads — and
+  so does a pad with no sample, which has no category to colour it by.
+
+  **The indices are an assumption and are unverified on hardware.** They read Ableton's
+  14x5 palette row-major, `index = (row - 1) * 14 + (column - 1)`, and each was picked as
+  the nearest palette entry to that category's UI hue. Two things could be wrong on their
+  own: the palette may be ordered column-major, and Move's palette may not hold Live's
+  colours. Either would give pads that are consistently coloured but not the colours the
+  app shows — neither breaks an import, and the fix is one line in that table.
+
+  The discriminating observation is cheap and has not been made: every kit this app has
+  ever exported shipped `color: 5`, so the colour those kits show on a Move settles the
+  ordering. Row-major puts 5 at bright green `#32FD42`; column-major puts it at orange
+  `#FDA43A`. **Do not write the palette mapping into this file as fact until someone has
+  looked at a Move.** Two tests pin what is checkable without one: every category maps
+  inside `0..69` with no collisions, and a generated preset's chains carry the index
+  matching each pad.
+- **The UI hues were deliberately not realigned to the palette.** Matching them would
+  claim the two agree, and that claim rests on both assumptions above being right — a
+  wrong guess would have the app showing orange where the device shows green, which is
+  worse than not claiming it. The hues stay as chosen; the indices are a separate table.
 
 ## Sample detection (`fileReader.ts`)
 

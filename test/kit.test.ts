@@ -23,7 +23,10 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
   };
 }
 
-import { CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, PAD_COUNT } from '../src/padLayout';
+import {
+  categoryColorIndex, CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DEFAULT_PAD_COLOR_INDEX,
+  DISPLAY_INDICES, PAD_COUNT
+} from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
@@ -1066,6 +1069,50 @@ await test('effect type follows category, amounts stay at zero', async () => {
     assert.equal(params[index].Effect_NoiseAmount, 0.0);
     assert.equal(params[index].Effect_SubOscAmount, 0.0);
   }
+});
+
+await test('each pad carries the colour of its category, empty pads the default', async () => {
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = makeSample('kick.wav', 'Kick');
+  kit[1] = makeSample('snare.wav', 'Snare');
+  kit[2] = makeSample('closed.wav', 'CHH');
+  kit[3] = makeSample('open.wav', 'OHH');
+  kit[6] = makeSample('hihat.wav', 'Hat');
+  kit[14] = makeSample('crash.wav', 'Crash');
+  kit[15] = makeSample('conga.wav', 'Perc');
+
+  const blob = await createPresetBundle(kit, 'Colour_Test', NO_TRIM);
+  const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+  const preset = JSON.parse(await zip.file('Preset.ablpreset')!.async('string'));
+  const colors = preset.chains[0].devices[0].chains.map((c: any) => c.color);
+
+  assert.equal(colors[0], categoryColorIndex('Kick'));
+  assert.equal(colors[1], categoryColorIndex('Snare'));
+  assert.notEqual(colors[0], colors[1], 'two categories must not share a colour');
+
+  // Pooled the same way the pads and the sidebar rows are: a generic hat is a closed
+  // hat and a crash is percussion, so each takes its pool's colour rather than its own.
+  assert.equal(colors[6], colors[2], 'a generic hat takes the closed-hat colour');
+  assert.equal(colors[14], colors[15], 'a crash takes the percussion colour');
+  assert.notEqual(colors[2], colors[3], 'closed and open hats must be distinguishable');
+
+  // An empty pad has no category to colour it by, and keeps what every pad used to ship as.
+  assert.equal(colors[4], DEFAULT_PAD_COLOR_INDEX);
+
+  // The rack's own chain and its return chains are not pads and are deliberately left alone.
+  assert.equal(preset.chains[0].color, DEFAULT_PAD_COLOR_INDEX);
+});
+
+await test('every category has a distinct colour inside the palette', () => {
+  const categories: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
+  const indices = categories.map(categoryColorIndex);
+
+  // 70 swatches, 14 columns by 5 rows. Out of range is not a different colour, it is a
+  // value the device has no entry for.
+  for (const index of indices) {
+    assert.ok(Number.isInteger(index) && index >= 0 && index <= 69, `${index} out of palette`);
+  }
+  assert.equal(new Set(indices).size, categories.length, 'colours must not collide');
 });
 
 await test('wav format is read without decoding', async () => {

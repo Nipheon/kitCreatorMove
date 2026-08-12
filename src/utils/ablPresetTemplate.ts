@@ -1,3 +1,5 @@
+import { categoryColorIndex } from '../padLayout';
+
 export function generateAblPreset(
   kitName: string,
   samples: (string | null)[],
@@ -33,7 +35,10 @@ export function generateAblPreset(
 
     return {
       "name": "",
-      "color": 5,
+      // One colour per drum category, so the grid reads on the device the way it reads
+      // in the app. The rack's own chain and its return chains stay at the original 5:
+      // they are not pads. An empty pad has no category and keeps 5 as well.
+      "color": categoryColorIndex(category),
       "devices": [
         {
           "presetUri": null,
