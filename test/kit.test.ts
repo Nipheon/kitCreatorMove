@@ -1113,6 +1113,13 @@ await test('every category has a distinct colour inside the palette', () => {
     assert.ok(Number.isInteger(index) && index >= 0 && index <= 69, `${index} out of palette`);
   }
   assert.equal(new Set(indices).size, categories.length, 'colours must not collide');
+
+  // An empty pad keeps the default, so no category may claim it — otherwise an empty pad
+  // reads on the device as a pad holding that category.
+  assert.ok(
+    !indices.includes(DEFAULT_PAD_COLOR_INDEX),
+    'the empty-pad colour must not also be a category colour'
+  );
 });
 
 await test('wav format is read without decoding', async () => {
