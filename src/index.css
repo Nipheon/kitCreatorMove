@@ -119,11 +119,12 @@
   --accent-pink: #FF5F9E;
 
   /*
-   * Fallback for the per-pad tint. `Pad` overrides this inline with the category's hue;
-   * the value here is what an untinted pad would use, and keeps every rule below valid
-   * on its own.
+   * The hue of whatever category the element belongs to. Set inline by `Pad` on each pad
+   * and by `App` on each row of the breakdown card, so the two agree by construction
+   * rather than by two lists that have to be kept in step. The value here is the fallback
+   * for anything that sets no category, and keeps every rule below valid on its own.
    */
-  --pad-accent: var(--accent-yellow);
+  --category-accent: var(--accent-yellow);
 }
 
 /*
@@ -135,7 +136,7 @@
 }
 
 /*
- * The pad's tint. `--pad-accent` is set inline per pad, so the surface, the border and
+ * The pad's tint. `--category-accent` is set inline per pad, so the surface, the border and
  * the glow all derive from one value. `color-mix` rather than a stack of pre-mixed
  * tokens: seven categories times four states is not a token table anyone will maintain.
  */
@@ -144,11 +145,11 @@
 }
 
 .pad-dot-glow {
-  box-shadow: 0 0 10px var(--pad-accent);
+  box-shadow: 0 0 10px var(--category-accent);
 }
 
 .pad-glow {
-  box-shadow: 0 0 24px var(--pad-accent);
+  box-shadow: 0 0 24px var(--category-accent);
 }
 
 /*
@@ -166,13 +167,18 @@
  * to 3.98:1 on snare pink. Recompute this whenever a hue *or a surface* moves; it is the
  * surface that caught us out, not the hue. Snare pink is the binding constraint at 4.54:1,
  * checked against the tinted pad, the hover surface and the lock bar.
+ *
+ * `.category-ink` is also what the breakdown card's row labels use, so a row and the pads
+ * it feeds are the same colour without a second table to keep in step. The sidebar card
+ * (`#36344A`) is darker than a tinted pad, so the same mix clears it comfortably — snare
+ * pink, the tightest, sits at 5.98:1 there.
  */
-.pad-ink,
+.category-ink,
 .pad-category,
 .pad-choke-badge,
 .pad-lock-active,
 .pad-shuffle:hover {
-  color: var(--pad-accent);
+  color: var(--category-accent);
 }
 
 .pad-choke-badge {
@@ -198,29 +204,29 @@
   .pad-tinted {
     background-image: linear-gradient(
       160deg,
-      color-mix(in srgb, var(--pad-accent) 14%, var(--color-surface-pad)) 0%,
+      color-mix(in srgb, var(--category-accent) 14%, var(--color-surface-pad)) 0%,
       var(--color-surface-pad) 62%
     );
   }
 
   .pad-glow {
-    box-shadow: 0 0 24px color-mix(in srgb, var(--pad-accent) 42%, transparent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--category-accent) 42%, transparent);
   }
 
-  .pad-ink,
+  .category-ink,
   .pad-category,
   .pad-choke-badge,
   .pad-lock-active,
   .pad-shuffle:hover {
-    color: color-mix(in srgb, var(--pad-accent) 48%, var(--color-text-light));
+    color: color-mix(in srgb, var(--category-accent) 48%, var(--color-text-light));
   }
 
   .pad-choke-badge {
-    border-color: color-mix(in srgb, var(--pad-accent) 45%, transparent);
+    border-color: color-mix(in srgb, var(--category-accent) 45%, transparent);
   }
 
   .pad-lock-active {
-    background-color: color-mix(in srgb, var(--pad-accent) 18%, transparent);
+    background-color: color-mix(in srgb, var(--category-accent) 18%, transparent);
   }
 }
 

@@ -222,7 +222,7 @@ export const Pad: React.FC<PadProps> = ({
    * the layout the library produced even before a kit is generated.
    */
   const padStyle = {
-    '--pad-accent': categoryAccent(sample ? sample.category : expectedCategory)
+    '--category-accent': categoryAccent(sample ? sample.category : expectedCategory)
   } as React.CSSProperties;
 
   // A div rather than a button: the lock, reroll, and exclude controls are buttons themselves,
@@ -239,14 +239,14 @@ export const Pad: React.FC<PadProps> = ({
       className={`group relative overflow-hidden w-full aspect-square bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
-            ? 'pad-tinted pad-glow border-[var(--pad-accent)] scale-[0.98]'
-            : 'pad-tinted border-border-main hover:border-[var(--pad-accent)] cursor-pointer'
+            ? 'pad-tinted pad-glow border-[var(--category-accent)] scale-[0.98]'
+            : 'pad-tinted border-border-main hover:border-[var(--category-accent)] cursor-pointer'
           : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
       <div className='flex w-full justify-between items-center'>
         <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
-          <span className='pad-ink text-sm font-bold shrink-0'>
+          <span className='category-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
@@ -260,7 +260,7 @@ export const Pad: React.FC<PadProps> = ({
             </span>
           )}
         </div>
-        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--pad-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
+        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
       <div className='w-full mt-auto mb-8 sm:mb-9'>
@@ -270,8 +270,8 @@ export const Pad: React.FC<PadProps> = ({
         <div className='w-full flex items-center justify-between gap-1'>
           <div className='text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
             {isSpinning ? (
-              <span className='pad-ink flex items-center gap-1 animate-pulse'>
-                <Loader2 className='pad-ink w-3.5 h-3.5 animate-spin shrink-0' />
+              <span className='category-ink flex items-center gap-1 animate-pulse'>
+                <Loader2 className='category-ink w-3.5 h-3.5 animate-spin shrink-0' />
                 <span className='text-text-muted text-xs uppercase font-mono tracking-wider'>Rolling</span>
               </span>
             ) : (

@@ -434,7 +434,7 @@ real packs.
 - **Every pad is tinted by the category it holds** — one hue each for Kick, Snare, Clap,
   CHH, OHH, Perc and Other, so a derived grid can be read without reading a word. The
   hues live in `@theme` as `--color-cat-*`; `categoryAccent()` in `padLayout.ts` maps a
-  category to one, and `Pad` sets the result as `--pad-accent` inline on the pad root.
+  category to one, and `Pad` sets the result as `--category-accent` inline on the pad root.
   The tint, border, glow, pad number, choke badge and both bottom-bar buttons all derive
   from that one property.
 
@@ -442,7 +442,7 @@ real packs.
   names, so a `bg-cat-${category}` assembled at runtime compiles to nothing at all — the
   build succeeds and every pad comes out untinted.
 
-  **The hue is never printed as text at full strength** (`.pad-ink` and friends mix it
+  **The hue is never printed as text at full strength** (`.category-ink` and friends mix it
   48% toward `--color-text-light`). At 14px bold the contrast threshold is 4.5:1 — 14px
   bold is not WCAG large text, that starts at 18.66px — and snare pink, open-hat violet
   and the "other" periwinkle all sit near 3.3:1 against their own tinted pad. The mix
@@ -554,6 +554,16 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   that is where those samples are drawn from. Separate Hat and Crash rows would read as
   unused while their samples sit on closed-hat and percussion pads. The card also has no
   row for a category that is not a role.
+
+  **Row labels carry the category hue, from the same `--category-accent` the pads set.**
+  A row and the pads it feeds are one colour by construction rather than two lists that
+  have to be kept in step, and `CHH + HAT` and `PERC + CRASH` tint from the pool exactly as
+  a pad holding a generic hat or a crash does. A row with no samples stays grey rather
+  than tinted — it should read as absent, not as available.
+
+  The custom property and `.category-ink` were called `--pad-accent` and `.pad-ink` while
+  the pads were their only user; they were renamed when the card started sharing them,
+  since a pad-named thing on a sidebar row invites someone to build a second mechanism.
 
   **Each row carries an eye toggle that switches the whole type off**, the same control
   and the same idea as disabling a source folder, writing into `disabledTypes`. It

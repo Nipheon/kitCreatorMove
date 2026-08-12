@@ -3,7 +3,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { Toast } from './components/Toast';
 import {
-  chokeGroupFor, chooseLayout, DISPLAY_INDICES, NO_SAMPLES_GRID_ID, PAD_COUNT, poolCategoryFor
+  categoryAccent, chokeGroupFor, chooseLayout, DISPLAY_INDICES, NO_SAMPLES_GRID_ID,
+  PAD_COUNT, poolCategoryFor
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
@@ -801,6 +802,11 @@ export default function App() {
                       return (
                         <div
                           key={cat}
+                          // The same custom property the pads set, so a row and the pads
+                          // it feeds are the one colour rather than two lists to keep in
+                          // step. CHH carries generic hats and Perc carries crashes here
+                          // exactly as they do on a pad, because both read the pool.
+                          style={{ '--category-accent': categoryAccent(cat) } as React.CSSProperties}
                           className={`flex justify-between items-center gap-2 text-sm uppercase font-medium ${isOff ? 'opacity-50' : ''}`}
                           title={cat === 'CHH'
                             ? 'Hats with no open/closed qualifier are treated as closed hats'
@@ -820,7 +826,9 @@ export default function App() {
                             >
                               {isOff ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
-                            <span className={`truncate ${total > 0 ? 'text-text-muted' : 'text-text-muted-dark opacity-50'}`}>
+                            {/* Tinted only when the row has samples: a type the library
+                                does not hold should read as absent, not as available. */}
+                            <span className={`truncate ${total > 0 ? 'category-ink' : 'text-text-muted-dark opacity-50'}`}>
                               {label}
                             </span>
                           </div>
