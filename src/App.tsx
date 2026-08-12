@@ -1186,6 +1186,17 @@ export default function App() {
                   </a>{' '}
                   for providing great insights on how to create ablpreset files.
                 </p>
+                <p className='text-text-light'>
+                  The drum icon is from{' '}
+                  <a
+                    href='https://www.magnific.com/icon/drum_8584847'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Magnific
+                  </a>.
+                </p>
                 <p className='text-text-light'>Other tools for kit creation:</p>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li>

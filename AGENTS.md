@@ -613,11 +613,12 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   `alt` and explicit width and height: it is decoration beside a heading that already
   names the app, and the dimensions stop the header shifting while it loads.
 
-  **Licensing is unresolved.** The file came from `cdn-icons-png.magnific.com`, a CDN
-  whose URL pattern matches Flaticon's. Icons from those sites are typically free *with
-  attribution*, and neither the licence nor the author is knowable from the URL. This
-  repository is 0BSD and ships no credit for it. Either confirm the licence allows
-  unattributed use or add the credit — help section 6 is where it would go.
+  **It is third-party work and carries a credit** in help section 6, linking to
+  `magnific.com/icon/drum_8584847`. The licence text could not be read from here —
+  magnific.com answers automated requests with a 403 — so the credit names the source
+  rather than a designer. If that page names an individual, the credit should name them
+  too: these licences generally want the designer, not just the site. Do not drop the
+  credit to tidy the modal; the repository is 0BSD but this file is not ours.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Thank You" credits drum-kit-generator and lists the other kit-creation tools, Kit-Maker and Move Studio. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
 
   **A user-visible rule needs a help entry, not only an AGENTS.md entry.** Preview and Grid IDs both shipped without one and went months undocumented, which is how a feature ends up existing only for whoever wrote it.
