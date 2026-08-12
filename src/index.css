@@ -62,9 +62,17 @@
   /* Text on a filled accent button. Deep indigo, not black — black on amber is harsh. */
   --color-text-inverse: #1A1730;
 
-  /* Scrims. Tuned to the indigo base; a black scrim over indigo reads as mud. */
+  /* The modal scrim. Tuned to the indigo base; a black scrim over indigo reads as mud. */
   --color-overlay-strong: rgba(19, 18, 27, 0.85);
-  --color-overlay-soft: rgba(19, 18, 27, 0.6);
+
+  /*
+   * Inline `code` chips in the help modal. Their own token, not the scrim: those two were
+   * the same `bg-black/60` before the tokens existed and got de-hardcoded together, which
+   * left the chips punching near-black holes in a mid-indigo modal. A scrim wants to be
+   * darker than everything; a chip only wants to be a step darker than the surface it
+   * sits on.
+   */
+  --color-surface-code: #2A2838;
 
   /* Alert & Warning colors */
   --color-warning-amber: #F0B429;

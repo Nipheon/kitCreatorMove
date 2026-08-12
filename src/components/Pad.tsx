@@ -313,7 +313,7 @@ export const Pad: React.FC<PadProps> = ({
               ? 'text-border-main cursor-not-allowed'
               : isLocked
                 ? 'pad-lock-active font-semibold cursor-pointer'
-                : 'text-text-muted-dark hover:text-text-light hover:bg-surface-hover cursor-pointer'
+                : 'text-text-subtle hover:text-text-light hover:bg-surface-hover cursor-pointer'
           }`}
         >
           {isLocked ? <Lock size={14} /> : <Unlock size={14} />}

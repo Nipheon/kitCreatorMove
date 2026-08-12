@@ -744,7 +744,7 @@ export default function App() {
               </div>
             ))}
             {sourceFolders.length === 0 && (
-              <div className='text-sm text-text-muted-dark text-center mt-4'>No folders loaded</div>
+              <div className='text-sm text-text-subtle text-center mt-4'>No folders loaded</div>
             )}
           </div>
           <div className='mt-auto space-y-2'>
@@ -893,7 +893,7 @@ export default function App() {
                   aria-label='Preset name suffix'
                 />
               </div>
-              <div className='text-sm text-text-muted-dark font-mono truncate' title={exportName}>
+              <div className='text-sm text-text-subtle font-mono truncate' title={exportName}>
                 {exportName}
               </div>
             </div>
@@ -912,7 +912,7 @@ export default function App() {
                 onChange={(e) => setBatchSize(parseInt(e.target.value))}
                 className='w-full accent-accent-yellow'
               />
-              <p className='text-sm leading-snug text-text-muted-dark'>
+              <p className='text-sm leading-snug text-text-subtle'>
                 Export multiple random kits in one zip. Locked pads remain the same across all.
               </p>
             </div>
@@ -951,7 +951,7 @@ export default function App() {
                 />
                 Trim silence (start & end)
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
+              <p className='text-sm leading-snug text-text-subtle'>
                 Applied on export only — pads always audition the original file.
               </p>
             </div>
@@ -961,7 +961,7 @@ export default function App() {
               <div className='flex justify-between text-sm'><span>Filled Pads</span><span className='text-accent-yellow'>{filledPads} / {PAD_COUNT}</span></div>
               <div className='flex justify-between text-sm'><span>Source Audio</span><span className='text-accent-yellow'>{formatMb(kitSizeBytes(kit))}</span></div>
               <div className='flex justify-between text-sm'><span>Grid ID</span><span className='text-accent-yellow font-mono'>{kitResult.layout.id}</span></div>
-              <p className='text-sm text-text-muted-dark pt-3 leading-relaxed'>
+              <p className='text-sm text-text-subtle pt-3 leading-relaxed'>
                 The grid is built from the categories this library actually holds. Kits
                 sharing a Grid ID lay their pads out identically, so one can replace the
                 other on the device. The exported name carries the column half of the ID
@@ -1024,7 +1024,7 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
-                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-overlay-soft px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
+                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
                 </p>
               </section>
 
@@ -1032,7 +1032,7 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding & Scanning Sample Folders</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
-                  <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
+                  <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
                 </ul>
@@ -1059,9 +1059,9 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
+                  <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
                   <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
-                  <li><strong className='text-text-bright'>Device Transfer:</strong> Copy exported <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
+                  <li><strong className='text-text-bright'>Device Transfer:</strong> Copy exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
 

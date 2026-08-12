@@ -417,6 +417,21 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 ## UI, Dimensions & Design System
 
 - **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements. There are no raw `text-white`, `bg-black/60` or `text-red-400` left in the components; `text-inverse`, `overlay-*` and `danger-*` cover those. Reintroducing one is how a palette change breaks in a place nobody looks.
+- **`text-text-muted-dark` is not for reading text.** It is `#7B74AE`, which is 3.2:1 on
+  the panel and 3.45:1 on the pad's bottom bar — under the 4.5:1 body text needs. It is
+  reserved for things the ratio does not apply to: an icon or glyph that is really a
+  control and brightens on hover (the folder eye, the remove ✕), the `-` between the two
+  name fields, and the deliberately dimmed zero-count rows in the breakdown card, whose
+  whole job is to read as absent. Everything a user actually reads uses
+  `text-text-subtle` (`#9A93C8`, 4.77:1 on the panel, 5.15:1 on the pad bar) or lighter.
+  The hint paragraphs, the export filename, "No folders loaded" and the Lock button label
+  were all on the dark step and have been moved up. Do not move them back to tighten the
+  hierarchy — use the lighter token and let the size and weight carry it.
+- **An inline `code` chip is not a scrim.** They were both `bg-black/60` before the tokens
+  existed and were de-hardcoded to the same `overlay` token, which left the chips in the
+  help modal punching near-black holes in a mid-indigo panel. A scrim wants to be darker
+  than everything; a chip wants to be one step darker than what it sits on. Hence
+  `--color-surface-code`.
 - **Only the surfaces are desaturated.** Every `--color-surface-*`, the two scrims and the
   header gradient are the original indigo at **half saturation**, hue and HSL lightness
   untouched so the ladder keeps its spacing. The text ramp, the borders and the accents
@@ -509,10 +524,18 @@ nothing will catch a regression except testing on hardware again:
 - The decode half of trimming — `OfflineAudioContext` does not exist in Node. Only
   `encodeWav` is unit-tested.
 - Whether a bundle still imports on the device at all.
-- **The indigo palette and the per-category pad tint are not verified at all** — not by
-  the suite, and not by eye either. The agent that wrote them had no browser available,
-  so contrast was computed rather than observed and the pad grid has never been seen.
-  Treat "it builds" as meaning nothing here, and say so rather than implying otherwise.
+- **The palette and the per-category pad tint, seen in Chrome** — the empty grid, a full
+  16-pad kit, and the help modal. The categories are distinguishable at a glance, the
+  toast, breakdown card and choke badges read, and the grid id renders as `ksho_ccpp`,
+  which is the letter change confirmed in a browser rather than only in the suite.
+
+  **How, since the suite cannot do it:** `npx vite preview`, then Chrome headless with
+  `--remote-debugging-port`, driven over CDP — `Runtime.evaluate` to dispatch a synthetic
+  `drop` carrying stubbed `webkitGetAsEntry` entries over generated WAV blobs, then
+  `Page.captureScreenshot`. The drop must be dispatched on `#root`'s first element child,
+  not on `window`: the handler is an `onDrop` prop and React listens at the root, which
+  `window` sits above. That is worth keeping — it is the only way to see a *filled* grid
+  without a real sample folder, and the empty grid hides most of what the theme does.
 
 `DISPLAY_INDICES` and the `receivingNote`/`sendingNote` mapping *are* pinned by a test
 now, precisely because a wrong mapping still produces a bundle where every pad sounds —
