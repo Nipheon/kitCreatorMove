@@ -345,6 +345,25 @@ real packs.
   in one pool. A library with 3 CHH and 25 generic hats will usually show generic hats
   on every closed pad. If that ever needs to change, bias the draw — do not put `Hat`
   back in the preference chain, it does not work.
+- **`Perc` and `Other` are drawn from as one pool without being merged** (`DRAW_GROUPS` in
+  `padLayout.ts`). Both keep their own column, their own letter in the grid id and their
+  own breakdown row — they are separate roles — but a pad asking for either draws from
+  both, weighted by what each pool still holds.
+
+  **This cannot be done with the preference chain, and trying is the trap.** `take` drains
+  a pool completely before reading the next entry, so listing `Other` after `Perc` gives
+  every percussion pad a perc until the percussion runs out and only then reaches the
+  other pool. It is the same mistake as ranking `Hat` below `CHH`, which did nothing for
+  the same reason. Equal treatment has to happen at the draw: `pickGroupPool` chooses a
+  pool in the group with probability proportional to its remaining size, and the pools are
+  pre-shuffled, so it is equivalent to drawing uniformly from the two concatenated.
+
+  It is applied at both draw sites — a full generate and a single-pad reroll. `Crash`
+  pools into `Perc` first, so a crash can now legitimately land on an `Other` pad; it
+  still chokes as a crash, because `chokeGroupFor` reads the real category.
+
+  **`satisfiesRole` had to learn it too**, or the warning toast would fire on nearly every
+  kit holding both: an `Other` on a percussion pad is the design, not a lost draw.
 - **`substituted` means the pad's category existed and the pad still did not get it.**
   `satisfiesRole` keeps the generic-hat-on-closed-pad and crash-on-percussion-pad
   equivalences out of the count. `unavailableRoles` reports a role the library cannot
@@ -490,6 +509,11 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   that is where those samples are drawn from. Separate Hat and Crash rows would read as
   unused while their samples sit on closed-hat and percussion pads. The card also has no
   row for a category that is not a role.
+
+  **`PERC + CRASH` and `OTHER` stay separate rows even though they share a draw.** They
+  are separate *roles*: each has its own column and its own letter in the grid id, so a
+  merged row would misreport what the grid holds. Pooling and drawing are different
+  things here — see `DRAW_GROUPS`.
 - **Pad warning messages are rendered in a Toast component (`src/components/Toast.tsx`).** `substituted`, `empty` and `unavailableRoles` are shown in a floating toast at the top centre, dismissing itself after 5 seconds or on the close button.
   - **`Toast` is presentational; `App` owns the timing** (`WARNING_TOAST_MS`). The component ran a second 5s timer of its own, which was two sources of truth for one behaviour *and* never fired reliably: `onClose` was a new closure on every App render and sat in that effect's dependency list, so a preview re-rendering App kept resetting it. `onClose` is now a `useCallback`.
   - **The entrance animation is local CSS (`.toast-enter` in `index.css`), not `animate-in slide-in-from-top-2`.** Those are `tailwindcss-animate` utilities; this project runs bare Tailwind 4 with no plugins, so they compiled to nothing and the toast just appeared. It honours `prefers-reduced-motion`.

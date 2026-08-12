@@ -945,6 +945,64 @@ await test('a percussion-only pack gets a percussion grid', () => {
   assert.deepEqual(unavailableRoles, []);
 });
 
+await test('perc and other draw from one another without being merged', () => {
+  // Separate roles, one draw. The pooling that Hat and Crash get would collapse Other
+  // into Perc and cost it its column; these two keep theirs.
+  const library: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`conga${i}.wav`, 'Perc')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
+  ];
+
+  const { layout } = generateRandomKit(library);
+  // Still four distinct columns, and both letters still in the id: not grouped.
+  assert.equal(layout.id, 'kspx');
+  assert.ok(layout.roles.includes('Perc') && layout.roles.includes('Other'));
+
+  const percPads = layout.roles.flatMap((r, i) => (r === 'Perc' ? [i] : []));
+  const otherPads = layout.roles.flatMap((r, i) => (r === 'Other' ? [i] : []));
+  assert.ok(percPads.length > 0 && otherPads.length > 0);
+
+  // A preference chain would drain one pool before touching the next, so a percussion
+  // pad would only ever see Other once the percussion ran out. Both must show up on
+  // both kinds of pad across repeated draws.
+  const seen = { perc: new Set<string>(), other: new Set<string>() };
+  for (let run = 0; run < 200; run++) {
+    const { kit, substituted } = generateRandomKit(library);
+    percPads.forEach(i => kit[i] && seen.perc.add(kit[i]!.category));
+    otherPads.forEach(i => kit[i] && seen.other.add(kit[i]!.category));
+    // Neither is a lost draw, so neither may be reported as a substitution.
+    assert.deepEqual(substituted, [], 'drawing across the group is not a substitution');
+  }
+
+  assert.deepEqual([...seen.perc].sort(), ['Other', 'Perc'], 'perc pads see both');
+  assert.deepEqual([...seen.other].sort(), ['Other', 'Perc'], 'other pads see both');
+});
+
+await test('a crash reaches an other pad, and choking is still its own', () => {
+  // Crash pools into Perc, and Perc draws with Other, so a crash can legitimately sit on
+  // an Other pad. It must still choke as a crash — pooling is about which pad a sample
+  // can reach, choking reads the real category.
+  const library: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash')),
+    ...Array.from({ length: 2 }, (_, i) => makeSample(`thing${i}.wav`, 'Other'))
+  ];
+
+  let sawCrashOnOtherPad = false;
+  for (let run = 0; run < 200 && !sawCrashOnOtherPad; run++) {
+    const { kit, layout, substituted } = generateRandomKit(library);
+    layout.roles.forEach((role, i) => {
+      if (role === 'Other' && kit[i]?.category === 'Crash') sawCrashOnOtherPad = true;
+    });
+    assert.deepEqual(substituted, []);
+  }
+  assert.ok(sawCrashOnOtherPad, 'a crash should be able to reach an other pad');
+  assert.equal(chokeGroupFor(makeSample('crash.wav', 'Crash')), CHOKE_CRASHES);
+});
+
 await test('excluded hats do not influence the grid', () => {
   const excluded: Sample[] = [
     { ...makeSample('open hat.wav', 'OHH'), isExcluded: true },

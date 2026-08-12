@@ -1,5 +1,5 @@
 import {
-  chooseLayout, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
+  chooseLayout, drawGroupFor, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
 } from '../padLayout';
 import { Category, Sample } from '../types';
 
@@ -95,6 +95,30 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set
 }
 
 /**
+ * Picks one of a category's draw-group pools, with probability proportional to how much
+ * each still holds. The pools are pre-shuffled, so weighting the choice by size and then
+ * taking off the end is the same as drawing uniformly from the pools concatenated — which
+ * is the point: `Perc` and `Other` are equal citizens at the draw, and a pad is as likely
+ * to get either as their remaining counts warrant.
+ *
+ * Returns the pool rather than the sample so the caller decides whether to pop it (a full
+ * generate, where pools deplete) or read it (a single-pad reroll, which rebuilds them).
+ */
+function pickGroupPool(pools: Record<Category, Sample[]>, category: Category): Sample[] | null {
+  const candidates = drawGroupFor(category).map(c => pools[c]).filter(pool => pool.length > 0);
+  const total = candidates.reduce((sum, pool) => sum + pool.length, 0);
+  if (total === 0) return null;
+
+  let n = Math.floor(Math.random() * total);
+  for (const pool of candidates) {
+    if (n < pool.length) return pool;
+    n -= pool.length;
+  }
+  // Unreachable while total is the sum of the lengths, but a wrong pad is worse than a throw.
+  return candidates[candidates.length - 1];
+}
+
+/**
  * The roles the library can fill, in pool terms — a generic hat counts as closed-hat
  * availability and a crash as percussion, matching where `poolCategoryFor` puts them.
  */
@@ -142,9 +166,8 @@ export function generateRandomKit(
     const preferences = layout.preferences[index];
 
     for (const cat of preferences) {
-      if (pools[cat].length > 0) {
-        return { sample: pools[cat].pop()! };
-      }
+      const pool = pickGroupPool(pools, cat);
+      if (pool) return { sample: pool.pop()! };
     }
 
     // Nothing in the preference list — fall back to whichever pool is deepest.
@@ -220,8 +243,9 @@ export function rerollSinglePad(
   let chosenSample: Sample | null = null;
 
   for (const cat of preferences) {
-    if (pools[cat].length > 0) {
-      chosenSample = pools[cat][0];
+    const pool = pickGroupPool(pools, cat);
+    if (pool) {
+      chosenSample = pool[0];
       break;
     }
   }

@@ -85,10 +85,36 @@ export const NO_SAMPLES_GRID_ID = 'none';
  * Choking is unaffected: `chokeGroupFor` reads the sample's real category, so crashes
  * still choke each other in their own group rather than joining the percussion pads.
  */
+function pooledCategory(category: Category): Category {
+  if (category === 'Hat') return 'CHH';
+  if (category === 'Crash') return 'Perc';
+  return category;
+}
+
 export function poolCategoryFor(sample: Sample): Category {
-  if (sample.category === 'Hat') return 'CHH';
-  if (sample.category === 'Crash') return 'Perc';
-  return sample.category;
+  return pooledCategory(sample.category);
+}
+
+/**
+ * Categories whose pools are drawn from as one, *without* being merged.
+ *
+ * This is deliberately not the same thing as `poolCategoryFor`. That maps a category onto
+ * another category's pool, and a category that is pooled away stops existing for the
+ * grid: `Hat` and `Crash` have no column, no letter in the id and no breakdown row of
+ * their own. `Perc` and `Other` keep all three — they are separate roles and the grid
+ * still advertises them separately — but a pad asking for either draws from both.
+ *
+ * **A preference chain cannot express this**, which is the trap to avoid: `take` drains
+ * a pool completely before it reads the next entry in the chain, so listing `Other` after
+ * `Perc` would give every percussion pad a perc until the percussion ran out, and only
+ * then reach the other pool. That is the same mistake as ranking `Hat` below `CHH`, which
+ * did nothing for the same reason. Equal treatment has to happen at the draw.
+ */
+const DRAW_GROUPS: Category[][] = [['Perc', 'Other']];
+
+/** The categories a pad asking for `category` may draw from, itself included. */
+export function drawGroupFor(category: Category): Category[] {
+  return DRAW_GROUPS.find(group => group.includes(category)) ?? [category];
 }
 
 /**
@@ -140,13 +166,16 @@ export const DRUM_CELL_COLOR = 5;
 
 /**
  * Whether a sample sitting on a pad counts as filling the role the pad asked for.
- * A generic hat on a closed-hat pad, or a crash on a percussion pad, is the intended
- * pooling above rather than a substitution, and must not be reported as one.
+ *
+ * A generic hat on a closed-hat pad, or a crash on a percussion pad, is the pooling above
+ * rather than a substitution. So is an `Other` on a percussion pad, or a percussion hit on
+ * an `Other` pad: those two draw from one another by design, so neither is the pad losing
+ * a draw. Reporting them would make the warning fire on almost every kit that has both.
  */
 export function satisfiesRole(category: Category, role: Category): boolean {
   if (category === role) return true;
-  if (role === 'CHH' && category === 'Hat') return true;
-  return role === 'Perc' && category === 'Crash';
+  const pooled = pooledCategory(category);
+  return pooled === role || drawGroupFor(role).includes(pooled);
 }
 
 /** The categories the library can actually fill a pad with, highest rank first. */
