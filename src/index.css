@@ -47,3 +47,22 @@
 }
 
 
+
+/*
+ * The toast's entrance. Written here rather than reached for with `animate-in
+ * slide-in-from-top-2`: those are tailwindcss-animate utilities and this project runs
+ * bare Tailwind 4 with no plugins, so they compiled to nothing and the toast simply
+ * appeared. Do not reintroduce them without adding the plugin.
+ */
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -0.5rem); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.toast-enter {
+  animation: toast-in 300ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-enter { animation: none; }
+}
