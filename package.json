@@ -2,6 +2,7 @@
   "name": "move-kit-builder",
   "private": true,
   "version": "0.0.0",
+  "license": "0BSD",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",

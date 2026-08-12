@@ -59,6 +59,7 @@ npm run build        # Production build
 index.html
 package.json
 README.md
+LICENSE
 AGENTS.md               # Conventions and hard-won rules — read before editing
 tsconfig.json
 vite.config.ts
@@ -101,4 +102,5 @@ Developed with the assistance of **Google Gemini** and **Anthropic Claude** AI m
 
 ## License
 
-MIT License.
+[BSD Zero Clause License](LICENSE) (`0BSD`) — do whatever you like with this. No
+attribution required, no notice to preserve, no conditions of any kind.

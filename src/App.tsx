@@ -1083,17 +1083,31 @@ export default function App() {
                   >
                     klingklangmatze
                   </a>{' '}
-                  for providing great insights on how to create ablpreset files. Also check out {' '}
-                  <a
-                    href='https://www.kit-maker.com/'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='text-accent-yellow hover:underline font-medium'
-                  >
-                    Kit-Maker
-                  </a>{' '}
-                  for a much more capable tool for kit creation.
+                  for providing great insights on how to create ablpreset files.
                 </p>
+                <p className='text-text-light'>Other tools for kit creation:</p>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li>
+                    <a
+                      href='https://www.kit-maker.com/'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      Kit-Maker
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href='https://movestudio.reocities.xyz/'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      Move Studio
+                    </a>
+                  </li>
+                </ul>
               </section>
             </div>
 
