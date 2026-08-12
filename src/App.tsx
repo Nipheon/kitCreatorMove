@@ -7,7 +7,9 @@ import {
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
 import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
-import { categorizeSample, getFilesFromDataTransfer, looksLikeLoop } from './utils/fileReader';
+import {
+  categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
+} from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import {
   DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders
@@ -56,6 +58,7 @@ export default function App() {
   const [batchSize, setBatchSize] = useState(1);
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
+  const [skipNonDrums, setSkipNonDrums] = useState(true);
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
@@ -284,7 +287,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  const kitOptions = { skipLoops };
+  const kitOptions = { skipLoops, skipNonDrums };
 
   /**
    * The grid id travels in the exported kit name so a rack can be identified on the
@@ -299,13 +302,14 @@ export default function App() {
 
   const exportName = kitNameFor(kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
+  const nonDrumCount = useMemo(() => samples.filter(s => s.isNonDrum && !s.isLoop).length, [samples]);
   const activeFoldersCount = useMemo(
     () => sourceFolders.filter(f => f.isEnabled !== false).length,
     [sourceFolders]
   );
   const usableCount = useMemo(
-    () => samples.filter(s => isUsableSample(s, { skipLoops })).length,
-    [samples, skipLoops]
+    () => samples.filter(s => isUsableSample(s, kitOptions)).length,
+    [samples, skipLoops, skipNonDrums]
   );
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
@@ -325,12 +329,12 @@ export default function App() {
       // while their samples sit on CHH and Perc pads.
       const row = poolCategoryFor(s);
       stats[row].total += 1;
-      if (isUsableSample(s, { skipLoops })) {
+      if (isUsableSample(s, kitOptions)) {
         stats[row].usable += 1;
       }
     });
     return stats;
-  }, [samples, skipLoops]);
+  }, [samples, skipLoops, skipNonDrums]);
 
   const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
   const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
@@ -386,12 +390,15 @@ export default function App() {
         for (const { file, path } of folder.files) {
           const url = URL.createObjectURL(file);
 
+          const category = categorizeSample(file.name, path);
+
           samples.push({
             id: newId('sample'),
             file,
             name: file.name,
-            category: categorizeSample(file.name, path),
+            category,
             isLoop: looksLikeLoop(file.name, path),
+            isNonDrum: looksNonDrum(category, file.name, path),
             url
           });
         }
@@ -575,7 +582,16 @@ export default function App() {
   const toggleSkipLoops = (next: boolean) => {
     setSkipLoops(next);
     if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), { skipLoops: next }));
+      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipLoops: next }));
+    }
+  };
+
+  const toggleSkipNonDrums = (next: boolean) => {
+    setSkipNonDrums(next);
+    if (samples.length > 0) {
+      setKitResult(
+        generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipNonDrums: next })
+      );
     }
   };
 
@@ -901,7 +917,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className='space-y-2'>
+            <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
@@ -911,13 +927,21 @@ export default function App() {
                 />
                 Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
-                Leaves out files whose name or folder marks them as a loop — "loop",
-                a bar count, or a tempo like 128bpm.
-              </p>
             </div>
 
-            <div className='space-y-2'>
+            <div>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={skipNonDrums}
+                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
+              </label>
+            </div>
+
+            <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
                   type='checkbox'
@@ -927,10 +951,6 @@ export default function App() {
                 />
                 Trim silence (start & end)
               </label>
-              <p className='text-sm leading-snug text-text-muted-dark'>
-                Re-encodes trimmed samples at their original sample rate and bit depth.
-                Turn off to copy every sample byte-for-byte.
-              </p>
             </div>
 
             <div className='pt-6 border-t border-border-dark space-y-1.5'>
@@ -1037,14 +1057,22 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-white'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
-                  <li><strong className='text-white'>Silence Trimming:</strong> Trims leading and trailing silence (&lt; -60 dBFS) while keeping exact bit depth and sample rate.</li>
                   <li><strong className='text-white'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
                   <li><strong className='text-white'>Device Transfer:</strong> Copy exported <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-white'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm.</li>
+                  <li><strong className='text-white'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
+                  <li><strong className='text-white'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
+                </ul>
+              </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a
@@ -1055,17 +1083,31 @@ export default function App() {
                   >
                     klingklangmatze
                   </a>{' '}
-                  for providing great insights on how to create ablpreset files. Also check out {' '}
-                  <a
-                    href='https://www.kit-maker.com/'
-                    target='_blank'
-                    rel='noopener noreferrer'
-                    className='text-accent-yellow hover:underline font-medium'
-                  >
-                    Kit-Maker
-                  </a>{' '}
-                  for a much more capable tool for kit creation.
+                  for providing great insights on how to create ablpreset files.
                 </p>
+                <p className='text-text-light'>Other tools for kit creation:</p>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li>
+                    <a
+                      href='https://www.kit-maker.com/'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      Kit-Maker
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href='https://movestudio.reocities.xyz/'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      Move Studio
+                    </a>
+                  </li>
+                </ul>
               </section>
             </div>
 

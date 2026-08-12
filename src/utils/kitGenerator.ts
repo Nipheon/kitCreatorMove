@@ -44,10 +44,21 @@ function shuffle<T>(items: T[]): void {
 export interface KitOptions {
   /** Leave loops out of the pools. On by default — a bar of music is not a drum hit. */
   skipLoops?: boolean;
+  /**
+   * Leave unclassifiable effects, vocals and melodic material out of the pools. On by
+   * default: `Other` competes for a column of its own, so without this a trap pack puts
+   * its vocal chants and riser effects on pads.
+   */
+  skipNonDrums?: boolean;
 }
 
-export function isUsableSample(sample: Sample, { skipLoops = true }: KitOptions = {}): boolean {
-  return !(skipLoops && sample.isLoop) && !sample.isExcluded;
+export function isUsableSample(
+  sample: Sample,
+  { skipLoops = true, skipNonDrums = true }: KitOptions = {}
+): boolean {
+  if (skipLoops && sample.isLoop) return false;
+  if (skipNonDrums && sample.isNonDrum) return false;
+  return !sample.isExcluded;
 }
 
 /**

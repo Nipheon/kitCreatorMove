@@ -101,8 +101,18 @@ function tokenize(name: string): string[] {
     .filter(Boolean);
 }
 
-const KICK = ['kick', 'kicks', 'kik', 'bd', 'kd', 'bassdrum'];
-const SNARE = ['snare', 'snares', 'snr', 'sn', 'sd', 'rim', 'rimshot', 'rs', 'sidestick'];
+/**
+ * Plurals of the two- and three-letter abbreviations are listed explicitly. The glue
+ * rule only applies from four characters up, so `bds` and `rims` matched nothing and
+ * fell through to `Other` — 162 files across a 70k-file survey.
+ */
+const KICK = [
+  'kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum', 'bassdrums'
+];
+const SNARE = [
+  'snare', 'snares', 'snr', 'snrs', 'sn', 'sns', 'sd', 'sds',
+  'rim', 'rims', 'rimshot', 'rs', 'sidestick'
+];
 const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
 /**
  * Crashes get their own choke group, so they are their own category. Rides and bare
@@ -117,6 +127,8 @@ const PERC = [
   'clave', 'claves', 'cabasa', 'guiro', 'triangle', 'timbale', 'timbales',
   'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'maraca', 'maracas',
   'tabla', 'udu', 'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cy',
+  // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
+  'timp', 'timpani',
   // TR-808 style: high/mid/low toms, cowbell, claves, maracas.
   'ht', 'mt', 'lt', 'cb', 'cl', 'clv', 'cr',
   // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
@@ -124,9 +136,9 @@ const PERC = [
   'hc', 'mc', 'lc'
 ];
 
-const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh'];
-const CLOSED = ['chh', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
-const OPEN = ['ohh', 'oh', 'open', 'opn', 'o'];
+const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
+const CLOSED = ['chh', 'chhs', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
+const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
 
 /**
  * "CHat"/"OHat" written without a separator. Matched as whole tokens only — they are
@@ -137,7 +149,9 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
-  [/\bbass drum\b/, 'Kick'],
+  // Plural included: a folder called "Bass Drums" used to match nothing here, fall
+  // through to Other, and then be discarded by the non-drum filter for saying "bass".
+  [/\bbass drums?\b/, 'Kick'],
   [/\bside stick\b/, 'Snare'],
   [/\bcross stick\b/, 'Snare'],
   [/\bhand clap\b/, 'Clap'],
@@ -184,11 +198,20 @@ function classify(text: string): Category | null {
     return 'Hat';
   }
   // Bare "CH01" / "OH03" with no hat word — in drum packs these are always hats.
-  if (tokens.includes('chh') || tokens.includes('ch')) return 'CHH';
-  if (tokens.includes('ohh') || tokens.includes('oh')) return 'OHH';
+  if (tokens.includes('chh') || tokens.includes('chhs') || tokens.includes('ch')) return 'CHH';
+  if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return 'OHH';
 
   if (has(CRASH)) return 'Crash';
   if (has(PERC)) return 'Perc';
+
+  /**
+   * An 808 with nothing else to go on is the kick voice — that is what the name means in
+   * every trap pack. Checked last so "808 clap" and "808 snare" keep their own category,
+   * and only on a bare token, so it cannot fire on a stray year or catalogue number that
+   * happens to sit next to a real word.
+   */
+  if (tokens.includes('808')) return 'Kick';
+
   return null;
 }
 
@@ -244,6 +267,64 @@ function textLooksLikeLoop(text: string): boolean {
   });
 }
 
+/**
+ * Content a drum kit has no use for: effects, vocal snippets, scratches, risers, and
+ * melodic material. In a 70k-file survey these were 4,472 files — nearly half of
+ * everything the categoriser could not place.
+ *
+ * Only ever consulted for samples that came back as `Other`. A kick called
+ * "Bass Kick.wav" matches `bass` here, and filtering on that alone would throw away a
+ * perfectly good kick; if the categoriser placed it, it stays.
+ */
+const NON_DRUM_WORDS = [
+  'fx', 'sfx', 'efx', 'vox', 'vocal', 'vocals', 'chant', 'chants', 'phrase', 'phrases',
+  'scratch', 'scratches', 'riser', 'risers', 'rise', 'swell', 'swells', 'downlifter',
+  'uplifter', 'chop', 'chops', 'guitar', 'guitars', 'bass', 'sub', 'lead', 'leads',
+  'synth', 'synths', 'pad', 'pads', 'string', 'strings', 'horn', 'horns', 'brass',
+  'piano', 'keys', 'melody', 'melodic', 'stab', 'stabs', 'atmos', 'ambient', 'drone',
+  'zap', 'zaps', 'chirp', 'chirps', 'noise', 'texture', 'foley', 'speech', 'talk',
+  // Melodic instruments seen filling the "Extras" folder of trap kits.
+  'choir', 'whistle', 'sitar', 'flute', 'organ', 'violin', 'cello', 'harp',
+  'trumpet', 'sax', 'saxophone', 'accordion'
+];
+
+/**
+ * Folder names that mean "not the drums" even when the files inside are named
+ * anonymously — `Fill 1.wav`, `AKWF_0001.wav`, `G Suspended 2.wav`. Matched against the
+ * folders only, never the filename: a sample called `Extras.wav` is not evidence.
+ *
+ * In a 120k-file survey these covered 11,597 of the 16,504 files that survived every
+ * other rule — single-cycle waveform banks, synth soundbanks, and the melodic odds and
+ * ends that trap kits ship beside their drums.
+ *
+ * 2,385 files under those same folders *were* classified as drums, and all of them are
+ * kept: like every rule here this is consulted only for `Other`.
+ */
+const NON_DRUM_FOLDERS = [
+  'extras', 'imported', 'misc', 'patches', 'waveforms', 'soundbanks', 'tags', 'akwf',
+  'presets', 'instruments', 'melodies', 'melodic'
+];
+
+/**
+ * Whether a sample the categoriser could not place looks like something other than a
+ * drum. Takes the category so the answer can never contradict a successful match.
+ */
+export function looksNonDrum(category: Category, name: string, directory = ''): boolean {
+  if (category !== 'Other') return false;
+
+  const hasWord = (text: string, list: string[]) =>
+    tokenize(text).some(t => list.includes(t));
+
+  if (hasWord(name, NON_DRUM_WORDS)) return true;
+
+  return folderCandidates(directory).some(folder => {
+    // A folder that names a drum category outranks any marker word inside it. Without
+    // this, "Bass Drums" reads as bass rather than as the kicks it holds.
+    if (classify(folder) !== null) return false;
+    return hasWord(folder, NON_DRUM_WORDS) || hasWord(folder, NON_DRUM_FOLDERS);
+  });
+}
+
 export function looksLikeLoop(name: string, directory = ''): boolean {
   if (textLooksLikeLoop(name)) return true;
   return folderCandidates(directory).some(textLooksLikeLoop);
@@ -255,6 +336,24 @@ export function looksLikeLoop(name: string, directory = ''): boolean {
  */
 export function categorizeSample(name: string, directory = ''): Category {
   const fromName = classify(name);
+
+  /**
+   * The one case where a folder may overrule the filename, and only to sharpen it: a
+   * name that says nothing but "hat" is missing the qualifier, and "Open Hats/" has it.
+   * Without this, an open-hat folder full of `hihat_01.wav` leaves the open column
+   * starving while every one of those files pools as a closed hat.
+   *
+   * Deliberately narrow. It fires only when the name is an unqualified `Hat` and the
+   * folder is explicitly open or closed, so an explicit filename still wins over a
+   * folder that disagrees — `closed hat.wav` in `Open Hats/` stays CHH.
+   */
+  if (fromName === 'Hat') {
+    for (const folder of folderCandidates(directory)) {
+      const fromFolder = classify(folder);
+      if (fromFolder === 'CHH' || fromFolder === 'OHH') return fromFolder;
+    }
+  }
+
   if (fromName) return fromName;
 
   for (const folder of folderCandidates(directory)) {

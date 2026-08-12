@@ -16,6 +16,7 @@ Everything lives at the repository root, next to `package.json`:
 index.html
 package.json
 README.md
+LICENSE
 tsconfig.json
 vite.config.ts
 src/
@@ -176,10 +177,55 @@ real packs.
   one-shot.
 - **A tempo must say `bpm`.** A bare bracketed number is not evidence — `[120]` is as
   likely an index or a catalogue number, and `beat [128].wav` is not a loop.
+- **Plurals of the two- and three-letter abbreviations are listed explicitly** (`bds`,
+  `kds`, `sds`, `sns`, `snrs`, `rims`, `kiks`, `hhs`, `chhs`, `ohhs`). The glue rule only
+  applies from four characters up, so these matched nothing and fell through to `Other` —
+  162 files in a 70k-file survey, `rims` alone accounting for 126. `chhs`/`ohhs` also
+  need listing in the bare-token fallback at the end of `classify`, which is reached
+  before the hat family test for names like `CHHS 1.wav`.
+- **`timp` covers timpani.** Four characters, so the glue rule reaches `timpani` and
+  `timpanies` without listing them.
+- **A bare `808` token classifies as Kick**, checked last so anything that says what it
+  is — `808 clap`, `808 snare`, `808 open hat` — keeps its own category. Whole token
+  only, so a catalogue number glued into a word cannot fire it.
+
+  **This is load-bearing for the preset's Sub Osc effect.** That rule used to require
+  `category === 'Other'`, which worked only because the categoriser deliberately left
+  808s unclassified. It now reads the sample name instead (`ablPresetTemplate.ts`), so
+  808s keep their sub oscillator while living on kick pads. Do not put the category check
+  back.
+- **`looksNonDrum` is only ever consulted for samples that came back as `Other`.** That
+  guard is the whole design: `bass`, `sub`, `vocal` and friends appear in perfectly good
+  drum names, and filtering on the words alone would throw away a kick called
+  "Bass Kick.wav". If the categoriser placed it, it stays. In a 70k-file survey this
+  flagged 4,601 files — effects, vocal chants, scratches, risers, guitar and melodic
+  material, roughly half of everything that could not be placed.
+
+  It matters more than it used to: `Other` competes for a column of its own, so without
+  the filter a trap pack puts its vocal chants and riser effects on pads.
+
+  **`NON_DRUM_FOLDERS` is matched against folders only, never the filename** — `Extras`,
+  `Imported`, `Misc`, `Patches`, `Waveforms`, `Soundbanks`, `Tags`, `AKWF`. Files in
+  those folders are named anonymously (`Fill 1.wav`, `AKWF_0001.wav`, `G Suspended
+  2.wav`), so the folder is the only evidence there is. In a 120k-file survey this caught
+  11,597 of the 16,504 files that survived every other rule, while 2,385 classified drums
+  under those same folders were kept by the `Other`-only guard.
+- **A folder that names a drum category outranks any marker word in it.** `Bass Drums`
+  used to match no phrase — the phrase was singular — fall through to `Other`, and then
+  be discarded for containing "bass". The phrase is now `/\bbass drums?\b/`, `bassdrums`
+  is in `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
+- **An explicitly open or closed hat folder sharpens an unqualified hat name.** The one
+  case where a folder may overrule the filename, and only to add the qualifier the name
+  left out: `hihat_01.wav` inside `Open Hats/` is an OHH. Without it, such a folder leaves
+  the open column starving while every file in it pools as a closed hat. Deliberately
+  narrow — it fires only when the name resolves to a bare `Hat` and the folder resolves
+  to `CHH` or `OHH`, so `closed hat.wav` in `Open Hats/` is still CHH and a kick in a hat
+  folder is still a kick.
 - **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
   makes a generic-hat library look like it has real split hats.
-- **`isUsableSample` filters out both loops (when `skipLoops` is enabled) and excluded samples (`sample.isExcluded`).**
-  This ensures the "Usable Samples" card count updates immediately when a user excludes a sample via the UI button.
+- **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`) and excluded
+  samples (`sample.isExcluded`).** Both toggles default to on. This is also what keeps the
+  "Usable Samples" card count in step when a sample is excluded from the UI.
 
 ## Pads, layout and choking
 
@@ -311,7 +357,8 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 
 - **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements.
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
-- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Includes section 5 "Thank You" with links to drum-kit-generator and Kit-Maker.
+- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Thank You" credits drum-kit-generator and lists the other kit-creation tools, Kit-Maker and Move Studio.
+- **The export toggles carry no explainer text in the settings panel.** Skip Loops, Skip Non-Drums and Trim Silence are a label and a checkbox each; what they do is documented in help section 5. The panel is a column of controls, not documentation — keep new options to one line there and put the explanation in the modal. The silence-trimming bullet was moved out of section 4 at the same time so the three filters read together in one place.
 - **Font Sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text, where there is room for it. The pad tile is the documented exception and its sizes are deliberate, not drift: Lock and Shuffle use `text-pad-action` (12px), the hotkey badge `text-xs`, and the choke badge `text-[10px] sm:text-xs`. Those three sit in a fixed-size tile alongside the sample name, and at `text-sm` they pushed the name out of the row. Do not "restore" them to 14px.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 

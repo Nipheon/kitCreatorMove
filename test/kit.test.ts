@@ -27,7 +27,9 @@ import { CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, PAD_COUNT } 
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { createPresetBundle } from '../src/utils/exporter';
-import { categorizeSample, isAudioFile, looksLikeLoop } from '../src/utils/fileReader';
+import {
+  categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
+} from '../src/utils/fileReader';
 import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
@@ -268,9 +270,12 @@ await test('multi-word names are read as phrases', () => {
   assert.equal(categorizeSample('Hi Hat 2.wav'), 'Hat');
 });
 
-await test('808s stay Other so the Sub Osc rule can still find them', () => {
-  assert.equal(categorizeSample('808 Bass.wav'), 'Other');
-  assert.equal(categorizeSample('808bass.wav'), 'Other');
+await test('an 808 is a kick and still gets the Sub Osc effect', () => {
+  // This used to assert 808s stayed Other, purely so the preset's Sub Osc rule — which
+  // required category 'Other' — could find them. The rule now reads the sample name, so
+  // the categoriser is free to say what an 808 actually is: the kick voice.
+  assert.equal(categorizeSample('808 Bass.wav'), 'Kick');
+  assert.equal(categorizeSample('808bass.wav'), 'Kick');
 });
 
 // The cases below are real paths taken from tidalcycles/Dirt-Samples, the Sonic Pi
@@ -450,6 +455,104 @@ await test('isUsableSample filters out loops and excluded samples', () => {
   assert.equal(isUsableSample(excludedLoop, { skipLoops: false }), false);
 });
 
+await test('plural abbreviations resolve like their singulars', () => {
+  // Under the four-character glue threshold, so only the exact token matched and the
+  // plural fell through to Other: 162 files in a 70k-file survey.
+  assert.equal(categorizeSample('RIMS 01.wav'), 'Snare');
+  assert.equal(categorizeSample('kit.wav', '/Pack/03-RIMS'), 'Snare');
+  assert.equal(categorizeSample('kit.wav', '/Pack/Distorted BDs'), 'Kick');
+  assert.equal(categorizeSample('BDS_04.wav'), 'Kick');
+  assert.equal(categorizeSample('SDS 2.wav'), 'Snare');
+  assert.equal(categorizeSample('HHS 9.wav'), 'Hat');
+  assert.equal(categorizeSample('CHHS 1.wav'), 'CHH');
+});
+
+await test('timpani is percussion', () => {
+  assert.equal(categorizeSample('High_Timp_A.wav'), 'Perc');
+  assert.equal(categorizeSample('timpani.wav'), 'Perc');
+  assert.equal(categorizeSample('roll.wav', '/Pack/Pitched Timpanies'), 'Perc');
+});
+
+await test('a bare 808 is a kick, but never beats a real category', () => {
+  assert.equal(categorizeSample('808.wav'), 'Kick');
+  assert.equal(categorizeSample('808 Bass.wav'), 'Kick');
+  assert.equal(categorizeSample('JJ-AY-808.wav'), 'Kick');
+  assert.equal(categorizeSample('01.wav', '/Pack/Trap 808s'), 'Kick');
+  // Anything that says what it is keeps its own category.
+  assert.equal(categorizeSample('808 clap.wav'), 'Clap');
+  assert.equal(categorizeSample('808 snare.wav'), 'Snare');
+  assert.equal(categorizeSample('808 open hat.wav'), 'OHH');
+  // A number that is not a lone token must not fire it.
+  assert.equal(categorizeSample('vox1808x.wav'), 'Other');
+});
+
+await test('a folder naming a drum category outranks a marker word inside it', () => {
+  // "Bass Drums" used to match no phrase (the phrase was singular), fall through to
+  // Other, and then be discarded by the non-drum filter for containing "bass".
+  assert.equal(categorizeSample('SHD_StockBD_01.wav', '/Pack/Bass Drums'), 'Kick');
+  assert.equal(categorizeSample('01.wav', '/Pack/Bass Drum'), 'Kick');
+  assert.equal(looksNonDrum('Kick', 'SHD_StockBD_01.wav', '/Pack/Bass Drums'), false);
+  // An unclassifiable file in a folder that says nothing drum-like is still discarded.
+  assert.equal(looksNonDrum('Other', 'SHD_BassDrop_1.wav', '/Pack/Bass Drops'), true);
+});
+
+await test('folder markers catch anonymously named junk', () => {
+  // Files named Fill 1.wav or AKWF_0001.wav carry no marker of their own; the folder
+  // they sit in is the only evidence. 11,597 of 16,504 remaining Other files in a
+  // 120k-file survey.
+  assert.equal(looksNonDrum('Other', 'Fill 1.wav', '/Pack/Drumkit/Extras'), true);
+  assert.equal(looksNonDrum('Other', 'AKWF_0001.wav', '/Pack/AKWF/Imported'), true);
+  assert.equal(looksNonDrum('Other', '0032.wav', '/Pack/Zampler Soundbanks/Analogon'), true);
+  assert.equal(looksNonDrum('Other', 'ms20c 100.wav', '/Pack/MS20 Misc'), true);
+  // The name is never checked against the folder list — "Extras.wav" is not evidence.
+  assert.equal(looksNonDrum('Other', 'Extras.wav', '/Pack/Drumkit'), false);
+  // And a classified drum in one of those folders is kept: 2,385 files in the survey.
+  assert.equal(looksNonDrum('Kick', 'kick 2.wav', '/Pack/Drumkit/Extras'), false);
+});
+
+await test('non-drum detection never overrides a real category', () => {
+  // The guard that matters: plenty of good drums have "bass" or "sub" in the name.
+  assert.equal(looksNonDrum('Kick', 'Bass Kick.wav'), false);
+  assert.equal(looksNonDrum('Kick', 'Sub Kick 03.wav'), false);
+  assert.equal(looksNonDrum('Snare', 'vocal snare.wav'), false);
+  assert.equal(looksNonDrum('Perc', 'guitar perc hit.wav'), false);
+
+  // Unclassifiable and clearly not a drum.
+  assert.equal(looksNonDrum('Other', 'JJ - SayWhat.wav', '/Pack/Trap Chants'), true);
+  assert.equal(looksNonDrum('Other', 'SPICY DRUM FX (1).wav', '/Pack/fx'), true);
+  assert.equal(looksNonDrum('Other', 'DJ scratch 2.wav'), true);
+  assert.equal(looksNonDrum('Other', 'Custom Candyland Rise FX.wav'), true);
+  assert.equal(looksNonDrum('Other', 'Guitar Elementz 3.wav'), true);
+
+  // Unclassifiable but with nothing marking it as non-drum: kept.
+  assert.equal(looksNonDrum('Other', 'Sound (139).wav'), false);
+  assert.equal(looksNonDrum('Other', 'A08_a08_C_Reg.wav'), false);
+});
+
+await test('skipNonDrums keeps non-drums out of the pools, and can be turned off', () => {
+  const library: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => ({
+      ...makeSample(`vox chant ${i}.wav`, 'Other' as const),
+      isNonDrum: true
+    }))
+  ];
+
+  const skipped = generateRandomKit(library);
+  assert.ok(!skipped.layout.roles.includes('Other'), 'chants must not earn a column');
+  assert.ok(
+    skipped.kit.every(s => !s?.isNonDrum),
+    'a chant reached a pad with skipNonDrums on'
+  );
+
+  const included = generateRandomKit(library, [], { skipNonDrums: false });
+  assert.ok(included.layout.roles.includes('Other'), 'opting in should earn the column');
+
+  assert.equal(isUsableSample({ ...library[6] }), false);
+  assert.equal(isUsableSample({ ...library[6] }, { skipNonDrums: false }), true);
+});
+
 await test('a pack name does not decide what its samples are', () => {
   // The outermost folder is the pack's marketing name. Reading it made every file in
   // "70s Breakbeat" a loop, and a perc hit in "Kick Ass Drums" a kick.
@@ -545,6 +648,27 @@ await test('the containing folder classifies a nameless sample', () => {
     assert.equal(categorizeSample('01.wav', dir), expected, dir);
   }
   assert.equal(categorizeSample('01.wav'), 'Other', 'no folder, no clue');
+});
+
+await test('an open or closed hat folder sharpens a generic hat name', () => {
+  // The only case a folder may overrule the filename, and only to add the qualifier the
+  // name left out — otherwise an "Open Hats" folder of hihat_NN.wav files leaves the
+  // open column starving while all of them pool as closed hats.
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('HH02.wav', '/Pack/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('hats 3.wav', '/Pack/Closed Hats'), 'CHH');
+  assert.equal(categorizeSample('hihat.wav', '/Pack/OHH'), 'OHH');
+
+  // An unqualified folder has nothing to add.
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Hi Hats'), 'Hat');
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Drums'), 'Hat');
+
+  // A name that states its own qualifier still wins over a folder that disagrees.
+  assert.equal(categorizeSample('closed hat.wav', '/Pack/Open Hats'), 'CHH');
+  assert.equal(categorizeSample('Hat_Open.wav', '/Pack/Closed Hats'), 'OHH');
+
+  // And this must not reach past hats: a kick in an open-hat folder is still a kick.
+  assert.equal(categorizeSample('kick 2.wav', '/Pack/Open Hats'), 'Kick');
 });
 
 await test('the filename beats the folder when both say something', () => {
