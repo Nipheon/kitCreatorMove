@@ -39,9 +39,11 @@
         ]
       }
     </script>
-    <!-- The drum emoji drawn as SVG text: same glyph as the header, and no icon file to
-         keep in step with it. Percent-encoded so the data URI survives any parser. -->
-    <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%A5%81%3C%2Ftext%3E%3C%2Fsvg%3E" />
+    <!-- The same drum used in the header. 32px for the tab, 512px for anything that
+         wants a big one, 180px for an iOS home screen. The source lives in public/. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon.png" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
   </head>
   <body>
     <div id="root">

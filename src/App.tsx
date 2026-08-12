@@ -750,13 +750,16 @@ export default function App() {
 
       <header className='header-gradient flex items-center justify-between px-8 py-4 border-b border-border-dark shrink-0'>
         <div className='flex items-center gap-3'>
-          {/* Emoji rather than an SVG so the header and the favicon are the same glyph,
-              with no asset to keep in sync. It renders in the platform's own emoji font,
-              so it is decoration, not information — hidden from screen readers, which
-              already get the heading beside it. */}
-          <span className='w-8 h-8 flex items-center justify-center text-2xl leading-none' aria-hidden='true'>
-            🥁
-          </span>
+          {/* Decoration beside a heading that already names the app, so it carries an
+              empty alt rather than a description. Same file as the favicon — width and
+              height are set to stop the header shifting while it loads. */}
+          <img
+            src='/icon.png'
+            alt=''
+            width={32}
+            height={32}
+            className='w-8 h-8 shrink-0'
+          />
           <h1 className='text-lg font-bold tracking-widest uppercase'>Kit Creator for Ableton Move</h1>
         </div>
         <div className='flex items-center gap-4'>
