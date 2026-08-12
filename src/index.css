@@ -1,52 +1,205 @@
 @import "tailwindcss";
 
 @theme {
+  /*
+   * Utility aliases for the two accents that appear as chrome. The glow is deliberately
+   * not aliased — it is only ever used raw, inside a `shadow-[…]`, where a Tailwind
+   * colour token buys nothing. Pink has no alias either: it is a pad category, not
+   * chrome, and lives below as `--color-cat-snare`.
+   */
   --color-accent-yellow: var(--accent-yellow);
-  --color-accent-yellow-glow: var(--accent-yellow-glow);
+  --color-accent-teal: var(--accent-teal);
 
-  /* Surfaces & Backgrounds */
-  --color-surface-darkest: #090909;
-  --color-surface-panel: #0E0E0E;
-  --color-surface-header: #111111;
-  --color-surface-modal: #121212;
-  --color-surface-card: #151515;
-  --color-surface-modal-header: #181818;
-  --color-surface-pad: #1A1A1A;
-  --color-surface-hover: #1C1C1C;
-  --color-surface-btn-hover: #252525;
+  /*
+   * Surfaces & Backgrounds. Deep indigo rather than near-black: the app read as bland
+   * and mysterious at #090909, and a mid-dark base carries colour without giving up the
+   * glow language the pads depend on. Keep the ladder monotonic — each step up is a
+   * lighter surface, and several places stack two of them (a card inside a panel, the
+   * pad's bottom bar over the pad).
+   */
+  --color-surface-darkest: #1E1B34;
+  --color-surface-panel: #272348;
+  --color-surface-header: #221F3E;
+  --color-surface-modal: #272348;
+  --color-surface-card: #2E2955;
+  --color-surface-modal-header: #322C5E;
+  --color-surface-pad: #332C5C;
+  --color-surface-hover: #3D3670;
+  --color-surface-btn-hover: #453D7D;
+  /* The Export button's solid fill. Was `bg-white`; near-white on indigo is a hole. */
+  --color-surface-solid: #EDEBFB;
+  --color-surface-solid-hover: #FFFFFF;
 
   /* Borders */
-  --color-border-dark: #222222;
-  --color-border-bar: #2A2A2A;
-  --color-border-main: #333333;
-  --color-border-light: #444444;
+  --color-border-dark: #363061;
+  --color-border-bar: #3E3770;
+  --color-border-main: #4A4283;
+  --color-border-light: #5C5399;
 
-  /* Text colors */
-  --color-text-dim: #444444;
-  --color-text-muted-dark: #555555;
-  --color-text-subtle: #666666;
-  --color-text-medium: #777777;
-  --color-text-muted: #888888;
-  --color-text-light: #CCCCCC;
-  --color-text-lighter: #DDDDDD;
-  --color-text-bright: #E0E0E0;
+  /*
+   * Text colors. The whole ramp is violet-tinted and lifted: the old #444-#666 end was
+   * built for a near-black surface and vanishes on #272348. The dimmest tone still used
+   * for reading text is --color-text-subtle, which clears 4.5:1 on the panel.
+   */
+  --color-text-dim: #56507F;
+  --color-text-muted-dark: #7B74AE;
+  --color-text-subtle: #9A93C8;
+  --color-text-medium: #A9A2D2;
+  --color-text-muted: #BAB4DC;
+  --color-text-light: #DEDAF2;
+  --color-text-lighter: #EEECFB;
+  --color-text-bright: #FFFFFF;
+  /* Text on a filled accent button. Deep indigo, not black — black on amber is harsh. */
+  --color-text-inverse: #1A1730;
+
+  /* Scrims. Tuned to the indigo base; a black scrim over indigo reads as mud. */
+  --color-overlay-strong: rgba(16, 13, 32, 0.85);
+  --color-overlay-soft: rgba(16, 13, 32, 0.6);
 
   /* Alert & Warning colors */
-  --color-warning-amber: #B8860B;
-  --color-warning-border: #5a4404;
-  --color-warning-bg: #2a2004;
+  --color-warning-amber: #F0B429;
+  --color-warning-border: #6B5116;
+  --color-warning-bg: #3A2C10;
+
+  /* Danger. Was raw Tailwind red-400/red-900/red-950, which sits cold against indigo. */
+  --color-danger-text: #FF7A8F;
+  --color-danger-border: #7A2740;
+  --color-danger-bg: #3A1526;
+
+  /*
+   * Category colours. One hue per drum category, used to tint the pad that holds it —
+   * the grid the app derives is then readable without reading a word.
+   *
+   * Hat takes the CHH hue and Crash takes the Perc hue because those are the pools they
+   * are drawn from (`poolCategoryFor`), the same rule the sidebar breakdown rows follow.
+   * A generic hat on a closed-hat pad must not look like a different instrument from the
+   * labelled closed hat on the pad beside it.
+   */
+  --color-cat-kick: #FFC93C;
+  --color-cat-snare: var(--accent-pink);
+  --color-cat-clap: #FF8A5B;
+  --color-cat-chh: #38E8D0;
+  --color-cat-ohh: #A78BFA;
+  --color-cat-perc: #9BE564;
+  --color-cat-other: #8E97D8;
 
   /* Font sizes */
   --text-pad-action: 0.75rem; /* 12px - 2px smaller than text-sm (14px) for Lock and Shuffle buttons */
 }
 
 :root {
-  /* Central yellow accent color (half saturation) */
-  --accent-yellow: #D0C066;
-  --accent-yellow-glow: rgba(208, 192, 102, 0.35);
+  /*
+   * Three accents, each with one job. Adding a fourth use for any of them is how this
+   * turns back into noise:
+   *   amber — primary actions, live values, focus. Everything in the two panels.
+   *   teal  — the usable-samples meter and Preview Kit. The secondary action colour.
+   *   pink  — pads only, as the Snare category. Never chrome.
+   */
+  --accent-yellow: #FFC93C;
+  --accent-yellow-glow: rgba(255, 201, 60, 0.4);
+  --accent-teal: #38E8D0;
+  --accent-pink: #FF5F9E;
+
+  /*
+   * Fallback for the per-pad tint. `Pad` overrides this inline with the category's hue;
+   * the value here is what an untinted pad would use, and keeps every rule below valid
+   * on its own.
+   */
+  --pad-accent: var(--accent-yellow);
 }
 
+/*
+ * The header's gradient. A flat fill across the full width read as a bar; this leans the
+ * indigo toward plum on the right so the title end of the header is the darker one.
+ */
+.header-gradient {
+  background-image: linear-gradient(100deg, #221F3E 0%, #2B2450 55%, #342A5E 100%);
+}
 
+/*
+ * The pad's tint. `--pad-accent` is set inline per pad, so the surface, the border and
+ * the glow all derive from one value. `color-mix` rather than a stack of pre-mixed
+ * tokens: seven categories times four states is not a token table anyone will maintain.
+ */
+.pad-tinted {
+  background-color: var(--color-surface-pad);
+}
+
+.pad-dot-glow {
+  box-shadow: 0 0 10px var(--pad-accent);
+}
+
+.pad-glow {
+  box-shadow: 0 0 24px var(--pad-accent);
+}
+
+/*
+ * Everything that prints the category hue *as text*, at one mix rather than a per-element
+ * ladder — the differences between 60% and 80% were invisible and the numbers were three
+ * separate things to get wrong.
+ *
+ * The raw hue is not usable here. At 14px bold the threshold is 4.5:1 (14px bold is not
+ * WCAG large text — that starts at 18.66px), and snare pink, open-hat violet and the
+ * "other" periwinkle all land near 3.7:1 on their own tinted pad. Mixed 65% toward the
+ * text ramp they clear it while staying obviously that category's colour. Recompute if a
+ * hue changes; those three are the ones with no headroom.
+ */
+.pad-ink,
+.pad-category,
+.pad-choke-badge,
+.pad-lock-active,
+.pad-shuffle:hover {
+  color: var(--pad-accent);
+}
+
+.pad-choke-badge {
+  border-color: var(--color-border-light);
+}
+
+.pad-lock-active {
+  background-color: var(--color-surface-hover);
+}
+
+/*
+ * The tinted half of the pad. These are classes rather than Tailwind arbitrary values
+ * because `color-mix()` cannot survive the class-name grammar — its commas and spaces
+ * are not expressible in `bg-[…]`.
+ *
+ * Gated behind `@supports` by hand, and the plain rules above are the fallback. Writing
+ * the mixes inline instead lets the build synthesise its own fallback by substituting the
+ * raw variable, which turns a 14% tint into a full-strength accent fill and puts accent
+ * text on an accent background in `.pad-lock-active`. Its fallback always won, because it
+ * is emitted after anything written here. Do not move these back out of the block.
+ */
+@supports (color: color-mix(in srgb, red, red)) {
+  .pad-tinted {
+    background-image: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--pad-accent) 14%, var(--color-surface-pad)) 0%,
+      var(--color-surface-pad) 62%
+    );
+  }
+
+  .pad-glow {
+    box-shadow: 0 0 24px color-mix(in srgb, var(--pad-accent) 42%, transparent);
+  }
+
+  .pad-ink,
+  .pad-category,
+  .pad-choke-badge,
+  .pad-lock-active,
+  .pad-shuffle:hover {
+    color: color-mix(in srgb, var(--pad-accent) 65%, var(--color-text-light));
+  }
+
+  .pad-choke-badge {
+    border-color: color-mix(in srgb, var(--pad-accent) 45%, transparent);
+  }
+
+  .pad-lock-active {
+    background-color: color-mix(in srgb, var(--pad-accent) 18%, transparent);
+  }
+}
 
 /*
  * The toast's entrance. Written here rather than reached for with `animate-in

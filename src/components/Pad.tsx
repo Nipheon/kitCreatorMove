@@ -1,5 +1,6 @@
 import { Ban, Lock, RefreshCw, Unlock, Loader2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
+import { categoryAccent } from '../padLayout';
 import { Sample } from '../types';
 
 interface ChokeDetail {
@@ -212,6 +213,18 @@ export const Pad: React.FC<PadProps> = ({
 
   const hotkey = PAD_HOTKEYS[index];
 
+  /**
+   * The pad's colour, one hue per drum category. Set as a custom property on the root so
+   * the tint, the border, the glow, the number and the two bottom-bar buttons all derive
+   * from a single value — a Tailwind class assembled at runtime would compile to nothing.
+   *
+   * An empty pad still gets the colour of the role it advertises, so the grid reads as
+   * the layout the library produced even before a kit is generated.
+   */
+  const padStyle = {
+    '--pad-accent': categoryAccent(sample ? sample.category : expectedCategory)
+  } as React.CSSProperties;
+
   // A div rather than a button: the lock, reroll, and exclude controls are buttons themselves,
   // and interactive elements cannot be nested inside a button.
   return (
@@ -222,17 +235,18 @@ export const Pad: React.FC<PadProps> = ({
       aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
       onClick={sample ? handlePlay : undefined}
       onKeyDown={sample ? handleKeyDown : undefined}
+      style={padStyle}
       className={`group relative overflow-hidden w-full aspect-square bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
-            ? 'border-accent-yellow shadow-[0_0_20px_var(--accent-yellow-glow)] scale-[0.98]'
-            : 'border-border-main hover:border-accent-yellow cursor-pointer'
+            ? 'pad-tinted pad-glow border-[var(--pad-accent)] scale-[0.98]'
+            : 'pad-tinted border-border-main hover:border-[var(--pad-accent)] cursor-pointer'
           : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
       <div className='flex w-full justify-between items-center'>
         <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
-          <span className='text-sm font-bold text-accent-yellow shrink-0'>
+          <span className='pad-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
@@ -241,23 +255,23 @@ export const Pad: React.FC<PadProps> = ({
             </span>
           )}
           {chokeGroup && (
-            <span className='text-[10px] sm:text-xs font-medium uppercase tracking-wider text-accent-yellow/90 border border-accent-yellow/40 px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'>
+            <span className='pad-choke-badge text-[10px] sm:text-xs font-medium uppercase tracking-wider border px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'>
               Choke {chokeGroup}
             </span>
           )}
         </div>
-        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-accent-yellow shadow-[0_0_8px_var(--accent-yellow)] scale-110' : 'border border-border-light'}`}></div>
+        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--pad-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
       <div className='w-full mt-auto mb-8 sm:mb-9'>
-        <div className='w-full text-sm uppercase tracking-wider text-text-subtle font-medium mb-0.5'>
+        <div className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
           <div className='text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
             {isSpinning ? (
-              <span className='flex items-center gap-1 text-accent-yellow animate-pulse'>
-                <Loader2 className='w-3.5 h-3.5 animate-spin shrink-0 text-accent-yellow' />
+              <span className='pad-ink flex items-center gap-1 animate-pulse'>
+                <Loader2 className='pad-ink w-3.5 h-3.5 animate-spin shrink-0' />
                 <span className='text-text-muted text-xs uppercase font-mono tracking-wider'>Rolling</span>
               </span>
             ) : (
@@ -272,7 +286,7 @@ export const Pad: React.FC<PadProps> = ({
                   e.stopPropagation();
                   onExclude(sample.id, index);
                 }}
-                className='text-text-subtle hover:text-red-400 transition-colors p-1'
+                className='text-text-subtle hover:text-danger-text transition-colors p-1'
                 title='Exclude sample'
                 aria-label={`Exclude ${sample.name}`}
               >
@@ -298,7 +312,7 @@ export const Pad: React.FC<PadProps> = ({
             !sample
               ? 'text-border-main cursor-not-allowed'
               : isLocked
-                ? 'bg-accent-yellow/20 text-accent-yellow font-semibold cursor-pointer'
+                ? 'pad-lock-active font-semibold cursor-pointer'
                 : 'text-text-muted-dark hover:text-text-light hover:bg-surface-hover cursor-pointer'
           }`}
         >
@@ -318,7 +332,7 @@ export const Pad: React.FC<PadProps> = ({
           className={`w-1/2 border-l border-border-bar flex items-center justify-center gap-1.5 transition-colors ${
             !sample || isLocked || !onReroll
               ? 'text-border-main cursor-not-allowed'
-              : 'text-text-medium hover:text-accent-yellow hover:bg-surface-hover cursor-pointer'
+              : 'pad-shuffle text-text-medium hover:bg-surface-hover cursor-pointer'
           }`}
           title='Shuffle sample on this pad'
           aria-label={`Shuffle sample on pad ${index + 1}`}

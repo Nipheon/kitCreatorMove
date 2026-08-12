@@ -687,10 +687,10 @@ export default function App() {
         </div>
       )}
 
-      <header className='flex items-center justify-between px-8 py-4 border-b border-border-dark bg-surface-header shrink-0'>
+      <header className='header-gradient flex items-center justify-between px-8 py-4 border-b border-border-dark shrink-0'>
         <div className='flex items-center gap-3'>
           <div className='w-8 h-8 bg-accent-yellow rounded-sm flex items-center justify-center'>
-            <div className='w-4 h-4 border-2 border-black rotate-45'></div>
+            <div className='w-4 h-4 border-2 border-text-inverse rotate-45'></div>
           </div>
           <h1 className='text-lg font-bold tracking-widest uppercase'>Kit Creator for Ableton Move</h1>
         </div>
@@ -735,7 +735,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => removeFolder(folder.id)}
-                    className='text-sm font-bold text-text-muted-dark group-hover:text-red-400 ml-2'
+                    className='text-sm font-bold text-text-muted-dark group-hover:text-danger-text ml-2'
                     aria-label={`Remove ${folder.name}`}
                   >
                     ✕
@@ -758,7 +758,7 @@ export default function App() {
                   <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
                 </div>
                 <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
-                  <div className='bg-accent-yellow h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
+                  <div className='bg-accent-teal h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
                 </div>
               </div>
 
@@ -827,7 +827,7 @@ export default function App() {
           <div className='flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
             <button
               onClick={randomizeKit}
-              className='px-8 py-3 bg-accent-yellow text-black font-bold uppercase text-sm tracking-widest rounded-full hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(232,229,216,0.2)] cursor-pointer'
+              className='px-8 py-3 bg-accent-yellow text-text-inverse font-bold uppercase text-sm tracking-widest rounded-full hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_24px_var(--accent-yellow-glow)] cursor-pointer'
               disabled={usableCount === 0}
             >
               Generate Random Kit
@@ -836,7 +836,7 @@ export default function App() {
               <button
                 onClick={previewKit}
                 disabled={isEmpty}
-                className='px-6 py-3 bg-surface-pad border border-border-main hover:border-accent-yellow text-text-bright hover:text-accent-yellow font-bold uppercase text-sm tracking-widest rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2'
+                className='px-6 py-3 bg-surface-pad border border-border-main hover:border-accent-teal text-text-bright hover:text-accent-teal font-bold uppercase text-sm tracking-widest rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2'
                 title={isPreviewing ? 'Stop preview' : 'Preview each pad in sequence'}
                 aria-label={isPreviewing ? 'Stop previewing kit' : 'Preview kit'}
               >
@@ -848,7 +848,7 @@ export default function App() {
                   type='checkbox'
                   checked={autoPreview}
                   onChange={(e) => setAutoPreview(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4 cursor-pointer'
+                  className='accent-accent-teal w-4 h-4 cursor-pointer'
                 />
                 Auto Preview
               </label>
@@ -864,7 +864,7 @@ export default function App() {
                 <label className='text-sm text-text-muted uppercase'>Preset Name</label>
                 <button
                   onClick={() => setKitSuffix(generateKitName('').suffix)}
-                  className='text-sm text-accent-yellow hover:text-white transition-colors flex items-center gap-1 cursor-pointer'
+                  className='text-sm text-accent-yellow hover:brightness-125 transition-all flex items-center gap-1 cursor-pointer'
                 >
                   <RefreshCw size={14} /> Randomize Suffix
                 </button>
@@ -973,12 +973,12 @@ export default function App() {
           </div>
 
           {error && (
-            <div className='mt-6 text-sm text-red-400 border border-red-900 bg-red-950/30 rounded px-3 py-2'>
+            <div className='mt-6 text-sm text-danger-text border border-danger-border bg-danger-bg rounded px-3 py-2'>
               {error}
             </div>
           )}
           {notice && (
-            <div className='mt-6 text-sm text-warning-amber border border-warning-border bg-warning-bg/40 rounded px-3 py-2'>
+            <div className='mt-6 text-sm text-warning-amber border border-warning-border bg-warning-bg rounded px-3 py-2'>
               {notice}
             </div>
           )}
@@ -992,7 +992,7 @@ export default function App() {
             <button
               onClick={exportKit}
               disabled={isEmpty || isExporting}
-              className='w-full py-3.5 bg-white text-black font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-text-bright transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
             >
               {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
               {isExporting ? 'Building Bundle…' : 'Export To Move'}
@@ -1002,17 +1002,17 @@ export default function App() {
       </main>
 
       {isHelpOpen && (
-        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 overflow-y-auto'>
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-overlay-strong backdrop-blur-md p-4 overflow-y-auto'>
           <div className='bg-surface-modal border border-border-main rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden'>
             {/* Modal Header */}
             <div className='flex items-center justify-between px-6 sm:px-8 py-5 border-b border-border-dark bg-surface-modal-header shrink-0'>
               <div className='flex items-center gap-3'>
                 <HelpCircle size={24} className='text-accent-yellow' />
-                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-white'>Kit Creator for Ableton Move — User Manual</h2>
+                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-text-bright'>Kit Creator for Ableton Move — User Manual</h2>
               </div>
               <button
                 onClick={() => setIsHelpOpen(false)}
-                className='text-text-muted hover:text-white p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer'
+                className='text-text-muted hover:text-text-bright p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer'
                 aria-label='Close manual'
               >
                 <X size={20} />
@@ -1024,25 +1024,25 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
-                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-black/60 px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
+                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-overlay-soft px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
                 </p>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding & Scanning Sample Folders</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-white'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
-                  <li><strong className='text-white'>Supported Formats:</strong> Accepts uncompressed <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
-                  <li><strong className='text-white'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
-                  <li><strong className='text-white'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
+                  <li><strong className='text-text-bright'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
+                  <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
+                  <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
+                  <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>3. 4×4 Pad Grid & Controls</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-white'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
-                  <li><strong className='text-white'>Keyboard Hotkeys:</strong> Play pads instantly with row keys:
+                  <li><strong className='text-text-bright'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
+                  <li><strong className='text-text-bright'>Keyboard Hotkeys:</strong> Play pads instantly with row keys:
                     <div className='grid grid-cols-4 gap-1.5 max-w-sm text-sm font-mono text-accent-yellow mt-2 bg-surface-pad p-3 rounded-lg border border-border-main text-center font-bold'>
                       <div>1 2 3 4</div>
                       <div>Q W E R</div>
@@ -1050,27 +1050,27 @@ export default function App() {
                       <div>Z X C V</div>
                     </div>
                   </li>
-                  <li><strong className='text-white'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
-                  <li><strong className='text-white'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
-                  <li><strong className='text-white'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
+                  <li><strong className='text-text-bright'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
+                  <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
+                  <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-white'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
-                  <li><strong className='text-white'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
-                  <li><strong className='text-white'>Device Transfer:</strong> Copy exported <code className='text-white font-mono text-sm bg-black/60 px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
+                  <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names combine a folder prefix (e.g. <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>MKIT</code>) and a random suffix (e.g. <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>Vibe</code>). Custom typed names are preserved.</li>
+                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
+                  <li><strong className='text-text-bright'>Device Transfer:</strong> Copy exported <code className='text-text-bright font-mono text-sm bg-overlay-soft px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-white'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm.</li>
-                  <li><strong className='text-white'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
-                  <li><strong className='text-white'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
+                  <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm.</li>
+                  <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
+                  <li><strong className='text-text-bright'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to copy every sample byte-for-byte.</li>
                 </ul>
               </section>
 
@@ -1118,7 +1118,7 @@ export default function App() {
             <div className='px-6 sm:px-8 py-4 border-t border-border-dark bg-surface-modal-header flex justify-end shrink-0'>
               <button
                 onClick={() => setIsHelpOpen(false)}
-                className='px-6 py-2.5 bg-accent-yellow text-black font-bold uppercase text-sm tracking-wider rounded-lg hover:bg-white transition-colors cursor-pointer'
+                className='px-6 py-2.5 bg-accent-yellow text-text-inverse font-bold uppercase text-sm tracking-wider rounded-lg hover:brightness-110 transition-all cursor-pointer'
               >
                 Got it
               </button>

@@ -92,6 +92,35 @@ export function poolCategoryFor(sample: Sample): Category {
 }
 
 /**
+ * The colour a pad is tinted with, as a CSS custom property defined in `index.css`.
+ *
+ * One hue per category, so the derived grid is readable without reading a word. `Hat`
+ * and `Crash` deliberately share the hue of the pool they are drawn from rather than
+ * getting their own: a generic hat on a closed-hat pad is the same instrument to the
+ * grid as the labelled closed hat beside it, and colouring it differently would advertise
+ * a distinction the layout does not make. Same rule as the sidebar breakdown rows.
+ *
+ * Returned as a var name rather than a Tailwind class because Tailwind 4 scans source
+ * text for class names — a class assembled at runtime compiles to nothing.
+ */
+const CATEGORY_ACCENT_VAR: Record<Category, string> = {
+  Kick: '--color-cat-kick',
+  Snare: '--color-cat-snare',
+  Clap: '--color-cat-clap',
+  CHH: '--color-cat-chh',
+  Hat: '--color-cat-chh',
+  OHH: '--color-cat-ohh',
+  Perc: '--color-cat-perc',
+  Crash: '--color-cat-perc',
+  Other: '--color-cat-other'
+};
+
+export function categoryAccent(category: string): string {
+  const name = CATEGORY_ACCENT_VAR[category as Category];
+  return name ? `var(${name})` : 'var(--accent-yellow)';
+}
+
+/**
  * Whether a sample sitting on a pad counts as filling the role the pad asked for.
  * A generic hat on a closed-hat pad, or a crash on a percussion pad, is the intended
  * pooling above rather than a substitution, and must not be reported as one.

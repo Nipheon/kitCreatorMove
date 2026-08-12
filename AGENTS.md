@@ -17,6 +17,7 @@ index.html
 package.json
 README.md
 LICENSE
+RETHEME-PLAN.md
 tsconfig.json
 vite.config.ts
 src/
@@ -331,6 +332,29 @@ real packs.
   not left to the disabled-ancestor side effect.
 - **The pad body is a `<div role="button">`, not a `<button>`.** The lock, shuffle, and exclude
   controls are real buttons and cannot be nested inside one.
+- **Every pad is tinted by the category it holds** — one hue each for Kick, Snare, Clap,
+  CHH, OHH, Perc and Other, so a derived grid can be read without reading a word. The
+  hues live in `@theme` as `--color-cat-*`; `categoryAccent()` in `padLayout.ts` maps a
+  category to one, and `Pad` sets the result as `--pad-accent` inline on the pad root.
+  The tint, border, glow, pad number, choke badge and both bottom-bar buttons all derive
+  from that one property.
+
+  **It must be a custom property, not a class.** Tailwind 4 scans source text for class
+  names, so a `bg-cat-${category}` assembled at runtime compiles to nothing at all — the
+  build succeeds and every pad comes out untinted.
+
+  **The hue is never printed as text at full strength** (`.pad-ink` and friends mix it
+  65% toward `--color-text-light`). At 14px bold the contrast threshold is 4.5:1 — 14px
+  bold is not WCAG large text, that starts at 18.66px — and snare pink, open-hat violet
+  and the "other" periwinkle all sit near 3.7:1 against their own tinted pad. The mix
+  clears the threshold and still reads as that category. One mix serves every text use;
+  the per-element ladder it replaced was three numbers to get wrong for no visible gain.
+
+  **`Hat` takes the CHH hue and `Crash` takes the Perc hue**, matching `poolCategoryFor`
+  and the sidebar breakdown rows. A generic hat sitting on a closed-hat pad is the same
+  thing to the grid as the labelled closed hat beside it; colouring it differently would
+  advertise a distinction the layout does not make. An empty pad is tinted by the role it
+  advertises, so the placeholder grid still reads as a layout.
 - **Kit Generation Visual Feedback:** When clicking "Generate Random Kit", all pads simultaneously start a brief spinner animation (`Loader2` + "Rolling") that stops at random durations up to 100ms per pad before revealing their newly picked sample names. When Auto Preview is enabled, this spinner animation is skipped so preview playback begins immediately.
 - **Preview Kit Button & Auto Preview:** Located directly to the right of the "Generate Random Kit" button. When clicked, it sequentially triggers each pad in index order with a 750ms delay between pads. An **Auto Preview** checkbox next to the button automatically triggers kit preview playback whenever a new kit is generated. Clicking anywhere on the interface, pressing any keyboard key, clicking the preview button again, or generating a new kit stops the active preview sequence cleanly.
 
@@ -368,7 +392,26 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 
 ## UI, Dimensions & Design System
 
-- **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements.
+- **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements. There are no raw `text-white`, `bg-black/60` or `text-red-400` left in the components; `text-inverse`, `overlay-*` and `danger-*` cover those. Reintroducing one is how a palette change breaks in a place nobody looks.
+- **The palette is mid-dark indigo, not near-black.** It was `#090909`-and-greys, which
+  read as bland and mysterious; surfaces now run `#1E1B34` (darkest) up to `#332C5C`
+  (pad). Two things follow from the base being a colour rather than an absence of one:
+  the **text ramp is violet-tinted and lifted** (`--color-text-subtle` is `#9A93C8`, not
+  `#666`, which disappears on indigo), and the **scrims are indigo-black** — a pure black
+  scrim over indigo reads as mud. The ladder is monotonic on purpose: several places
+  stack two surfaces, a card inside a panel and the pad's bottom bar over the pad.
+- **Three accents, each with exactly one job.** Amber `#FFC93C` is primary — actions,
+  live values, focus, everything in both panels. Teal `#38E8D0` is secondary and appears
+  in two places only: the usable-samples meter and Preview Kit. Pink `#FF5F9E` is a pad
+  category and never chrome. Giving any of them a fourth use is how this goes back to
+  noise; a new UI colour should be a new token with a stated job, not a reach for one of
+  these.
+- **The `color-mix()` rules are hand-gated behind `@supports`, and the plain rules above
+  them are the fallback.** Written inline instead, the build synthesises its own fallback
+  by substituting the raw variable — which turns a 14% tint into a full-strength accent
+  fill, and puts accent-coloured text on an accent-coloured background in
+  `.pad-lock-active`. That fallback always wins, because it is emitted after anything
+  hand-written in the same rule. Do not move them out of the block.
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Thank You" credits drum-kit-generator and lists the other kit-creation tools, Kit-Maker and Move Studio.
 - **The export toggles carry no explainer text in the settings panel**, with one exception. Skip Loops, Skip Non-Drums and Trim Silence are a label and a checkbox each; what they do is documented in help section 5. The panel is a column of controls, not documentation — keep new options to one line there and put the explanation in the modal. The silence-trimming bullet was moved out of section 4 at the same time so the three filters read together in one place.
@@ -427,6 +470,10 @@ nothing will catch a regression except testing on hardware again:
 - The decode half of trimming — `OfflineAudioContext` does not exist in Node. Only
   `encodeWav` is unit-tested.
 - Whether a bundle still imports on the device at all.
+- **The indigo palette and the per-category pad tint are not verified at all** — not by
+  the suite, and not by eye either. The agent that wrote them had no browser available,
+  so contrast was computed rather than observed and the pad grid has never been seen.
+  Treat "it builds" as meaning nothing here, and say so rather than implying otherwise.
 
 `DISPLAY_INDICES` and the `receivingNote`/`sendingNote` mapping *are* pinned by a test
 now, precisely because a wrong mapping still produces a bundle where every pad sounds —
