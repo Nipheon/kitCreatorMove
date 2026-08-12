@@ -17,7 +17,6 @@ index.html
 package.json
 README.md
 LICENSE
-RETHEME-PLAN.md
 tsconfig.json
 vite.config.ts
 src/
