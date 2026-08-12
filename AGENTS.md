@@ -594,6 +594,11 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   `.pad-lock-active`. That fallback always wins, because it is emitted after anything
   hand-written in the same rule. Do not move them out of the block.
 - **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
+- **The header icon and the favicon are the same drum emoji**, the header as a `<span>`
+  and the favicon as an SVG `<text>` in a percent-encoded data URI in `index.html`. No
+  icon file, so the two cannot drift apart. It replaced a yellow tile holding a rotated
+  square. The emoji renders in the platform's own font, which is why the header one is
+  `aria-hidden` — it is decoration beside a heading that already says the name.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Thank You" credits drum-kit-generator and lists the other kit-creation tools, Kit-Maker and Move Studio. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
 
   **A user-visible rule needs a help entry, not only an AGENTS.md entry.** Preview and Grid IDs both shipped without one and went months undocumented, which is how a feature ends up existing only for whoever wrote it.
