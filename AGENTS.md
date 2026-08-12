@@ -202,6 +202,17 @@ real packs.
 
   It matters more than it used to: `Other` competes for a column of its own, so without
   the filter a trap pack puts its vocal chants and riser effects on pads.
+
+  **`NON_DRUM_FOLDERS` is matched against folders only, never the filename** — `Extras`,
+  `Imported`, `Misc`, `Patches`, `Waveforms`, `Soundbanks`, `Tags`, `AKWF`. Files in
+  those folders are named anonymously (`Fill 1.wav`, `AKWF_0001.wav`, `G Suspended
+  2.wav`), so the folder is the only evidence there is. In a 120k-file survey this caught
+  11,597 of the 16,504 files that survived every other rule, while 2,385 classified drums
+  under those same folders were kept by the `Other`-only guard.
+- **A folder that names a drum category outranks any marker word in it.** `Bass Drums`
+  used to match no phrase — the phrase was singular — fall through to `Other`, and then
+  be discarded for containing "bass". The phrase is now `/\bbass drums?\b/`, `bassdrums`
+  is in `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
 - **An explicitly open or closed hat folder sharpens an unqualified hat name.** The one
   case where a folder may overrule the filename, and only to add the qualifier the name
   left out: `hihat_01.wav` inside `Open Hats/` is an OHH. Without it, such a folder leaves

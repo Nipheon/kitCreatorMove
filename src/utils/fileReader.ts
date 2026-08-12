@@ -106,7 +106,9 @@ function tokenize(name: string): string[] {
  * rule only applies from four characters up, so `bds` and `rims` matched nothing and
  * fell through to `Other` — 162 files across a 70k-file survey.
  */
-const KICK = ['kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum'];
+const KICK = [
+  'kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum', 'bassdrums'
+];
 const SNARE = [
   'snare', 'snares', 'snr', 'snrs', 'sn', 'sns', 'sd', 'sds',
   'rim', 'rims', 'rimshot', 'rs', 'sidestick'
@@ -147,7 +149,9 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
-  [/\bbass drum\b/, 'Kick'],
+  // Plural included: a folder called "Bass Drums" used to match nothing here, fall
+  // through to Other, and then be discarded by the non-drum filter for saying "bass".
+  [/\bbass drums?\b/, 'Kick'],
   [/\bside stick\b/, 'Snare'],
   [/\bcross stick\b/, 'Snare'],
   [/\bhand clap\b/, 'Clap'],
@@ -278,7 +282,27 @@ const NON_DRUM_WORDS = [
   'uplifter', 'chop', 'chops', 'guitar', 'guitars', 'bass', 'sub', 'lead', 'leads',
   'synth', 'synths', 'pad', 'pads', 'string', 'strings', 'horn', 'horns', 'brass',
   'piano', 'keys', 'melody', 'melodic', 'stab', 'stabs', 'atmos', 'ambient', 'drone',
-  'zap', 'zaps', 'chirp', 'chirps', 'noise', 'texture', 'foley', 'speech', 'talk'
+  'zap', 'zaps', 'chirp', 'chirps', 'noise', 'texture', 'foley', 'speech', 'talk',
+  // Melodic instruments seen filling the "Extras" folder of trap kits.
+  'choir', 'whistle', 'sitar', 'flute', 'organ', 'violin', 'cello', 'harp',
+  'trumpet', 'sax', 'saxophone', 'accordion'
+];
+
+/**
+ * Folder names that mean "not the drums" even when the files inside are named
+ * anonymously — `Fill 1.wav`, `AKWF_0001.wav`, `G Suspended 2.wav`. Matched against the
+ * folders only, never the filename: a sample called `Extras.wav` is not evidence.
+ *
+ * In a 120k-file survey these covered 11,597 of the 16,504 files that survived every
+ * other rule — single-cycle waveform banks, synth soundbanks, and the melodic odds and
+ * ends that trap kits ship beside their drums.
+ *
+ * 2,385 files under those same folders *were* classified as drums, and all of them are
+ * kept: like every rule here this is consulted only for `Other`.
+ */
+const NON_DRUM_FOLDERS = [
+  'extras', 'imported', 'misc', 'patches', 'waveforms', 'soundbanks', 'tags', 'akwf',
+  'presets', 'instruments', 'melodies', 'melodic'
 ];
 
 /**
@@ -287,12 +311,18 @@ const NON_DRUM_WORDS = [
  */
 export function looksNonDrum(category: Category, name: string, directory = ''): boolean {
   if (category !== 'Other') return false;
-  const matches = (text: string) => {
-    const tokens = tokenize(text);
-    return tokens.some(t => NON_DRUM_WORDS.includes(t));
-  };
-  if (matches(name)) return true;
-  return folderCandidates(directory).some(matches);
+
+  const hasWord = (text: string, list: string[]) =>
+    tokenize(text).some(t => list.includes(t));
+
+  if (hasWord(name, NON_DRUM_WORDS)) return true;
+
+  return folderCandidates(directory).some(folder => {
+    // A folder that names a drum category outranks any marker word inside it. Without
+    // this, "Bass Drums" reads as bass rather than as the kicks it holds.
+    if (classify(folder) !== null) return false;
+    return hasWord(folder, NON_DRUM_WORDS) || hasWord(folder, NON_DRUM_FOLDERS);
+  });
 }
 
 export function looksLikeLoop(name: string, directory = ''): boolean {

@@ -486,6 +486,30 @@ await test('a bare 808 is a kick, but never beats a real category', () => {
   assert.equal(categorizeSample('vox1808x.wav'), 'Other');
 });
 
+await test('a folder naming a drum category outranks a marker word inside it', () => {
+  // "Bass Drums" used to match no phrase (the phrase was singular), fall through to
+  // Other, and then be discarded by the non-drum filter for containing "bass".
+  assert.equal(categorizeSample('SHD_StockBD_01.wav', '/Pack/Bass Drums'), 'Kick');
+  assert.equal(categorizeSample('01.wav', '/Pack/Bass Drum'), 'Kick');
+  assert.equal(looksNonDrum('Kick', 'SHD_StockBD_01.wav', '/Pack/Bass Drums'), false);
+  // An unclassifiable file in a folder that says nothing drum-like is still discarded.
+  assert.equal(looksNonDrum('Other', 'SHD_BassDrop_1.wav', '/Pack/Bass Drops'), true);
+});
+
+await test('folder markers catch anonymously named junk', () => {
+  // Files named Fill 1.wav or AKWF_0001.wav carry no marker of their own; the folder
+  // they sit in is the only evidence. 11,597 of 16,504 remaining Other files in a
+  // 120k-file survey.
+  assert.equal(looksNonDrum('Other', 'Fill 1.wav', '/Pack/Drumkit/Extras'), true);
+  assert.equal(looksNonDrum('Other', 'AKWF_0001.wav', '/Pack/AKWF/Imported'), true);
+  assert.equal(looksNonDrum('Other', '0032.wav', '/Pack/Zampler Soundbanks/Analogon'), true);
+  assert.equal(looksNonDrum('Other', 'ms20c 100.wav', '/Pack/MS20 Misc'), true);
+  // The name is never checked against the folder list — "Extras.wav" is not evidence.
+  assert.equal(looksNonDrum('Other', 'Extras.wav', '/Pack/Drumkit'), false);
+  // And a classified drum in one of those folders is kept: 2,385 files in the survey.
+  assert.equal(looksNonDrum('Kick', 'kick 2.wav', '/Pack/Drumkit/Extras'), false);
+});
+
 await test('non-drum detection never overrides a real category', () => {
   // The guard that matters: plenty of good drums have "bass" or "sub" in the name.
   assert.equal(looksNonDrum('Kick', 'Bass Kick.wav'), false);
