@@ -626,6 +626,27 @@ await test('the containing folder classifies a nameless sample', () => {
   assert.equal(categorizeSample('01.wav'), 'Other', 'no folder, no clue');
 });
 
+await test('an open or closed hat folder sharpens a generic hat name', () => {
+  // The only case a folder may overrule the filename, and only to add the qualifier the
+  // name left out — otherwise an "Open Hats" folder of hihat_NN.wav files leaves the
+  // open column starving while all of them pool as closed hats.
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('HH02.wav', '/Pack/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('hats 3.wav', '/Pack/Closed Hats'), 'CHH');
+  assert.equal(categorizeSample('hihat.wav', '/Pack/OHH'), 'OHH');
+
+  // An unqualified folder has nothing to add.
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Hi Hats'), 'Hat');
+  assert.equal(categorizeSample('hihat_01.wav', '/Pack/Drums'), 'Hat');
+
+  // A name that states its own qualifier still wins over a folder that disagrees.
+  assert.equal(categorizeSample('closed hat.wav', '/Pack/Open Hats'), 'CHH');
+  assert.equal(categorizeSample('Hat_Open.wav', '/Pack/Closed Hats'), 'OHH');
+
+  // And this must not reach past hats: a kick in an open-hat folder is still a kick.
+  assert.equal(categorizeSample('kick 2.wav', '/Pack/Open Hats'), 'Kick');
+});
+
 await test('the filename beats the folder when both say something', () => {
   assert.equal(categorizeSample('Kick 9.wav', '/Pack/Snares'), 'Kick');
   assert.equal(categorizeSample('Open Hat.wav', '/Pack/Kicks'), 'OHH');

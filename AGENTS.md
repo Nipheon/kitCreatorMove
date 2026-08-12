@@ -202,6 +202,13 @@ real packs.
 
   It matters more than it used to: `Other` competes for a column of its own, so without
   the filter a trap pack puts its vocal chants and riser effects on pads.
+- **An explicitly open or closed hat folder sharpens an unqualified hat name.** The one
+  case where a folder may overrule the filename, and only to add the qualifier the name
+  left out: `hihat_01.wav` inside `Open Hats/` is an OHH. Without it, such a folder leaves
+  the open column starving while every file in it pools as a closed hat. Deliberately
+  narrow — it fires only when the name resolves to a bare `Hat` and the folder resolves
+  to `CHH` or `OHH`, so `closed hat.wav` in `Open Hats/` is still CHH and a kick in a hat
+  folder is still a kick.
 - **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
   makes a generic-hat library look like it has real split hats.
 - **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`) and excluded

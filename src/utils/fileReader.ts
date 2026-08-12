@@ -306,6 +306,24 @@ export function looksLikeLoop(name: string, directory = ''): boolean {
  */
 export function categorizeSample(name: string, directory = ''): Category {
   const fromName = classify(name);
+
+  /**
+   * The one case where a folder may overrule the filename, and only to sharpen it: a
+   * name that says nothing but "hat" is missing the qualifier, and "Open Hats/" has it.
+   * Without this, an open-hat folder full of `hihat_01.wav` leaves the open column
+   * starving while every one of those files pools as a closed hat.
+   *
+   * Deliberately narrow. It fires only when the name is an unqualified `Hat` and the
+   * folder is explicitly open or closed, so an explicit filename still wins over a
+   * folder that disagrees — `closed hat.wav` in `Open Hats/` stays CHH.
+   */
+  if (fromName === 'Hat') {
+    for (const folder of folderCandidates(directory)) {
+      const fromFolder = classify(folder);
+      if (fromFolder === 'CHH' || fromFolder === 'OHH') return fromFolder;
+    }
+  }
+
   if (fromName) return fromName;
 
   for (const folder of folderCandidates(directory)) {
