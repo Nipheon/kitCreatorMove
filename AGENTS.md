@@ -274,6 +274,21 @@ real packs.
   state: the grid falls back to `NO_SAMPLES_GRID_ID` and the kit is empty. A test covers
   each of those three.
 
+- **Export names are deduplicated against what was actually exported, never against
+  what was generated** (`exportedNames` in `App.tsx`, `uniqueKitName` in `kitNaming.ts`).
+  Rolling through twenty kits and exporting one must not leave the survivor numbered.
+
+  The counter also counts collisions rather than batch position. It used to be
+  `-${i + 1}`, so two kits in one zip landing on the same random suffix produced
+  `IHF-ksch-Flip-4` — a number that matched neither the number of Flips nor anything the
+  user had on disk. Within a batch the code first re-rolls the suffix up to
+  `SUFFIX_ATTEMPTS` times, since the pool is ~39 words and a fresh word reads better
+  than a number; numbering is the fallback once the pool is genuinely crowded.
+
+  **Names are recorded after the export resolves, not before.** A failed export wrote no
+  file, so its names must stay free. A single export that does collide renames and says
+  so in a notice rather than silently writing something other than the preview.
+
 ## Pads, layout and choking
 
 - **The grid is derived from the library, not chosen from a list** (`deriveLayout` in

@@ -61,3 +61,19 @@ export function prefixForFolders(folders: SourceFolder[]): string {
   if (enabled.length > 1) return MULTI_FOLDER_PREFIX;
   return prefixFromFolderName(enabled[0].name);
 }
+
+/**
+ * A name not already taken, numbering only as a last resort.
+ *
+ * The counter used to be the kit's position in the batch, so two kits in one zip
+ * rolling the same suffix produced `...-Flip-4` — a number that described neither how
+ * many Flips existed nor anything the user had exported. It counts collisions now, and
+ * `taken` is meant to hold names actually written to disk this session, not names that
+ * merely appeared in the preview.
+ */
+export function uniqueKitName(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}

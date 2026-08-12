@@ -13,7 +13,7 @@ import {
 } from './utils/fileReader';
 import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import {
-  DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders
+  DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders, uniqueKitName
 } from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
@@ -77,6 +77,11 @@ export default function App() {
   const lastStoppedTime = useRef(0);
   /** Pad index -> id of the sample that pad has finished buffering. */
   const readyPads = useRef(new Map<number, string>());
+  /**
+   * Names written into a bundle this session. Only a real export lands here: generating
+   * a kit and rolling past it must never make a later kit collide with a phantom.
+   */
+  const exportedNames = useRef(new Set<string>());
   /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
   const readyWaitCleanup = useRef<(() => void) | null>(null);
 
@@ -630,21 +635,36 @@ export default function App() {
     });
   };
 
+  /**
+   * How many fresh suffixes to try before numbering. The pool is ~39 words, so a clash
+   * is unlucky rather than likely; rolling again reads better than `-2` and costs
+   * nothing, but the loop has to terminate once the pool is genuinely exhausted.
+   */
+  const SUFFIX_ATTEMPTS = 8;
+
   const buildBatch = () => {
-    const used = new Set([exportName]);
-    const kits = [{ kit: [...kit], name: exportName }];
+    // Seeded from what has actually been exported, so a kit generated and discarded
+    // never pushes a number onto a later name.
+    const taken = new Set(exportedNames.current);
+    const kits: { kit: (Sample | null)[]; name: string }[] = [];
+
+    const first = uniqueKitName(exportName, taken);
+    taken.add(first);
+    kits.push({ kit: [...kit], name: first });
 
     for (let i = 1; i < batchSize; i++) {
       const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
       // Every kit in a batch is built from the same library, so they all share a grid
       // and the id is the same for each — which is the point: a batch is swappable.
-      let name = kitNameFor(generateKitName('').suffix, next.layout.columnsId);
-      // Fall back to a counter rather than appending repeatedly, which produced
-      // names like NAME-Zap-3-3-3.
-      if (used.has(name)) {
-        name = `${kitNameFor(generateKitName('').suffix, next.layout.columnsId)}-${i + 1}`;
+      let name = '';
+      for (let attempt = 0; attempt < SUFFIX_ATTEMPTS && !name; attempt++) {
+        const candidate = kitNameFor(generateKitName('').suffix, next.layout.columnsId);
+        if (!taken.has(candidate)) name = candidate;
       }
-      used.add(name);
+      if (!name) {
+        name = uniqueKitName(kitNameFor(generateKitName('').suffix, next.layout.columnsId), taken);
+      }
+      taken.add(name);
       kits.push({ kit: next.kit, name });
     }
     return kits;
@@ -667,9 +687,23 @@ export default function App() {
     const onProgress = (done: number, total: number) => setExportProgress({ done, total });
 
     try {
-      const report = batchSize > 1
-        ? await exportBatchKits(buildBatch(), kitPrefix, { trimSilence, onProgress })
-        : await exportKitZip(kit, exportName, { trimSilence, onProgress });
+      const names: string[] = [];
+      let report;
+      if (batchSize > 1) {
+        const batch = buildBatch();
+        names.push(...batch.map(entry => entry.name));
+        report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
+      } else {
+        const single = uniqueKitName(exportName, exportedNames.current);
+        names.push(single);
+        report = await exportKitZip(kit, single, { trimSilence, onProgress });
+        if (single !== exportName) {
+          setNotice(`"${exportName}" was already exported this session, so this kit was saved as "${single}".`);
+        }
+      }
+      // Recorded only after the export resolved: a failed one wrote no file, so its
+      // names are still free.
+      names.forEach(name => exportedNames.current.add(name));
 
       if (report.trimFailures > 0) {
         setNotice(`${report.trimFailures} sample(s) could not be trimmed and were exported unchanged.`);

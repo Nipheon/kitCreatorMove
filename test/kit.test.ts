@@ -36,7 +36,7 @@ import {
 import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
-  prefixFromFolderName
+  prefixFromFolderName, uniqueKitName
 } from '../src/utils/kitNaming';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -665,6 +665,26 @@ await test('prefixes are three uppercase characters', () => {
   for (const name of ['A', 'Some Very Long Folder Name Here', '!!!', '70s Breakbeats']) {
     assert.equal(prefixFromFolderName(name).length, PREFIX_LENGTH, name);
   }
+});
+
+await test('a name is only numbered when it is already taken', () => {
+  // The counter used to be the kit's index inside the batch, so two kits in one zip
+  // rolling the same suffix produced "-4" — a number describing neither the number of
+  // duplicates nor anything previously exported.
+  const taken = new Set<string>();
+  assert.equal(uniqueKitName('MKT-ksho-Flip', taken), 'MKT-ksho-Flip');
+
+  taken.add('MKT-ksho-Flip');
+  assert.equal(uniqueKitName('MKT-ksho-Flip', taken), 'MKT-ksho-Flip-2');
+
+  taken.add('MKT-ksho-Flip-2');
+  assert.equal(uniqueKitName('MKT-ksho-Flip', taken), 'MKT-ksho-Flip-3');
+
+  // An unrelated name is untouched however crowded the set is.
+  assert.equal(uniqueKitName('MKT-ksho-Zap', taken), 'MKT-ksho-Zap');
+
+  // Numbers count collisions, so they never skip: three Flips give -2 and -3, not -4.
+  assert.deepEqual([...taken].sort(), ['MKT-ksho-Flip', 'MKT-ksho-Flip-2']);
 });
 
 await test('the suffix pool is large and well formed', () => {
