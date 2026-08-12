@@ -15,6 +15,7 @@ Everything lives at the repository root, next to `package.json`:
 ```
 index.html
 package.json
+README.md
 tsconfig.json
 vite.config.ts
 src/
