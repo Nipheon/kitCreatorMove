@@ -212,6 +212,12 @@ real packs.
   one-shot.
 - **A tempo must say `bpm`.** A bare bracketed number is not evidence — `[120]` is as
   likely an index or a catalogue number, and `beat [128].wav` is not a loop.
+- **A tempo counts as loop evidence in a filename, never in a folder name.** Three packs
+  in a 214-pack survey produced zero usable samples — an empty grid, silently — because
+  their one-shots live under `Construction Kit (135 bpm)/Dry/`. A folder names the tempo
+  the kit was written at; that says nothing about the files inside it. The `bpm` token
+  follows the same rule, since it is the same evidence. Folders that mean loops say so in
+  words, and those still count.
 - **`tokenize` splits camelCase.** `BohmSlappAltOpenHat.wav` was one token, and `hat` is
   three characters so it only ever matches a token outright — an entire collection read as
   `Other`. It hid for a long time because such packs usually also have a folder called
@@ -396,6 +402,17 @@ real packs.
   in one pool. A library with 3 CHH and 25 generic hats will usually show generic hats
   on every closed pad. If that ever needs to change, bias the draw — do not put `Hat`
   back in the preference chain, it does not work.
+- **Filling runs in two passes: every pad takes its own sound before any pad takes a
+  substitute, and the top row is served first when substituting.** One pass in pad order
+  let the bottom rows drain the pools the top row was waiting for: a real pack with two
+  closed hats and one open hat filled those columns, ran them dry, took the percussion as
+  the nearest sound, and left the top row holding three snares. Serving the top row first
+  in the second pass matters too — otherwise a dry hat column takes the last spare
+  percussion and the same complaint returns one pass later.
+
+  A consequence worth knowing: a role the library has nothing for now leaves its pads
+  *empty* rather than quietly holding something else, so `summarisePads` reports
+  `unavailableRoles` for empty pads as well as substituted ones.
 - **The fallback chain is `ROLE_FALLBACKS`, nearest sound first — not `RANK`.** A pad
   whose own pool runs dry walks its chain, and that chain used to be `RANK` order, which
   begins `Kick, Snare`. So a clap pad with the claps gone took a kick: the least clap-like

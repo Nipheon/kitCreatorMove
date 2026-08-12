@@ -81,6 +81,14 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set
   kit.forEach((sample, idx) => {
     if (!sample) {
       empty.push(idx);
+      // An empty pad whose category the library never had is worth naming once, the same
+      // as a filled one that had to substitute. Own-sound-first filling made this the
+      // common shape: a pad with nothing to ask for now stays empty instead of quietly
+      // holding something else.
+      const role = layout.preferences[idx]?.[0];
+      if (role && !available.has(role) && !unavailableRoles.includes(role)) {
+        unavailableRoles.push(role);
+      }
       return;
     }
     const prefs = layout.preferences[idx];
@@ -185,11 +193,40 @@ export function generateRandomKit(
     return deepest ? { sample: pools[deepest].pop()! } : { sample: null };
   };
 
+  /**
+   * Two passes: every pad gets the sound it asked for before any pad gets a substitute.
+   *
+   * One pass in pad order let the bottom rows eat the pools the top row was waiting for.
+   * A real pack — 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash, 1 open hat
+   * — filled its hat and open-hat columns, ran them dry, and took the percussion as the
+   * nearest sound; by the time the top row was reached the extras were gone and it held
+   * three snares. The top row exists precisely to not be that.
+   */
+  const ownSound = (index: number): Sample | null => {
+    const pool = pickGroupPool(pools, layout.preferences[index][0]);
+    return pool ? pool.pop()! : null;
+  };
+
   for (let i = 0; i < PAD_COUNT; i++) {
     if (lockedSamples[i]) {
       kit[i] = lockedSamples[i];
       continue;
     }
+    kit[i] = ownSound(i);
+  }
+
+  /**
+   * Substitutes go to the top row first. Its chain is extras-then-core, so serving it
+   * after the columns let a dry hat column take the last spare percussion and leave the
+   * top row reaching for a snare — the same complaint as before, one pass later.
+   */
+  const substituteOrder = [
+    ...Array.from({ length: 4 }, (_, i) => PAD_COUNT - 4 + i),
+    ...Array.from({ length: PAD_COUNT - 4 }, (_, i) => i)
+  ];
+
+  for (const i of substituteOrder) {
+    if (kit[i] || lockedSamples[i]) continue;
     kit[i] = take(i).sample;
   }
 

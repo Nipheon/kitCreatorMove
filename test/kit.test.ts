@@ -180,10 +180,12 @@ await test('a thin library gets the same grid, filled by fallback', () => {
 });
 
 await test('a pad that loses a draw against a pool that exists still counts as substituted', () => {
-  // One kick for three kick pads: the role is fillable, the pool just ran dry.
+  // One kick for four kick pads, with hats left over after their own column is served:
+  // the role is fillable, the pool just ran dry, and something else is free to stand in.
   const lopsided = [
     makeSample('k0.wav', 'Kick'),
-    ...Array.from({ length: 8 }, (_, i) => makeSample(`s${i}.wav`, 'Snare'))
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`s${i}.wav`, 'Snare')),
+    ...Array.from({ length: 12 }, (_, i) => makeSample(`h${i}.wav`, 'CHH'))
   ];
   const result = generateRandomKit(lopsided);
   assert.ok(result.substituted.length > 0, 'kick pads filled from another pool');
@@ -605,6 +607,48 @@ await test('a pack name does not decide what its samples are', () => {
   assert.equal(categorizeSample('02.wav', '/Snare Attack/bits'), 'Other');
   assert.equal(looksLikeLoop('03.wav', '/Drum Loops Pack/hats'), false);
   assert.equal(looksLikeLoop('04.wav', '/128bpm Pack/hats'), false);
+});
+
+await test('a tempo in a folder name does not make its contents loops', () => {
+  // Found by running 214 real packs: three of them came out with zero usable samples,
+  // an empty grid and nothing said, because their one-shots sit under a folder called
+  // "Construction Kit (135 bpm)" — the tempo the kit was written at, not a claim about
+  // the files inside it.
+  const dry = '/Pack/1-Future King/Construction Kit (135 bpm)/Dry';
+  assert.equal(looksLikeLoop('Clap (Trap Boot Vol.3).wav', dry), false);
+  assert.equal(looksLikeLoop('Cym Crash.wav', dry), false);
+  assert.equal(looksLikeLoop('808.wav', '/Pack/Construction Kit (80 bpm)/Dry'), false);
+
+  // A tempo in the file's own name is still evidence, and a folder saying it in words
+  // still counts.
+  assert.equal(looksLikeLoop('LSHHC_Drum_Loop_01_90BPM.wav', '/Pack'), true);
+  assert.equal(looksLikeLoop('GIGA-COUNTRY[136BPM].wav', '/Pack'), true);
+  assert.equal(looksLikeLoop('kick.wav', '/Pack/Drum Loops'), true);
+  assert.equal(looksLikeLoop('kick.wav', '/Pack/Loops 120bpm'), true);
+});
+
+await test('every pad gets its own sound before any pad gets a substitute', () => {
+  // Reported by a real pack: 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash,
+  // 1 open hat. Filling in pad order let the hat columns run dry, take the percussion as
+  // their nearest sound, and leave the top row holding three snares.
+  const library: Sample[] = [
+    ...Array.from({ length: 18 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 2 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH')),
+    ...Array.from({ length: 2 }, (_, i) => makeSample(`perc${i}.wav`, 'Perc')),
+    makeSample('clap.wav', 'Clap'),
+    makeSample('crash.wav', 'Crash'),
+    makeSample('open hat.wav', 'OHH')
+  ];
+
+  const { kit } = generateRandomKit(library);
+  const topRow = [12, 13, 14, 15].map(i => kit[i]?.category);
+  for (const category of topRow) {
+    assert.ok(
+      category === 'Clap' || category === 'Perc' || category === 'Crash' || category === 'Other',
+      `top row held ${category} while extras were still free`
+    );
+  }
 });
 
 await test('a break is a loop by its own name, never by its folder', () => {

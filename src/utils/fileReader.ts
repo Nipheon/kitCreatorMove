@@ -257,16 +257,26 @@ const LOOP_WORDS = ['loop', 'loops', 'bpm'];
  * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
  * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
  */
-function textLooksLikeLoop(text: string): boolean {
+function textLooksLikeLoop(text: string, tempoCounts = true): boolean {
   const tokens = tokenize(text);
   const joined = tokens.join(' ');
 
   // A tempo has to say so: "130bpm", "[130bpm]", "128 bpm". A bare number —
   // "[120]" — is just as likely to be an index or a catalogue number.
-  if (/\b\d{2,3} ?bpm\b/.test(joined)) return true;
-  if (/\b\d+ bars?\b/.test(joined)) return true;
+  //
+  // `tempoCounts` is false for folders. A tempo in a *folder* name describes the folder,
+  // and a construction kit is named for the tempo it was written at while holding
+  // perfectly ordinary one-shots: "Construction Kit (135 bpm)/Dry/Clap.wav" is a clap.
+  // Three packs in a 120k-file survey came out with zero usable samples this way — an
+  // empty grid, with nothing said. A folder that means loops nearly always says so in
+  // words, and those still count below.
+  if (tempoCounts && /\b\d{2,3} ?bpm\b/.test(joined)) return true;
+  if (tempoCounts && /\b\d+ bars?\b/.test(joined)) return true;
 
   return tokens.some(t => {
+    // `bpm` is tempo evidence like the patterns above, so it follows the same rule:
+    // a folder saying "Construction Kit (135 bpm)" is naming its tempo, not its contents.
+    if (t === 'bpm') return tempoCounts;
     if (LOOP_WORDS.includes(t)) return true;
     for (const suffix of ['loop', 'loops']) {
       if (t.endsWith(suffix) && t.length - suffix.length >= 3) return true;
@@ -361,7 +371,7 @@ function nameLooksLikeBreak(name: string): boolean {
 export function looksLikeLoop(name: string, directory = '', category: Category = 'Other'): boolean {
   if (textLooksLikeLoop(name)) return true;
   if (category === 'Other' && nameLooksLikeBreak(name)) return true;
-  return folderCandidates(directory).some(textLooksLikeLoop);
+  return folderCandidates(directory).some(folder => textLooksLikeLoop(folder, false));
 }
 
 /**
