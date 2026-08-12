@@ -346,8 +346,14 @@ real packs.
   in its own right and both are reachable. Ranking `Hat` below `CHH` in the preference
   chain was the earlier attempt and did nothing: `take` drains the `CHH` pool completely
   before it reads the next entry, so a library with three or more labelled closed hats
-  could never reach its generic ones. Open pads are deliberately left out of the hat
-  pooling — under the same assumption a generic hat is the wrong sound for an open pad.
+  could never reach its generic ones.
+
+  **An open pad is still not filled from the hat pool by default** — an unqualified hat is
+  assumed closed, so it is the wrong sound for an open pad, and `OHH` is a role of its
+  own. But an open pad that has run out of open hats now *falls back* to the closed pool
+  first, labelled and generic alike: a closed hat is still a hat, and beats the snare or
+  kick the pad would otherwise land on. Filling by default and falling back when empty are
+  different questions, and the earlier rule answered both with one no.
 
   **Choking is unaffected.** `chokeGroupFor` reads the sample's real category, so a
   crash sitting on a percussion pad still chokes in group 2, not with the percussion.
@@ -368,13 +374,17 @@ real packs.
   the most distinctive sound in a kit and the one a listener notices immediately in the
   wrong place.
 
-  **The open-hat pad is the exception: it reaches `CHH` last, below even the kick.** The
-  closed-hat pool holds generic `Hat` samples as well as labelled closed ones and nothing
-  can ask it for only the labelled ones, so putting `CHH` first — the obvious nearest
-  sound — funnels unqualified hats onto open pads, which the hat pooling exists to avoid.
-  The old `RANK` chain satisfied that only by accident, having put `Kick` and `Snare`
-  ahead of `CHH` everywhere; drain those two and generic hats reached open pads anyway.
-  The existing hat test caught this the moment `CHH` moved up, and now pins it.
+  **An open-hat pad reaches `CHH` first**, which covers labelled closed hats and generic
+  ones alike — they share a pool and nothing can ask it for one or the other. This was
+  briefly the other way round, keeping open pads out of the hat pool entirely on the
+  grounds that an unqualified hat is assumed closed. Overruled deliberately: that
+  assumption is about what fills an open pad *by default*, not about what an exhausted pad
+  should reach for next, and a closed hat beats the snare or kick it landed on instead.
+
+  **A closed hat on an open pad is reported as a substitution**, and is deliberately not
+  in `satisfiesRole`. Unlike a generic hat on a closed pad, which is an identity, this is
+  a real mismatch — the pad asked for an open hat and did not get one. It is the least bad
+  option available, not a free one, and the toast should say so.
 
   A second test asserts every chain is a permutation of the roles — exhaustive and
   duplicate-free — so `take` can never run off the end into its deepest-pool guess while a

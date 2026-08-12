@@ -91,17 +91,22 @@ const ROLE_FALLBACKS: Partial<Record<Category, Category[]>> = {
   Clap: ['Snare', 'Perc', 'Other', 'CHH', 'OHH', 'Kick'],
   CHH: ['OHH', 'Perc', 'Other', 'Clap', 'Snare', 'Kick'],
   /**
-   * `CHH` last, which looks wrong and is not. The closed-hat *pool* holds generic `Hat`
-   * samples as well as labelled closed ones and nothing can ask it for only the labelled
-   * ones, so putting it first — the obvious nearest sound — funnels unqualified hats onto
-   * open pads. That is the one thing the hat pooling is documented to avoid: an
-   * unqualified hat is assumed closed, so it is the wrong sound here. A test pins it.
+   * `CHH` first, which covers labelled closed hats *and* generic ones — they share a pool
+   * and nothing can ask it for one or the other.
    *
-   * The old `RANK`-ordered chain satisfied this only by accident, having put `Kick` and
-   * `Snare` ahead of `CHH` for every role; drain those and generic hats reached open pads
-   * anyway. This makes it deliberate.
+   * This reverses an earlier rule that kept open pads out of the hat pooling entirely, on
+   * the grounds that an unqualified hat is assumed closed and so is the wrong sound for an
+   * open pad. Overruled deliberately: a closed hat is still a hat, and it beats the kick
+   * or snare an open pad would otherwise land on once the open hats run out. The
+   * assumption only ever applied to *filling* an open pad from the generic pool by
+   * default, not to what an exhausted pad should reach for next.
+   *
+   * A closed hat on an open pad *is* reported as a substitution — the pad asked for an
+   * open hat and did not get one, which is worth telling the user about. That is why this
+   * is not in `satisfiesRole`: unlike a generic hat on a closed pad, it is a real
+   * mismatch, just the least bad one available.
    */
-  OHH: ['Perc', 'Other', 'Clap', 'Snare', 'Kick', 'CHH'],
+  OHH: ['CHH', 'Perc', 'Other', 'Clap', 'Snare', 'Kick'],
   Perc: ['Other', 'CHH', 'OHH', 'Clap', 'Snare', 'Kick'],
   Other: ['Perc', 'CHH', 'OHH', 'Clap', 'Snare', 'Kick']
 };

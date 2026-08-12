@@ -905,15 +905,16 @@ await test('every fallback chain is complete and puts the kick last', () => {
     assert.deepEqual([...chain].sort(), [...roles].sort(), `pad ${pad} chain is not a permutation`);
 
     // A kick is the most distinctive sound in a kit and the worst stand-in for anything
-    // else. The exception is the open-hat pad, which puts CHH below even the kick —
-    // that pool holds generic hats, which must not reach an open pad.
-    if (role !== 'Kick' && role !== 'OHH') {
+    // else, so every role but its own reaches it last.
+    if (role !== 'Kick') {
       assert.equal(chain[chain.length - 1], 'Kick', `pad ${pad} should reach a kick last`);
     }
   });
 
+  // An open pad reaches the closed-hat pool first: a closed or generic hat is still a
+  // hat, and beats the snare or kick it would otherwise land on.
   const ohhChain = layout.preferences[layout.roles.indexOf('OHH')];
-  assert.equal(ohhChain[ohhChain.length - 1], 'CHH', 'an open pad reaches the hat pool last');
+  assert.equal(ohhChain[1], 'CHH', 'an open pad reaches the hat pool first');
 });
 
 await test('labelled and generic closed hats share the closed column', () => {
@@ -941,8 +942,14 @@ await test('labelled and generic closed hats share the closed column', () => {
         // The equivalence is intended, so it must not be reported as a substitution.
         assert.ok(!substituted.includes(pad), `pad ${pad} reported as substituted`);
       }
-      // An unqualified hat is assumed closed, so it is the wrong sound for an open pad.
-      if (role === 'OHH') assert.notEqual(category, 'Hat', `generic hat on open pad ${pad}`);
+      // An open pad that runs out of open hats reaches the closed pool, which holds
+      // labelled and generic hats alike. Both are acceptable there; a kick is not.
+      if (role === 'OHH') {
+        assert.ok(
+          category === 'OHH' || category === 'CHH' || category === 'Hat',
+          `open pad ${pad} held ${category}`
+        );
+      }
     });
   }
 
