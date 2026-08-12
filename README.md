@@ -10,7 +10,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🎯 **Smart Classification**: Detects sample roles (*Kick*, *Snare*, *Closed Hat*, *Open Hat*, *Clap*, *Crash*, *Percussion*, *Other*) from filenames and folder names, tuned against real sample libraries. A hat with no open/closed qualifier is treated as closed, a crash is drawn from the percussion pool, and a bare `808` is a kick.
 - 🧹 **Loop & Non-Drum Filtering**: Leaves out loops (a bar count, a tempo like `128bpm`) and uncategorised material that looks like effects, vocals, scratches or melody — including anything sitting in an `Extras`, `Imported` or `Misc` folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is untouched. Both filters are toggles.
 - 🎛️ **Derived 4×4 Pad Grid**: The grid is built from the categories your library actually holds rather than picked from a fixed list. Up to four categories take a full-height column each; a fifth and beyond share the top row. Mapped to hardware MIDI notes 36–51 (Pad 1 = bottom-left).
-- 🆔 **Grid IDs**: Every grid gets a short fingerprint of its arrangement — `ksco` for Kick / Snare / Closed / Open, `ksco_llpp` when claps and percussion share the top row. Kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device. The ID travels in the exported kit name.
+- 🆔 **Grid IDs**: Every grid gets a short fingerprint of its arrangement — `ksho` for Kick / Snare / Closed / Open, `ksho_ccpp` when claps and percussion share the top row. Kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device. The ID travels in the exported kit name.
 - 🔇 **Automatic Choking**: Hats choke each other (Choke Group 1), crashes choke each other (Choke Group 2). Rides are deliberately left to ring out.
 - 🔒 **Pad Locking & Single Reroll**: Lock pads to hold sounds while randomising the rest, or reroll individual pads on demand.
 - 🎹 **Keyboard Hotkeys**: Audition pads using grid row keys (`1 2 3 4`, `Q W E R`, `A S D F`, `Z X C V`).
@@ -88,9 +88,9 @@ test/
 
 1. **Drop Sample Folders**: Drag any folder of drum samples into the app window.
 2. **Library Analysis**: Every file is classified from its name, falling back to the folder it sits in. Loops and non-drum material are filtered out, and the sidebar breaks the library down by category.
-3. **Grid Derivation**: The categories present decide the grid — four columns, four rows, with a shared top row when more than four categories are available. The result carries a Grid ID such as `ksco` or `ksco_llpp`.
+3. **Grid Derivation**: The categories present decide the grid — four columns, four rows, with a shared top row when more than four categories are available. The result carries a Grid ID such as `ksho` or `ksho_ccpp`.
 4. **Generate & Audition**: Hit **Generate Random Kit**, or play pads with the mouse and hotkeys. Lock what you like, reroll what you don't, exclude samples you never want to see again.
-5. **Export to Hardware**: **Export To Move** downloads `.ablpresetbundle` files named `PREFIX-gridid-Suffix` (e.g. `MKT-ksco-Nova`). Copy them into your Ableton Move presets folder.
+5. **Export to Hardware**: **Export To Move** downloads `.ablpresetbundle` files named `PREFIX-gridid-Suffix` (e.g. `MKT-ksho-Nova`). Copy them into your Ableton Move presets folder.
 
 ## Contributing
 

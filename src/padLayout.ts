@@ -14,8 +14,8 @@ export interface PadLayout {
    * goes in the exported kit name, because Move shows roughly 9-11 characters of a
    * preset name and the full id does not fit alongside a prefix and suffix.
    *
-   * It is deliberately a weaker fingerprint than `id`: `KSCO_LLLL` and `KSCO_LLPP` both
-   * name as `KSCO`, so two kits sharing a name id can still differ on pads 13-16. The
+   * It is deliberately a weaker fingerprint than `id`: `ksho_cccc` and `ksho_ccpp` both
+   * name as `ksho`, so two kits sharing a name id can still differ on pads 13-16. The
    * top row was judged not worth the characters. Use `id`, not this, for any check that
    * two grids are genuinely identical.
    */
@@ -57,9 +57,14 @@ const DOUBLING_ORDER: Category[] = ['Snare', 'Kick', 'CHH', 'OHH', 'Clap', 'Perc
  *
  * Lowercase because Move renders lowercase glyphs in fewer pixels than capitals, and the
  * id has to survive a preset-name display that shows roughly 9-11 characters.
+ *
+ * `h` for a closed hat and `c` for a clap. The first version read `c` as closed hat and
+ * gave the clap `l`, which is the letter nothing in the word suggests — `ksco` had to be
+ * decoded rather than read. The only constraint is that the seven stay distinct; every
+ * other letter here is the category's own initial.
  */
 const LETTER: Partial<Record<Category, string>> = {
-  Kick: 'k', Snare: 's', Clap: 'l', CHH: 'c', OHH: 'o', Perc: 'p', Other: 'x'
+  Kick: 'k', Snare: 's', Clap: 'c', CHH: 'h', OHH: 'o', Perc: 'p', Other: 'x'
 };
 
 const SHORT_LABEL: Partial<Record<Category, string>> = {

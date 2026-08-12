@@ -696,34 +696,34 @@ await test('the seven grids from the specification', () => {
 
   //  k s s ch  x4   — a generic hat is a closed hat
   const withGeneric = gridOf([...kicks, ...snares, ...generic]);
-  assert.equal(withGeneric.id, 'kssc');
+  assert.equal(withGeneric.id, 'kssh');
   assert.deepEqual(withGeneric.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'CHH']);
 
   //  k s cl ch  x4
   const withClap = gridOf([...kicks, ...snares, ...claps, ...generic]);
-  assert.equal(withClap.id, 'kslc');
+  assert.equal(withClap.id, 'ksch');
   assert.deepEqual(withClap.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
 
   //  k s ch oh  x4
   const splitHats = gridOf([...kicks, ...snares, ...closed, ...open]);
-  assert.equal(splitHats.id, 'ksco');
+  assert.equal(splitHats.id, 'ksho');
   assert.deepEqual(splitHats.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
 
   //  cl cl cl cl over k s ch oh
   const clapRow = gridOf([...kicks, ...snares, ...closed, ...open, ...claps]);
-  assert.equal(clapRow.id, 'ksco_llll');
+  assert.equal(clapRow.id, 'ksho_cccc');
   assert.deepEqual(clapRow.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
   assert.deepEqual(clapRow.roles.slice(12), ['Clap', 'Clap', 'Clap', 'Clap']);
 
   //  perc x4 over k s cl ch
   const percRow = gridOf([...kicks, ...snares, ...claps, ...generic, ...perc]);
-  assert.equal(percRow.id, 'kslc_pppp');
+  assert.equal(percRow.id, 'ksch_pppp');
   assert.deepEqual(percRow.roles.slice(0, 4), ['Kick', 'Snare', 'Clap', 'CHH']);
   assert.deepEqual(percRow.roles.slice(12), ['Perc', 'Perc', 'Perc', 'Perc']);
 
   //  cl cl perc perc over k s ch oh
   const shared = gridOf([...kicks, ...snares, ...closed, ...open, ...claps, ...perc]);
-  assert.equal(shared.id, 'ksco_llpp');
+  assert.equal(shared.id, 'ksho_ccpp');
   assert.deepEqual(shared.roles.slice(0, 4), ['Kick', 'Snare', 'CHH', 'OHH']);
   assert.deepEqual(shared.roles.slice(12), ['Clap', 'Clap', 'Perc', 'Perc']);
 });
@@ -768,11 +768,11 @@ await test('the name carries the columns half of the id, the app keeps the whole
     ...kicks, ...snares, ...closed, ...open, ...claps, ...perc
   ]).layout;
 
-  assert.equal(clapRow.id, 'ksco_llll');
-  assert.equal(shared.id, 'ksco_llpp');
+  assert.equal(clapRow.id, 'ksho_cccc');
+  assert.equal(shared.id, 'ksho_ccpp');
   assert.notEqual(clapRow.id, shared.id, 'the full id still tells them apart');
-  assert.equal(clapRow.columnsId, 'ksco');
-  assert.equal(shared.columnsId, 'ksco');
+  assert.equal(clapRow.columnsId, 'ksho');
+  assert.equal(shared.columnsId, 'ksho');
   assert.notDeepEqual(clapRow.roles, shared.roles, 'and they really are different grids');
 });
 
@@ -799,7 +799,7 @@ await test('generic hats take the closed-hat column, never one of their own', ()
   ];
   const { layout, kit } = generateRandomKit(genericPool);
   assert.ok(!layout.roles.includes('Hat'), 'Hat is never a role');
-  assert.equal(layout.id, 'kscp');
+  assert.equal(layout.id, 'kshp');
   const onClosedPads = kit.filter((_, i) => layout.roles[i] === 'CHH');
   assert.equal(onClosedPads.length, 4, 'one full-height closed column');
   assert.ok(onClosedPads.every(s => s?.category === 'Hat'), 'generic hats fill the CHH column');
@@ -812,7 +812,7 @@ await test('kicks, snares and generic hats give k s s ch', () => {
     ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat'))
   ];
   const { layout, empty, kit } = generateRandomKit(minimalPool);
-  assert.equal(layout.id, 'kssc');
+  assert.equal(layout.id, 'kssh');
   assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'CHH']);
   assert.deepEqual(layout.roles.slice(12), ['Kick', 'Snare', 'Snare', 'CHH']);
   // Nine samples cannot fill sixteen pads; nothing is invented to cover the gap.
@@ -829,7 +829,7 @@ await test('one labelled closed hat does not conjure an open-hat column', () => 
   ];
   const { layout } = generateRandomKit(almost);
   assert.ok(!layout.roles.includes('OHH'), 'no open hats in the library');
-  assert.equal(layout.id, 'kssc');
+  assert.equal(layout.id, 'kssh');
 });
 
 await test('labelled and generic closed hats share the closed column', () => {
@@ -847,7 +847,7 @@ await test('labelled and generic closed hats share the closed column', () => {
   let genericOnClosed = 0;
   for (let run = 0; run < 40; run++) {
     const { kit, layout, substituted } = generateRandomKit(library);
-    assert.equal(layout.id, 'ksco');
+    assert.equal(layout.id, 'ksho');
 
     layout.roles.forEach((role, pad) => {
       const category = kit[pad]?.category;
@@ -894,7 +894,7 @@ await test('no hats at all gives the snare the spare column', () => {
     ...Array.from({ length: 3 }, (_, i) => makeSample(`clap${i}.wav`, 'Clap'))
   ];
   const { layout } = generateRandomKit(noHats);
-  assert.equal(layout.id, 'kssl');
+  assert.equal(layout.id, 'kssc');
   assert.deepEqual(layout.roles.slice(0, 4), ['Kick', 'Snare', 'Snare', 'Clap']);
 });
 
@@ -919,7 +919,7 @@ await test('excluded hats do not influence the grid', () => {
   ];
   const { layout } = generateRandomKit(excluded);
   assert.ok(!layout.roles.includes('OHH'), 'an excluded open hat earned a column');
-  assert.equal(layout.id, 'kslc');
+  assert.equal(layout.id, 'ksch');
 });
 
 await test('all hats choke each other whatever the grid', async () => {

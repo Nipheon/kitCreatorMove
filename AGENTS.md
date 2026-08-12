@@ -252,10 +252,23 @@ real packs.
   matched least badly, and layout choice never looked at kicks or snares at all, so a
   percussion-only pack got a Kick/Snare/CHH/OHH grid and filled it by fallback.
 - **The grid id is a fingerprint of the arrangement.** One letter per category —
-  `k`ick, `s`nare, c`l`ap, `c`losed, `o`pen, `p`erc, `x` for other — as four column
-  letters, then `_` and four top-row letters if there is a shared row: `ksco`, `kssc`,
-  `ksco_llpp`. Equal ids mean every pad advertises the same role, which is the condition
+  `k`ick, `s`nare, `c`lap, closed `h`at, `o`pen, `p`erc, `x` for other — as four column
+  letters, then `_` and four top-row letters if there is a shared row: `ksho`, `kssh`,
+  `ksho_ccpp`. Equal ids mean every pad advertises the same role, which is the condition
   for swapping one drum rack for another on the device.
+
+  **`h` is the closed hat and `c` is the clap.** The first version had those the other way
+  about, with the clap on `l` — the one letter its name does not contain — so `ksco` had
+  to be decoded rather than read. The only hard constraint is that the seven letters stay
+  distinct; a test asserts the id is injective across all 127 non-empty category subsets,
+  which is what would catch a collision if someone adds a category later.
+
+  **This renamed every existing grid.** `ksco` is now `ksho`, `kssc` is `kssh`,
+  `ksco_llpp` is `ksho_ccpp`. Kits exported before the change carry the old id in their
+  preset name, so a `ksco` rack and a `ksho` rack already on a device are the same layout
+  under two names and will not look swappable. Nothing on the device breaks — the id is
+  a label, not something Move reads — and re-exporting a kit from the same library
+  produces the new id. Accepted deliberately as a one-off cost for a readable id.
 
   **Lowercase deliberately:** Move renders lowercase glyphs in fewer pixels than
   capitals, so a lowercase id survives further into a preset-name display that shows
@@ -263,9 +276,9 @@ real packs.
   it is the part that can afford to be cut.
 - **The exported name carries `columnsId`, not `id`.** Move shows roughly 9-11
   characters of a preset name, so the shared top row is left out and a kit exports as
-  `PRE-ksco-Suffix` (13 characters, which truncates into the decorative suffix rather
+  `PRE-ksho-Suffix` (13 characters, which truncates into the decorative suffix rather
   than into either identifying part). **`columnsId` is therefore a deliberately weaker
-  fingerprint than `id`:** `ksco_llll` and `ksco_llpp` both name as `ksco`, so two kits
+  fingerprint than `id`:** `ksho_cccc` and `ksho_ccpp` both name as `ksho`, so two kits
   sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
   worth the characters. Any check that two grids are genuinely identical must use `id`,
   which is what the settings panel shows.
