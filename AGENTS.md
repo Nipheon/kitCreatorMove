@@ -356,6 +356,30 @@ real packs.
   in one pool. A library with 3 CHH and 25 generic hats will usually show generic hats
   on every closed pad. If that ever needs to change, bias the draw — do not put `Hat`
   back in the preference chain, it does not work.
+- **The fallback chain is `ROLE_FALLBACKS`, nearest sound first — not `RANK`.** A pad
+  whose own pool runs dry walks its chain, and that chain used to be `RANK` order, which
+  begins `Kick, Snare`. So a clap pad with the claps gone took a kick: the least clap-like
+  thing in the library. `RANK` answers which category claims a column when the grid cannot
+  hold them all, which is a question about layout priority, not about what sounds least
+  wrong in place of something missing. One ordering cannot answer both.
+
+  Snare and clap cover for each other, the two hats cover for each other, percussion and
+  `Other` cover for each other, and **a kick is last for every role but its own** — it is
+  the most distinctive sound in a kit and the one a listener notices immediately in the
+  wrong place.
+
+  **The open-hat pad is the exception: it reaches `CHH` last, below even the kick.** The
+  closed-hat pool holds generic `Hat` samples as well as labelled closed ones and nothing
+  can ask it for only the labelled ones, so putting `CHH` first — the obvious nearest
+  sound — funnels unqualified hats onto open pads, which the hat pooling exists to avoid.
+  The old `RANK` chain satisfied that only by accident, having put `Kick` and `Snare`
+  ahead of `CHH` everywhere; drain those two and generic hats reached open pads anyway.
+  The existing hat test caught this the moment `CHH` moved up, and now pins it.
+
+  A second test asserts every chain is a permutation of the roles — exhaustive and
+  duplicate-free — so `take` can never run off the end into its deepest-pool guess while a
+  sensible category is still available. `preferenceChain` appends anything the table
+  misses, so adding a category cannot silently produce a short chain.
 - **`Perc` and `Other` are drawn from as one pool without being merged** (`DRAW_GROUPS` in
   `padLayout.ts`). Both keep their own column, their own letter in the grid id and their
   own breakdown row — they are separate roles — but a pad asking for either draws from

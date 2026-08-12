@@ -24,7 +24,7 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
 }
 
 import {
-  CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, DISPLAY_INDICES, DRUM_CELL_COLOR,
+  CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, chooseLayout, DISPLAY_INDICES, DRUM_CELL_COLOR,
   NO_SAMPLES_GRID_ID, PAD_COUNT
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
@@ -867,6 +867,53 @@ await test('one labelled closed hat does not conjure an open-hat column', () => 
   const { layout } = generateRandomKit(almost);
   assert.ok(!layout.roles.includes('OHH'), 'no open hats in the library');
   assert.equal(layout.id, 'kssh');
+});
+
+await test('a pad short of its own category falls back to the nearest sound', () => {
+  // The chain used to be RANK order, which begins Kick, Snare — so a clap pad with the
+  // claps gone took a kick, the least clap-like thing in the library.
+  const library: Sample[] = [
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 8 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH')),
+    makeSample('clap only.wav', 'Clap')
+  ];
+
+  for (let run = 0; run < 40; run++) {
+    const { kit, layout } = generateRandomKit(library);
+    const clapPads = layout.roles.flatMap((r, i) => (r === 'Clap' ? [i] : []));
+    assert.ok(clapPads.length > 1, 'the fixture needs more clap pads than claps');
+
+    const filled = clapPads.map(i => kit[i]?.category).filter(Boolean);
+    assert.ok(filled.includes('Clap'), 'the one real clap should still be used');
+    for (const category of filled) {
+      assert.notEqual(category, 'Kick', 'a kick is the worst stand-in for a clap');
+      assert.ok(category === 'Clap' || category === 'Snare', `clap pad held ${category}`);
+    }
+  }
+});
+
+await test('every fallback chain is complete and puts the kick last', () => {
+  const roles: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
+  const layout = chooseLayout(roles.map((c, i) => makeSample(`s${i}.wav`, c)));
+
+  layout.roles.forEach((role: Category, pad: number) => {
+    const chain = layout.preferences[pad];
+    assert.equal(chain[0], role, `pad ${pad} must ask for its own role first`);
+    // Exhaustive and duplicate-free, so take() can never run off the end of a chain
+    // into the deepest-pool guess while a sensible category is still available.
+    assert.deepEqual([...chain].sort(), [...roles].sort(), `pad ${pad} chain is not a permutation`);
+
+    // A kick is the most distinctive sound in a kit and the worst stand-in for anything
+    // else. The exception is the open-hat pad, which puts CHH below even the kick —
+    // that pool holds generic hats, which must not reach an open pad.
+    if (role !== 'Kick' && role !== 'OHH') {
+      assert.equal(chain[chain.length - 1], 'Kick', `pad ${pad} should reach a kick last`);
+    }
+  });
+
+  const ohhChain = layout.preferences[layout.roles.indexOf('OHH')];
+  assert.equal(ohhChain[ohhChain.length - 1], 'CHH', 'an open pad reaches the hat pool last');
 });
 
 await test('labelled and generic closed hats share the closed column', () => {

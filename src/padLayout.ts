@@ -67,6 +67,52 @@ const LETTER: Partial<Record<Category, string>> = {
   Kick: 'k', Snare: 's', Clap: 'c', CHH: 'h', OHH: 'o', Perc: 'p', Other: 'x'
 };
 
+/**
+ * What a pad reaches for when its own pool runs dry, nearest sound first.
+ *
+ * Deliberately **not** `RANK`. That answers which category claims a column when the grid
+ * cannot hold them all, which is a question about layout priority; this one is about what
+ * sounds least wrong in place of the thing that is missing. Reusing `RANK` for both meant
+ * every chain began `Kick, Snare, …`, so a clap pad with no claps left took a kick — the
+ * one sound in the library least like a clap.
+ *
+ * The shape of it: snare and clap cover for each other, the two hats cover for each
+ * other, percussion and `Other` cover for each other, and **a kick is last for every role
+ * but its own**. A kick is the most distinctive thing in a kit and the worst stand-in for
+ * anything else; it is also the one a listener notices immediately in the wrong place.
+ *
+ * Only roles need an entry — `Hat` and `Crash` are pooled away before a pad ever asks —
+ * and `preferenceChain` appends anything missing, so a new category cannot silently
+ * produce a chain that stops early.
+ */
+const ROLE_FALLBACKS: Partial<Record<Category, Category[]>> = {
+  Kick: ['Perc', 'Other', 'Snare', 'Clap', 'CHH', 'OHH'],
+  Snare: ['Clap', 'Perc', 'Other', 'CHH', 'OHH', 'Kick'],
+  Clap: ['Snare', 'Perc', 'Other', 'CHH', 'OHH', 'Kick'],
+  CHH: ['OHH', 'Perc', 'Other', 'Clap', 'Snare', 'Kick'],
+  /**
+   * `CHH` last, which looks wrong and is not. The closed-hat *pool* holds generic `Hat`
+   * samples as well as labelled closed ones and nothing can ask it for only the labelled
+   * ones, so putting it first — the obvious nearest sound — funnels unqualified hats onto
+   * open pads. That is the one thing the hat pooling is documented to avoid: an
+   * unqualified hat is assumed closed, so it is the wrong sound here. A test pins it.
+   *
+   * The old `RANK`-ordered chain satisfied this only by accident, having put `Kick` and
+   * `Snare` ahead of `CHH` for every role; drain those and generic hats reached open pads
+   * anyway. This makes it deliberate.
+   */
+  OHH: ['Perc', 'Other', 'Clap', 'Snare', 'Kick', 'CHH'],
+  Perc: ['Other', 'CHH', 'OHH', 'Clap', 'Snare', 'Kick'],
+  Other: ['Perc', 'CHH', 'OHH', 'Clap', 'Snare', 'Kick']
+};
+
+/** The pad's own role first, then the rest of the library nearest-sound first. */
+function preferenceChain(role: Category): Category[] {
+  const ordered = ROLE_FALLBACKS[role] ?? RANK.filter(c => c !== role);
+  const missing = RANK.filter(c => c !== role && !ordered.includes(c));
+  return [role, ...ordered, ...missing];
+}
+
 const SHORT_LABEL: Partial<Record<Category, string>> = {
   Kick: 'K', Snare: 'S', Clap: 'CL', CHH: 'CH', OHH: 'OH', Perc: 'PERC', Other: 'OTHER'
 };
@@ -279,7 +325,7 @@ export function deriveLayout(samples: Sample[]): PadLayout {
       columnsId: NO_SAMPLES_GRID_ID,
       label: 'No samples yet',
       roles,
-      preferences: roles.map(role => [role, ...RANK.filter(c => c !== role)])
+      preferences: roles.map(preferenceChain)
     };
   }
 
@@ -294,11 +340,11 @@ export function deriveLayout(samples: Sample[]): PadLayout {
   roles.push(...topRow);
 
   /**
-   * Every pad falls back through the rest of the library in rank order, so a pad whose
-   * own pool runs dry takes the next most sensible thing rather than dropping into
-   * `take`'s deepest-pool guess.
+   * Every pad falls back through the rest of the library nearest-sound first, so a pad
+   * whose own pool runs dry takes the closest thing rather than dropping into `take`'s
+   * deepest-pool guess.
    */
-  const preferences = roles.map(role => [role, ...RANK.filter(c => c !== role)]);
+  const preferences = roles.map(preferenceChain);
 
   return {
     id: gridId(columns, topRow),
