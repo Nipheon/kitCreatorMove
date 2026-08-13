@@ -1296,29 +1296,27 @@ export default function App() {
                     Magnific
                   </a>, used under its attribution licence.
                 </p>
-                <p className='text-text-light'>Other tools for kit creation:</p>
-                <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li>
-                    <a
-                      href='https://www.kit-maker.com/'
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-accent-yellow hover:underline font-medium'
-                    >
-                      Kit-Maker
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href='https://movestudio.reocities.xyz/'
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-accent-yellow hover:underline font-medium'
-                    >
-                      Move Studio
-                    </a>
-                  </li>
-                </ul>
+                <p className='text-text-light'>
+                  Check out{' '}
+                  <a
+                    href='https://www.kit-maker.com/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Kit Maker
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href='https://movestudio.reocities.xyz/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Move Studio
+                  </a>{' '}
+                  for other great tools for kit creation.
+                </p>
               </section>
             </div>
 
