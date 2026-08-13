@@ -62,12 +62,21 @@ const NAMES: string[] = [
   "snare_babymanuel5.wav"
 ];
 
-export function devSeedFolder(): SourceFolder {
+/**
+ * `count` fakes a library assembled from several packs, which is what the sidebar has to
+ * survive: twenty folders is enough to prove the list scrolls instead of pushing the
+ * counts and filters below the fold.
+ */
+export function devSeedFolders(count = 1): SourceFolder[] {
+  return Array.from({ length: count }, (_, n) => devSeedFolder(n));
+}
+
+export function devSeedFolder(index = 0): SourceFolder {
   const dir = '/neptunes kit';
   const samples: Sample[] = NAMES.map((name, i) => {
     const category = categorizeSample(name, dir);
     return {
-      id: `seed-${i}`,
+      id: `seed-${index}-${i}`,
       file: new File([name], name, { type: 'audio/wav' }),
       name,
       category,
@@ -77,5 +86,10 @@ export function devSeedFolder(): SourceFolder {
     };
   });
 
-  return { id: 'seed-folder', name: 'neptunes kit (dev seed)', samples, isEnabled: true };
+  return {
+    id: `seed-folder-${index}`,
+    name: index === 0 ? 'neptunes kit (dev seed)' : `neptunes kit ${index + 1} (dev seed)`,
+    samples,
+    isEnabled: true
+  };
 }

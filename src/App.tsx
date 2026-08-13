@@ -93,15 +93,19 @@ export default function App() {
    */
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    if (!new URLSearchParams(window.location.search).has('seed')) return;
+    const seed = new URLSearchParams(window.location.search).get('seed');
+    if (seed === null) return;
+    // `?seed=20` fakes twenty folders, which is how the sidebar's scrolling gets tested.
+    const count = Math.min(Math.max(parseInt(seed || '1', 10) || 1, 1), 50);
     let cancelled = false;
-    import('./devSeed').then(({ devSeedFolder }) => {
+    import('./devSeed').then(({ devSeedFolders }) => {
       if (cancelled) return;
-      const folder = devSeedFolder();
-      setSourceFolders([folder]);
-      setKitResult(generateRandomKit(folder.samples, [], { skipLoops: true, skipNonDrums: true }));
-      setKitPrefix(prefixForFolders([folder]));
-      setKitSuffix(generateKitName(folder.name).suffix);
+      const folders = devSeedFolders(count);
+      const samples = folders.flatMap(f => f.samples);
+      setSourceFolders(folders);
+      setKitResult(generateRandomKit(samples, [], { skipLoops: true, skipNonDrums: true }));
+      setKitPrefix(prefixForFolders(folders));
+      setKitSuffix(generateKitName(folders[0].name).suffix);
     });
     return () => { cancelled = true; };
   }, []);
@@ -800,13 +804,23 @@ export default function App() {
       </header>
 
       <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden'>
-        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
-          <div className='mb-8'>
-            <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4'>Source Folders</h2>
-            <div className='border-2 border-dashed border-border-main rounded-lg p-4 text-center mb-4'>
-              <div className='text-2xl mb-2 text-text-dim'>+</div>
-              <p className='text-sm text-text-muted'>Drag sample folders anywhere on this window</p>
-            </div>
+        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-hidden'>
+          {/* Heading, drop zone, list and the count block are siblings of the sidebar on
+              purpose, so the list is the only one that gives up room: it takes what is
+              left and scrolls, and twenty folders can never push the sample count or the
+              filters below the fold.
+
+              Wrapping the first three in a `flex-1 min-h-0` block was the previous
+              attempt. The block shrank below its own contents on a short window and the
+              heading and drop zone painted over the count beneath; capping the list
+              instead stopped the overlap but put the count off screen again. Only one of
+              them may shrink, and it has to be the list. */}
+          <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4 shrink-0'>Source Folders</h2>
+          <div className='border-2 border-dashed border-border-main rounded-lg p-4 text-center mb-4 shrink-0'>
+            <div className='text-2xl mb-2 text-text-dim'>+</div>
+            <p className='text-sm text-text-muted'>Drag sample folders anywhere on this window</p>
+          </div>
+          <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
             {sourceFolders.map(folder => (
               <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
                 <div className='bg-surface-pad px-3 py-2 rounded flex items-center justify-between group'>
@@ -836,7 +850,7 @@ export default function App() {
               <div className='text-sm text-text-subtle text-center mt-4'>No folders loaded</div>
             )}
           </div>
-          <div className='mt-auto space-y-2'>
+          <div className='mt-auto shrink-0 space-y-2'>
             <div className='text-xs text-text-muted uppercase tracking-wider font-medium px-1'>
               {sourceFolders.length > 0 ? `${activeFoldersCount} folder(s) used` : 'Waiting for samples'}
             </div>
@@ -903,6 +917,29 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </div>
+            {/* Beside the count they move: switching either one changes "usable samples"
+                immediately, and they used to sit in the export panel on the far side of
+                the window from the number they explain. */}
+            <div className='space-y-2 pt-1'>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={skipLoops}
+                  onChange={(e) => toggleSkipLoops(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
+              </label>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={skipNonDrums}
+                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
+              </label>
             </div>
           </div>
         </aside>
@@ -1039,6 +1076,21 @@ export default function App() {
               </p>
             </div>
 
+            <div>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={trimSilence}
+                  onChange={(e) => setTrimSilence(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Trim silence (start & end)
+              </label>
+              <p className='text-sm leading-snug text-text-subtle'>
+                Applied on export only — pads always audition the original file.
+              </p>
+            </div>
+
             {/* Directly under the slider it belongs to: the batch size decides what this
                 button produces, and reading the count then hunting for the action at the
                 far end of the panel put them out of sight of each other. */}
@@ -1056,45 +1108,6 @@ export default function App() {
                 {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
                 {isExporting ? 'Building Bundle…' : 'Export To Move'}
               </button>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipLoops}
-                  onChange={(e) => toggleSkipLoops(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
-              </label>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipNonDrums}
-                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
-              </label>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={trimSilence}
-                  onChange={(e) => setTrimSilence(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Trim silence (start & end)
-              </label>
-              <p className='text-sm leading-snug text-text-subtle'>
-                Applied on export only — pads always audition the original file.
-              </p>
             </div>
 
             <div className='pt-6 border-t border-border-dark space-y-1.5'>

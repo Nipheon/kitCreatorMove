@@ -700,6 +700,25 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   The export progress line moved with it. Error and notice banners still trail the panel:
   they report drops and folder loads as well as exports, so they are panel-level, not
   button-level.
+- **The sidebar's folder list is the only part of it that shrinks.** Heading, drop zone,
+  list and the count block are siblings of the `aside`; the list takes what is left
+  (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`) and scrolls, so twenty folders can
+  never push the sample count or the filters below the fold — they are what you watch
+  while adding folders.
+
+  Two earlier shapes failed and are worth not repeating. Scrolling the whole `aside` put
+  the count a full screen out of view at twenty folders. Wrapping heading, drop zone and
+  list in a `flex-1 min-h-0` block let that block shrink below its own contents on a short
+  window, and its children painted over the count beneath — a flex child that can shrink
+  past its content will overlap its siblings, it does not clip itself. Capping the list
+  height instead stopped the overlap and put the count off screen again.
+
+  Below about 700px of window height with twenty folders the sidebar does scroll as a
+  whole. Everything is reachable and nothing overlaps; there is simply not enough room.
+- **Skip Loops and Skip Non-Drums live in the left sidebar, under the sample count they
+  change; Trim Silence sits directly above Export To Move.** The first two are library
+  filters and their effect shows in the count immediately above them, while trimming is an
+  export setting and belongs with the button that performs it.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 
   **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because
