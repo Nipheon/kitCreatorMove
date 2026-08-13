@@ -1234,12 +1234,10 @@ export default function App() {
                   your downloads folder. Closing the tab is all it takes to clear it — nothing
                   was stored anywhere else.
                 </p>
-                <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>No account, no sign-in:</strong> Nothing about you is asked for, so there is nothing to hold on to.</li>
-                  <li><strong className='text-text-bright'>Your originals are untouched:</strong> The app only ever reads the files you drop. Trimming happens on the copies going into the zip, never on the sample sitting in your folder.</li>
-                  <li><strong className='text-text-bright'>Nothing carries over:</strong> Loaded folders, kits and settings live in the page for as long as the tab is open. Reload and you start from an empty grid.</li>
-                  <li><strong className='text-text-bright'>Visitor counting:</strong> The page uses Cloudflare Web Analytics, which counts page views without cookies and without tracking people between sites. It sees nothing about your samples, your kits or your exports.</li>
-                </ul>
+                <p className='text-text-subtle'>
+                  The one exception is ordinary web analytics: the page counts visits, the same
+                  as any website. It records nothing about your samples, your kits or your files.
+                </p>
               </section>
 
               <section className='space-y-2.5'>
