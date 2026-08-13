@@ -1225,7 +1225,45 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Source Code &amp; Contact</h3>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li>
+                    <strong className='text-text-bright'>Repository:</strong>{' '}
+                    <a
+                      href='https://github.com/Nipheon/kitCreatorMove'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      github.com/Nipheon/kitCreatorMove
+                    </a>{' '}
+                    — the whole app, under the BSD Zero Clause licence: do what you like
+                    with it, no attribution needed.
+                  </li>
+                  <li>
+                    <strong className='text-text-bright'>Bugs and ideas:</strong>{' '}
+                    <a
+                      href='https://github.com/Nipheon/kitCreatorMove/issues'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      open an issue
+                    </a>
+                    . A sample pack that lays out oddly is the most useful kind of report —
+                    the folder names alone usually explain it.
+                  </li>
+                  <li>
+                    <strong className='text-text-bright'>Contact:</strong>{' '}
+                    <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>
+                      2266715+Nipheon@users.noreply.github.com
+                    </code>
+                  </li>
+                </ul>
+              </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a
