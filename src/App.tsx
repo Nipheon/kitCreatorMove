@@ -1165,7 +1165,18 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
-                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export directly to your hardware.
+                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export a bundle you can upload to your hardware.
+                </p>
+                <p>
+                  <strong className='text-text-bright'>Your samples never leave your computer.</strong> There is no
+                  server and no upload: the files are read, categorised, trimmed and packaged
+                  into a zip by your browser, and the finished bundle is handed straight back to
+                  your downloads folder. Closing the tab is all it takes to clear it — nothing
+                  was stored anywhere else.
+                </p>
+                <p className='text-text-subtle'>
+                  The one exception is ordinary web analytics: the page counts visits, the same
+                  as any website. It records nothing about your samples, your kits or your files.
                 </p>
               </section>
 
