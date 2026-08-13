@@ -1255,9 +1255,12 @@ export default function App() {
                   </li>
                   <li>
                     <strong className='text-text-bright'>Contact:</strong>{' '}
-                    <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>
+                    <a
+                      href='mailto:2266715+Nipheon@users.noreply.github.com'
+                      className='text-accent-yellow hover:underline font-mono text-sm'
+                    >
                       2266715+Nipheon@users.noreply.github.com
-                    </code>
+                    </a>
                   </li>
                 </ul>
               </section>
