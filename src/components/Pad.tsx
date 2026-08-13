@@ -246,11 +246,11 @@ export const Pad: React.FC<PadProps> = ({
     >
       <div className='flex w-full justify-between items-center'>
         <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
-          <span className='category-ink text-sm font-bold shrink-0'>
+          <span className='pad-number category-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
-            <span className='text-xs font-mono text-text-muted bg-surface-header px-1 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
+            <span className='pad-hotkey text-xs font-mono text-text-muted bg-surface-header px-1 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
               {hotkey}
             </span>
           )}
@@ -268,7 +268,7 @@ export const Pad: React.FC<PadProps> = ({
           {sample ? sample.category : expectedCategory}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
-          <div className='text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
+          <div className='pad-name text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
             {isSpinning ? (
               <span className='category-ink flex items-center gap-1 animate-pulse'>
                 <Loader2 className='category-ink w-3.5 h-3.5 animate-spin shrink-0' />

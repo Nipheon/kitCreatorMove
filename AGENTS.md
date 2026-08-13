@@ -611,11 +611,17 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   straight over the sidebar. Measured, not guessed — `flex-1` on the section is
   `lg:` only for that reason.
 
-  **A pad shrinks with the stage, so its contents scale in steps** (container queries on
-  `.pad-tile`): under 130px the Lock and Shuffle captions go and the icons carry it, under
-  110px the category line goes too and the action bar, its reserved space and the tile
-  padding all shrink together. The three have to move as one — shrinking only the bar
-  leaves the sample name still clipping into it.
+  **A pad shrinks with the stage, so its type scales with it** (container queries on
+  `.pad-tile`). Every text size is `clamp(floor, Ncqi, ceiling)`, where `cqi` is a
+  percentage of the pad's *content* box — padding and border already subtracted, so a
+  215px pad queries against ~181px. The coefficients put every clamp at its ceiling from
+  about a 165px pad upward, which is why large pads read exactly as they did before the
+  grid became flexible.
+
+  Hiding is the last resort, not the first: captions go under 104px and the category line
+  under 88px, both far below where they used to go, because shrinking gets there first.
+  Under 88px the action bar, its reserved space and the tile padding shrink together —
+  move one without the others and the sample name still clips into the bar.
 
   `Pad` fills its cell (`w-full h-full`) instead of declaring `aspect-square`: the grid is
   a square with `grid-rows-4`, so the cells are already square and a pad that sized itself

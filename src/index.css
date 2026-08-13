@@ -289,7 +289,46 @@
     container-type: inline-size;
   }
 
-  @container (max-width: 130px) {
+  /*
+   * Type scales with the pad instead of jumping between fixed sizes. `cqi` is a percentage
+   * of the pad's own width, so a 215px pad reads exactly as before — every clamp sits at
+   * its maximum there — and a 100px pad shrinks its text rather than dropping it.
+   *
+   * That is what buys the lower hide thresholds below: the labels only go once shrinking
+   * them further would make them unreadable, not as soon as they stop fitting at 12px.
+   */
+  /*
+   * `cqi` is a percentage of the pad's *content* box — padding and border are already
+   * subtracted — so a 215px pad queries against ~181px. The coefficients are set from
+   * that: 10.5cqi reaches the 14px maximum at about a 165px pad and falls away below it,
+   * which keeps every size from a 100px pad upward reading as one scale rather than
+   * snapping between two.
+   */
+  .pad-number {
+    font-size: clamp(0.625rem, 10.5cqi, 0.875rem);
+  }
+
+  .pad-hotkey {
+    font-size: clamp(0.5rem, 9cqi, 0.75rem);
+  }
+
+  .pad-category {
+    font-size: clamp(0.5625rem, 10.5cqi, 0.875rem);
+  }
+
+  .pad-name {
+    font-size: clamp(0.625rem, 10.5cqi, 0.875rem);
+  }
+
+  .pad-action-label {
+    font-size: clamp(0.5rem, 9cqi, 0.75rem);
+  }
+
+  .pad-choke-badge {
+    font-size: clamp(0.5rem, 9cqi, 0.75rem);
+  }
+
+  @container (max-width: 104px) {
     .pad-action-label {
       display: none;
     }
@@ -303,7 +342,7 @@
  * already says what the grid asked for, and the number and hotkey stay legible.
  */
 @supports (container-type: inline-size) {
-  @container (max-width: 110px) {
+  @container (max-width: 88px) {
     .pad-category {
       display: none;
     }
