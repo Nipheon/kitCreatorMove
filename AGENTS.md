@@ -715,6 +715,16 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 
   Below about 700px of window height with twenty folders the sidebar does scroll as a
   whole. Everything is reachable and nothing overlaps; there is simply not enough room.
+- **Skip Loops and Skip Non-Drums do not re-roll the kit.** They change the pool the
+  *next* kit draws from. They used to regenerate immediately so the toggle would not look
+  inert; the feedback now sits directly above them instead — the usable count and the
+  per-type figures move the instant either is clicked. A kit generated before the filter
+  changed can therefore still hold a sample the filter would now exclude, which is the
+  intended trade: nothing is taken away from under you mid-listen.
+- **There is no drop zone in the sidebar, only a line of text.** `handleDrop` is on the
+  app root, so the whole window has always been the drop target; the bordered box just
+  claimed vertical space the folder list wanted while implying the drop had to land inside
+  it. Drag feedback comes from the full-window overlay, not from the sidebar.
 - **Skip Loops and Skip Non-Drums live inside the Usable Samples card, between the count
   and the Breakdown by Type list; Trim Silence sits directly above Export To Move.** Both
   filters change the total directly above them and the per-type figures directly below, so

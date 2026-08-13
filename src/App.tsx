@@ -616,22 +616,19 @@ export default function App() {
     }
   };
 
-  // Regenerates immediately, otherwise the toggle looks inert.
-  const toggleSkipLoops = (next: boolean) => {
-    setSkipLoops(next);
-    if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipLoops: next }));
-    }
-  };
+  /**
+   * These two change the pool the *next* kit is drawn from; they deliberately do not
+   * re-roll the current one. They used to, so the toggle would not look inert — but the
+   * feedback now sits right above them: the usable count and the per-type figures move
+   * the instant either is clicked, without throwing away the kit you were listening to.
+   *
+   * A kit generated before the filter changed can therefore still hold a sample the
+   * filter would now exclude. That is the intended trade: nothing is silently removed
+   * from under you, and the next Generate applies the filter.
+   */
+  const toggleSkipLoops = (next: boolean) => setSkipLoops(next);
 
-  const toggleSkipNonDrums = (next: boolean) => {
-    setSkipNonDrums(next);
-    if (samples.length > 0) {
-      setKitResult(
-        generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipNonDrums: next })
-      );
-    }
-  };
+  const toggleSkipNonDrums = (next: boolean) => setSkipNonDrums(next);
 
   /**
    * Switches a whole type off. Regenerates immediately for the same reason the other
@@ -816,10 +813,12 @@ export default function App() {
               instead stopped the overlap but put the count off screen again. Only one of
               them may shrink, and it has to be the list. */}
           <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4 shrink-0'>Source Folders</h2>
-          <div className='border-2 border-dashed border-border-main rounded-lg p-4 text-center mb-4 shrink-0'>
-            <div className='text-2xl mb-2 text-text-dim'>+</div>
-            <p className='text-sm text-text-muted'>Drag sample folders anywhere on this window</p>
-          </div>
+          {/* A line, not a drop zone. The whole window is the drop target — `handleDrop`
+              sits on the app root — so a bordered box here only claimed vertical space
+              the folder list wanted, while implying the drop had to land inside it. */}
+          <p className='text-sm text-text-subtle mb-4 shrink-0'>
+            Drag sample folders anywhere on this window.
+          </p>
           <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
             {sourceFolders.map(folder => (
               <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
@@ -1086,7 +1085,7 @@ export default function App() {
                   onChange={(e) => setTrimSilence(e.target.checked)}
                   className='accent-accent-yellow w-4 h-4'
                 />
-                Trim silence (start & end)
+                Trim silence below -60 dBFS (start &amp; end)
               </label>
               <p className='text-sm leading-snug text-text-subtle'>
                 Applied on export only — pads always audition the original file.
