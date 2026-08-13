@@ -635,7 +635,9 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   **Do not lower the 12px floor.** An earlier version floored at 9-10px: it measured fine,
   fit without clipping, and was too small to read. The hotkey and choke chips are the one
   exception, floored at 10px — they are labels on a label, and holding them at 12px inside
-  a 100px pad crowds out the sample name beside them.
+  a 100px pad crowds out the sample name beside them. Under a 130px content width the
+  whole header row is pinned at 11px instead, which is what makes the choke badge's word
+  fit; see the badge entry below.
 
   Hiding is the last resort, not the first: captions go under 104px of content width and
   the category line under 88px, because shrinking gets there first.
