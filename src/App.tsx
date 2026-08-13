@@ -85,6 +85,27 @@ export default function App() {
   /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
   const readyWaitCleanup = useRef<(() => void) | null>(null);
 
+  /**
+   * Dev convenience: `?seed` on a dev server fills the grid from a real pack's filenames,
+   * so the layout can be judged with content in it. Both guards matter — the env check is
+   * what lets the bundler drop the seed module from a production build, and the query
+   * param is what keeps a normal dev session starting empty like the real thing.
+   */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (!new URLSearchParams(window.location.search).has('seed')) return;
+    let cancelled = false;
+    import('./devSeed').then(({ devSeedFolder }) => {
+      if (cancelled) return;
+      const folder = devSeedFolder();
+      setSourceFolders([folder]);
+      setKitResult(generateRandomKit(folder.samples, [], { skipLoops: true, skipNonDrums: true }));
+      setKitPrefix(prefixForFolders([folder]));
+      setKitSuffix(generateKitName(folder.name).suffix);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // Mounted for the app's lifetime: pads buffer long before any preview is requested,
   // so the registry has to be listening before startPreview is ever called.
   useEffect(() => {

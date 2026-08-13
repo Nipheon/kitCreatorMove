@@ -321,6 +321,14 @@
     .pad-action-label {
       display: none;
     }
+
+    /* The choke badge is a whole word ("Choke 1") in a header row that also holds the pad
+       number, the hotkey and the play indicator. Below this width it stops fitting and
+       pushes the indicator out through the right edge — visible only on hat pads, which
+       is why an empty grid looked fine. */
+    .pad-choke-badge {
+      display: none;
+    }
   }
 }
 

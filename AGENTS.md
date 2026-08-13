@@ -64,6 +64,20 @@ what it describes. The Preset naming section was dropped in `9828101` while
 against the code at the time. An entry that is merely plausible is the failure mode this
 file exists to prevent.
 
+## Looking at the app with content in it
+
+`npm run dev` then **`http://localhost:3000/?seed`** fills the grid from `src/devSeed.ts`:
+47 real filenames from a real pack, categorised through the same pipeline as a genuine
+drop, with a few milliseconds of silence as the audio so the pads have something loadable.
+
+Both guards are load-bearing. `import.meta.env.DEV` is what lets the bundler drop the seed
+from a production build — verified by grepping `dist/` for the folder name — and the query
+param is what keeps an ordinary dev session starting empty, like the real thing.
+
+**Judge layout changes with the seed on.** An empty grid hides whole classes of problem:
+the choke badge only renders on hat pads, so a header row that overflowed at 125px looked
+perfectly fine until a kit with hats was in it.
+
 ## Before you report success
 
 ```
