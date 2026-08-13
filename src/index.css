@@ -317,6 +317,41 @@
     font-size: clamp(0.625rem, 9cqi, 0.75rem);
   }
 
+  /*
+   * The header row carries the pad number, the hotkey chip, the choke badge and the play
+   * indicator, and it is the choke badge's word that runs out of room first. Rather than
+   * drop the word at 137px pads — an ordinary window at ordinary zoom — the whole row goes
+   * to 11px and sheds its padding and letter-spacing, which buys the ~25px the word needs.
+   */
+  @container (max-width: 130px) {
+    .pad-number,
+    .pad-hotkey,
+    .pad-choke-badge {
+      font-size: 0.6875rem;
+      letter-spacing: 0;
+    }
+
+    .pad-hotkey,
+    .pad-choke-badge {
+      padding-inline: 0.125rem;
+    }
+
+    /* The word costs about 25px and the row only had 14 spare. The rest comes from the
+       gaps and from dropping the play indicator, which is the one thing here that says
+       nothing on its own: a playing pad already takes the accent border, the glow and the
+       scale, so the dot is a third telling of the same fact.
+       Measure against the pad's PADDING box, not its border box — 16px of padding hid an
+       11px overflow from a border-box check while the dot sat outside the content area. */
+    .pad-header,
+    .pad-header-group {
+      gap: 0.125rem;
+    }
+
+    .pad-indicator {
+      display: none;
+    }
+  }
+
   @container (max-width: 104px) {
     .pad-action-label {
       display: none;
@@ -328,9 +363,7 @@
        badge's border and colour already say what it is, and the group number is the part
        that differs between pads. Hiding the badge outright was the first attempt and took
        it away at ~125px pads, which is an ordinary window on an ordinary display. */
-    .pad-choke-word {
-      display: none;
-    }
+
   }
 }
 
@@ -342,7 +375,8 @@
  */
 @supports (container-type: inline-size) {
   @container (max-width: 88px) {
-    .pad-category {
+    .pad-category,
+    .pad-choke-word {
       display: none;
     }
 

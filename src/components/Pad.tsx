@@ -244,8 +244,8 @@ export const Pad: React.FC<PadProps> = ({
           : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
-      <div className='flex w-full justify-between items-center'>
-        <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
+      <div className='pad-header flex w-full justify-between items-center'>
+        <div className='pad-header-group flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
           <span className='pad-number category-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
@@ -263,7 +263,7 @@ export const Pad: React.FC<PadProps> = ({
             </span>
           )}
         </div>
-        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
+        <div className={`pad-indicator w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
       <div className='pad-body w-full mt-auto mb-8 sm:mb-9'>

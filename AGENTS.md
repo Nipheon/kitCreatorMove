@@ -638,10 +638,20 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   a 100px pad crowds out the sample name beside them.
 
   Hiding is the last resort, not the first: captions go under 104px of content width and
-  the category line under 88px, because shrinking gets there first. The choke badge keeps
-  its border and its group number at every size and drops only the word "Choke" under
-  104px — hiding the badge outright was the first attempt and took choke information away
-  at ~125px pads, which is an ordinary window on an ordinary display. Under 88px the action
+  the category line under 88px, because shrinking gets there first.
+
+  **The choke badge keeps its word down to an 88px content width**, which took three
+  attempts and is worth not undoing. Hiding the badge outright lost choke information at
+  ~125px pads — an ordinary window at ordinary zoom. Keeping only the number lost the
+  word at the same size. What finally fits it: the whole header row drops to 11px with no
+  letter-spacing under 130px, the gaps tighten, and the play indicator is hidden — it is
+  the one element there that says nothing on its own, since a playing pad already takes
+  the accent border, the glow and the scale.
+
+  **Measure pad contents against the pad's PADDING box, not its border box.** 16px of
+  padding hid an 11px overflow from a border-box check, and the indicator sat outside the
+  content area while the check reported clean. `.pad-actions` is the exception — it is
+  full-bleed by design, so exclude it from any such check. Under 88px the action
   bar, its reserved space and the tile padding shrink together — move one without the
   others and the sample name still clips into the bar.
 
