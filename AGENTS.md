@@ -593,7 +593,21 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   fill, and puts accent-coloured text on an accent-coloured background in
   `.pad-lock-active`. That fallback always wins, because it is emitted after anything
   hand-written in the same rule. Do not move them out of the block.
-- **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
+- **The pad grid sizes itself to the space left over, not to a fixed 700px.** The middle
+  column is a flex column: a `.pad-stage` that takes the leftover height, with the
+  controls row below it, and `.pad-grid` inside sized `min(100cqw, 100cqh)` so the square
+  follows whichever of the stage's dimensions is scarcer. It was `max-w-[700px]
+  aspect-square`, which overflowed a short window and refused to grow on a large one.
+
+  **Container query units, not viewport units.** The stage is what remains after the
+  header, both sidebars and the controls row; nothing here can subtract those from `100vh`
+  without going stale the first time one of them changes height. The plain
+  `width: 100%; aspect-ratio: 1` rule stands on its own and is what runs if
+  `container-type: size` is unsupported — same `@supports` gating as the `color-mix` rules.
+
+  `Pad` fills its cell (`w-full h-full`) instead of declaring `aspect-square`: the grid is
+  a square with `grid-rows-4`, so the cells are already square and a pad that sized itself
+  would fight the stage for the height.
 - **`index.html` carries the whole SEO surface**: description, canonical, Open Graph and
   Twitter tags, and a `WebApplication` JSON-LD block. The app is client-rendered, so a
   crawler that runs no JavaScript sees only what is in that file — before this it saw a

@@ -248,3 +248,32 @@
 @media (prefers-reduced-motion: reduce) {
   .toast-enter { animation: none; }
 }
+
+/*
+ * The pad grid is a square that fits its stage, sized from whichever of the stage's two
+ * dimensions is scarcer. It replaced `max-w-[700px] aspect-square`, which was cut off on
+ * a short window and refused to grow on a large one.
+ *
+ * Container query units rather than viewport units on purpose: the stage is what is left
+ * after the header, the sidebars and the controls row, and none of those have a height
+ * this file could subtract from 100vh without going stale the moment one of them changes.
+ *
+ * The plain rule below runs everywhere and keeps the old width-driven behaviour; the
+ * @supports block is what makes the height count too. Same gating as the color-mix rules.
+ */
+.pad-grid {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+@supports (container-type: size) {
+  .pad-stage {
+    container-type: size;
+  }
+
+  .pad-grid {
+    width: min(100cqw, 100cqh);
+    height: min(100cqw, 100cqh);
+    aspect-ratio: auto;
+  }
+}

@@ -886,23 +886,29 @@ export default function App() {
           </div>
         </aside>
 
-        <section className='flex-1 w-full bg-surface-darkest flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto min-h-0'>
-          <div className='grid grid-cols-4 gap-3 sm:gap-4 mb-8 w-full max-w-[700px] aspect-square'>
-            {DISPLAY_INDICES.map((index) => (
-              <Pad
-                key={index}
-                index={index}
-                sample={kit[index]}
-                expectedCategory={kitResult.layout.roles[index]}
-                chokeGroup={chokeGroupFor(kit[index])}
-                isLocked={lockedPads[index]}
-                onToggleLock={() => toggleLock(index)}
-                onExclude={handleExcludeSample}
-                onReroll={rerollPad}
-                auditionToken={audition.index === index ? audition.token : 0}
-                isSpinning={spinningPads[index]}
-              />
-            ))}
+        <section className='flex-1 w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 min-h-0'>
+          {/* The stage takes whatever vertical space is left after the controls, and the
+              grid sizes itself to the smaller of the stage's two dimensions — so it is
+              never cut off on a short window and keeps growing on a large one. The old
+              fixed 700px square did both wrongly. */}
+          <div className='pad-stage w-full flex-1 min-h-[min(86vw,60vh)] lg:min-h-0 grid place-items-center'>
+            <div className='pad-grid grid grid-cols-4 grid-rows-4 gap-2 sm:gap-3'>
+              {DISPLAY_INDICES.map((index) => (
+                <Pad
+                  key={index}
+                  index={index}
+                  sample={kit[index]}
+                  expectedCategory={kitResult.layout.roles[index]}
+                  chokeGroup={chokeGroupFor(kit[index])}
+                  isLocked={lockedPads[index]}
+                  onToggleLock={() => toggleLock(index)}
+                  onExclude={handleExcludeSample}
+                  onReroll={rerollPad}
+                  auditionToken={audition.index === index ? audition.token : 0}
+                  isSpinning={spinningPads[index]}
+                />
+              ))}
+            </div>
           </div>
 
           <Toast

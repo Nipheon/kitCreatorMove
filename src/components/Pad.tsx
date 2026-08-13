@@ -236,7 +236,7 @@ export const Pad: React.FC<PadProps> = ({
       onClick={sample ? handlePlay : undefined}
       onKeyDown={sample ? handleKeyDown : undefined}
       style={padStyle}
-      className={`group relative overflow-hidden w-full aspect-square bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
+      className={`group relative overflow-hidden w-full h-full min-h-0 bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'pad-tinted pad-glow border-[var(--category-accent)] scale-[0.98]'
