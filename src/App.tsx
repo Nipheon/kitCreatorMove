@@ -865,6 +865,31 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Inside the card, between the count and the breakdown: both filters change
+                  the number directly above them and the per-type figures directly below,
+                  so this is the one place where cause and effect are both on screen.
+                  Type matches the card's own rows — text-sm, uppercase, medium. */}
+              <div className='pt-3 border-t border-border-dark space-y-1.5'>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase font-medium cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={skipLoops}
+                    onChange={(e) => toggleSkipLoops(e.target.checked)}
+                    className='accent-accent-yellow w-3.5 h-3.5'
+                  />
+                  Skip loops{loopCount > 0 ? ` (${loopCount})` : ''}
+                </label>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase font-medium cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={skipNonDrums}
+                    onChange={(e) => toggleSkipNonDrums(e.target.checked)}
+                    className='accent-accent-yellow w-3.5 h-3.5'
+                  />
+                  Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount})` : ''}
+                </label>
+              </div>
+
               {samples.length > 0 && (
                 <div className='pt-3 border-t border-border-dark space-y-1.5'>
                   <div className='text-xs text-text-muted uppercase tracking-wider font-medium mb-2'>
@@ -917,29 +942,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
-            {/* Beside the count they move: switching either one changes "usable samples"
-                immediately, and they used to sit in the export panel on the far side of
-                the window from the number they explain. */}
-            <div className='space-y-2 pt-1'>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipLoops}
-                  onChange={(e) => toggleSkipLoops(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
-              </label>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipNonDrums}
-                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
-              </label>
             </div>
           </div>
         </aside>

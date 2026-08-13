@@ -715,10 +715,13 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 
   Below about 700px of window height with twenty folders the sidebar does scroll as a
   whole. Everything is reachable and nothing overlaps; there is simply not enough room.
-- **Skip Loops and Skip Non-Drums live in the left sidebar, under the sample count they
-  change; Trim Silence sits directly above Export To Move.** The first two are library
-  filters and their effect shows in the count immediately above them, while trimming is an
-  export setting and belongs with the button that performs it.
+- **Skip Loops and Skip Non-Drums live inside the Usable Samples card, between the count
+  and the Breakdown by Type list; Trim Silence sits directly above Export To Move.** Both
+  filters change the total directly above them and the per-type figures directly below, so
+  that slot is the only place where cause and effect are both on screen. They carry the
+  card's own type — `text-sm`, uppercase, medium — not the export panel's. Trimming is an
+  export setting rather than a library filter, which is why it stays with the button that
+  performs it.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 
   **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because
