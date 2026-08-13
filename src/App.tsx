@@ -1085,10 +1085,11 @@ export default function App() {
                   onChange={(e) => setTrimSilence(e.target.checked)}
                   className='accent-accent-yellow w-4 h-4'
                 />
-                Trim silence below -60 dBFS (start &amp; end)
+                Trim silence (start &amp; end)
               </label>
               <p className='text-sm leading-snug text-text-subtle'>
-                Applied on export only — pads always audition the original file.
+                Cuts anything below -60 dBFS from each end. Applied on export only — pads
+                always audition the original file.
               </p>
             </div>
 
