@@ -628,6 +628,12 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
 
   Trim Silence keeps a single line beneath it — "Applied on export only — pads always audition the original file." That is not a description of the option, it answers *when* it takes effect, which the checkbox implies wrongly: the toggle sits in the panel while listening, so it reads as though it changes what the pads play. It does not. `trimSilence` is only ever passed to `exportKitZip`/`exportBatchKits`; `Pad.tsx` has no trimming and always plays the original file.
 - **Font Sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text, where there is room for it. The pad tile is the documented exception and its sizes are deliberate, not drift: Lock and Shuffle use `text-pad-action` (12px), the hotkey badge `text-xs`, and the choke badge `text-[10px] sm:text-xs`. Those three sit in a fixed-size tile alongside the sample name, and at `text-sm` they pushed the name out of the row. Do not "restore" them to 14px.
+- **Export To Move sits directly under the Batch Export Amount slider**, not pinned to
+  the bottom of the settings panel. The slider decides what the button produces, and with
+  the button at the far end of a scrolling panel the two were never on screen together.
+  The export progress line moved with it. Error and notice banners still trail the panel:
+  they report drops and folder loads as well as exports, so they are panel-level, not
+  button-level.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 
   **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because

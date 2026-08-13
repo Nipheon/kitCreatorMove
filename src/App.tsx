@@ -1006,6 +1006,25 @@ export default function App() {
               </p>
             </div>
 
+            {/* Directly under the slider it belongs to: the batch size decides what this
+                button produces, and reading the count then hunting for the action at the
+                far end of the panel put them out of sight of each other. */}
+            <div>
+              {isExporting && exportProgress && exportProgress.total > 1 && (
+                <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
+                  Kit {Math.min(exportProgress.done + 1, exportProgress.total)} of {exportProgress.total}
+                </div>
+              )}
+              <button
+                onClick={exportKit}
+                disabled={isEmpty || isExporting}
+                className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              >
+                {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
+                {isExporting ? 'Building Bundle…' : 'Export To Move'}
+              </button>
+            </div>
+
             <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
@@ -1072,21 +1091,6 @@ export default function App() {
             </div>
           )}
 
-          <div className='mt-auto pt-6'>
-            {isExporting && exportProgress && exportProgress.total > 1 && (
-              <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
-                Kit {Math.min(exportProgress.done + 1, exportProgress.total)} of {exportProgress.total}
-              </div>
-            )}
-            <button
-              onClick={exportKit}
-              disabled={isEmpty || isExporting}
-              className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
-            >
-              {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
-              {isExporting ? 'Building Bundle…' : 'Export To Move'}
-            </button>
-          </div>
         </aside>
       </main>
 
