@@ -236,7 +236,7 @@ export const Pad: React.FC<PadProps> = ({
       onClick={sample ? handlePlay : undefined}
       onKeyDown={sample ? handleKeyDown : undefined}
       style={padStyle}
-      className={`group relative overflow-hidden w-full aspect-square bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
+      className={`pad-tile group relative overflow-hidden w-full h-full min-h-0 bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'pad-tinted pad-glow border-[var(--category-accent)] scale-[0.98]'
@@ -244,31 +244,34 @@ export const Pad: React.FC<PadProps> = ({
           : 'border-border-main opacity-50 cursor-not-allowed'
       }`}
     >
-      <div className='flex w-full justify-between items-center'>
-        <div className='flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
-          <span className='category-ink text-sm font-bold shrink-0'>
+      <div className='pad-header flex w-full justify-between items-center'>
+        <div className='pad-header-group flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
+          <span className='pad-number category-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
           </span>
           {hotkey && (
-            <span className='text-xs font-mono text-text-muted bg-surface-header px-1 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
+            <span className='pad-hotkey text-xs font-mono text-text-muted bg-surface-header px-1 py-0.5 rounded border border-border-main shrink-0' title={`Keyboard key [${hotkey}]`}>
               {hotkey}
             </span>
           )}
           {chokeGroup && (
-            <span className='pad-choke-badge text-[10px] sm:text-xs font-medium uppercase tracking-wider border px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'>
-              Choke {chokeGroup}
+            <span
+              className='pad-choke-badge text-[10px] sm:text-xs font-medium uppercase tracking-wider border px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'
+              title={`Choke group ${chokeGroup} — only one pad in this group sounds at a time`}
+            >
+              <span className='pad-choke-word'>Choke </span>{chokeGroup}
             </span>
           )}
         </div>
-        <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
+        <div className={`pad-indicator w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
-      <div className='w-full mt-auto mb-8 sm:mb-9'>
+      <div className='pad-body w-full mt-auto mb-8 sm:mb-9'>
         <div className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
-          <div className='text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
+          <div className='pad-name text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
             {isSpinning ? (
               <span className='category-ink flex items-center gap-1 animate-pulse'>
                 <Loader2 className='category-ink w-3.5 h-3.5 animate-spin shrink-0' />
@@ -298,7 +301,7 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       {/* Split Bottom Bar: 50% Lock + 50% Shuffle */}
-      <div className='absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
+      <div className='pad-actions absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
         <button
           type='button'
           disabled={!sample}
@@ -317,7 +320,7 @@ export const Pad: React.FC<PadProps> = ({
           }`}
         >
           {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-          <span className='text-pad-action uppercase tracking-wider font-semibold'>
+          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
             {isLocked ? 'Locked' : 'Lock'}
           </span>
         </button>
@@ -338,7 +341,7 @@ export const Pad: React.FC<PadProps> = ({
           aria-label={`Shuffle sample on pad ${index + 1}`}
         >
           <RefreshCw size={14} />
-          <span className='text-pad-action uppercase tracking-wider font-semibold'>
+          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
             Shuffle
           </span>
         </button>

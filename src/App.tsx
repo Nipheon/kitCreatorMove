@@ -85,6 +85,31 @@ export default function App() {
   /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
   const readyWaitCleanup = useRef<(() => void) | null>(null);
 
+  /**
+   * Dev convenience: `?seed` on a dev server fills the grid from a real pack's filenames,
+   * so the layout can be judged with content in it. Both guards matter — the env check is
+   * what lets the bundler drop the seed module from a production build, and the query
+   * param is what keeps a normal dev session starting empty like the real thing.
+   */
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const seed = new URLSearchParams(window.location.search).get('seed');
+    if (seed === null) return;
+    // `?seed=20` fakes twenty folders, which is how the sidebar's scrolling gets tested.
+    const count = Math.min(Math.max(parseInt(seed || '1', 10) || 1, 1), 50);
+    let cancelled = false;
+    import('./devSeed').then(({ devSeedFolders }) => {
+      if (cancelled) return;
+      const folders = devSeedFolders(count);
+      const samples = folders.flatMap(f => f.samples);
+      setSourceFolders(folders);
+      setKitResult(generateRandomKit(samples, [], { skipLoops: true, skipNonDrums: true }));
+      setKitPrefix(prefixForFolders(folders));
+      setKitSuffix(generateKitName(folders[0].name).suffix);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // Mounted for the app's lifetime: pads buffer long before any preview is requested,
   // so the registry has to be listening before startPreview is ever called.
   useEffect(() => {
@@ -591,22 +616,19 @@ export default function App() {
     }
   };
 
-  // Regenerates immediately, otherwise the toggle looks inert.
-  const toggleSkipLoops = (next: boolean) => {
-    setSkipLoops(next);
-    if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipLoops: next }));
-    }
-  };
+  /**
+   * These two change the pool the *next* kit is drawn from; they deliberately do not
+   * re-roll the current one. They used to, so the toggle would not look inert — but the
+   * feedback now sits right above them: the usable count and the per-type figures move
+   * the instant either is clicked, without throwing away the kit you were listening to.
+   *
+   * A kit generated before the filter changed can therefore still hold a sample the
+   * filter would now exclude. That is the intended trade: nothing is silently removed
+   * from under you, and the next Generate applies the filter.
+   */
+  const toggleSkipLoops = (next: boolean) => setSkipLoops(next);
 
-  const toggleSkipNonDrums = (next: boolean) => {
-    setSkipNonDrums(next);
-    if (samples.length > 0) {
-      setKitResult(
-        generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, skipNonDrums: next })
-      );
-    }
-  };
+  const toggleSkipNonDrums = (next: boolean) => setSkipNonDrums(next);
 
   /**
    * Switches a whole type off. Regenerates immediately for the same reason the other
@@ -779,13 +801,25 @@ export default function App() {
       </header>
 
       <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden'>
-        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
-          <div className='mb-8'>
-            <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4'>Source Folders</h2>
-            <div className='border-2 border-dashed border-border-main rounded-lg p-4 text-center mb-4'>
-              <div className='text-2xl mb-2 text-text-dim'>+</div>
-              <p className='text-sm text-text-muted'>Drag sample folders anywhere on this window</p>
-            </div>
+        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-hidden'>
+          {/* Heading, drop zone, list and the count block are siblings of the sidebar on
+              purpose, so the list is the only one that gives up room: it takes what is
+              left and scrolls, and twenty folders can never push the sample count or the
+              filters below the fold.
+
+              Wrapping the first three in a `flex-1 min-h-0` block was the previous
+              attempt. The block shrank below its own contents on a short window and the
+              heading and drop zone painted over the count beneath; capping the list
+              instead stopped the overlap but put the count off screen again. Only one of
+              them may shrink, and it has to be the list. */}
+          <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-4 shrink-0'>Source Folders</h2>
+          {/* A line, not a drop zone. The whole window is the drop target — `handleDrop`
+              sits on the app root — so a bordered box here only claimed vertical space
+              the folder list wanted, while implying the drop had to land inside it. */}
+          <p className='text-sm text-text-subtle mb-4 shrink-0'>
+            Drag sample folders anywhere on this window.
+          </p>
+          <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
             {sourceFolders.map(folder => (
               <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
                 <div className='bg-surface-pad px-3 py-2 rounded flex items-center justify-between group'>
@@ -815,7 +849,7 @@ export default function App() {
               <div className='text-sm text-text-subtle text-center mt-4'>No folders loaded</div>
             )}
           </div>
-          <div className='mt-auto space-y-2'>
+          <div className='mt-auto shrink-0 space-y-2'>
             <div className='text-xs text-text-muted uppercase tracking-wider font-medium px-1'>
               {sourceFolders.length > 0 ? `${activeFoldersCount} folder(s) used` : 'Waiting for samples'}
             </div>
@@ -828,6 +862,31 @@ export default function App() {
                 <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
                   <div className='bg-accent-teal h-full transition-all' style={{ width: samples.length > 0 ? `${Math.round((usableCount / samples.length) * 100)}%` : '0%' }}></div>
                 </div>
+              </div>
+
+              {/* Inside the card, between the count and the breakdown: both filters change
+                  the number directly above them and the per-type figures directly below,
+                  so this is the one place where cause and effect are both on screen.
+                  Type matches the card's own rows — text-sm, uppercase, medium. */}
+              <div className='pt-3 border-t border-border-dark space-y-1.5'>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase font-medium cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={skipLoops}
+                    onChange={(e) => toggleSkipLoops(e.target.checked)}
+                    className='accent-accent-yellow w-3.5 h-3.5'
+                  />
+                  Skip loops{loopCount > 0 ? ` (${loopCount})` : ''}
+                </label>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase font-medium cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={skipNonDrums}
+                    onChange={(e) => toggleSkipNonDrums(e.target.checked)}
+                    className='accent-accent-yellow w-3.5 h-3.5'
+                  />
+                  Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount})` : ''}
+                </label>
               </div>
 
               {samples.length > 0 && (
@@ -886,23 +945,35 @@ export default function App() {
           </div>
         </aside>
 
-        <section className='flex-1 w-full bg-surface-darkest flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto min-h-0'>
-          <div className='grid grid-cols-4 gap-3 sm:gap-4 mb-8 w-full max-w-[700px] aspect-square'>
-            {DISPLAY_INDICES.map((index) => (
-              <Pad
-                key={index}
-                index={index}
-                sample={kit[index]}
-                expectedCategory={kitResult.layout.roles[index]}
-                chokeGroup={chokeGroupFor(kit[index])}
-                isLocked={lockedPads[index]}
-                onToggleLock={() => toggleLock(index)}
-                onExclude={handleExcludeSample}
-                onReroll={rerollPad}
-                auditionToken={audition.index === index ? audition.token : 0}
-                isSpinning={spinningPads[index]}
-              />
-            ))}
+        <section className='w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 lg:flex-1 lg:min-h-0'>
+          {/* The grid sizes itself to the smaller of the stage's two dimensions, so it is
+              never cut off on a short window and keeps growing on a large one. The old
+              fixed 700px square did both wrongly.
+
+              The stage gets its height two different ways on purpose. Side by side with
+              the sidebars it takes the row's leftover height (`lg:flex-1`). Stacked, the
+              page scrolls and there IS no leftover height — `flex-1` there resolved to
+              32px while the stage kept its minimum, so the grid painted straight over the
+              sidebar. Below `lg` the section is content-sized and the stage carries its
+              own minimum instead. */}
+          <div className='pad-stage w-full min-h-[min(86vw,60vh)] lg:flex-1 lg:min-h-0 grid place-items-center'>
+            <div className='pad-grid grid grid-cols-4 grid-rows-4 gap-2 sm:gap-3'>
+              {DISPLAY_INDICES.map((index) => (
+                <Pad
+                  key={index}
+                  index={index}
+                  sample={kit[index]}
+                  expectedCategory={kitResult.layout.roles[index]}
+                  chokeGroup={chokeGroupFor(kit[index])}
+                  isLocked={lockedPads[index]}
+                  onToggleLock={() => toggleLock(index)}
+                  onExclude={handleExcludeSample}
+                  onReroll={rerollPad}
+                  auditionToken={audition.index === index ? audition.token : 0}
+                  isSpinning={spinningPads[index]}
+                />
+              ))}
+            </div>
           </div>
 
           <Toast
@@ -1006,6 +1077,22 @@ export default function App() {
               </p>
             </div>
 
+            <div>
+              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={trimSilence}
+                  onChange={(e) => setTrimSilence(e.target.checked)}
+                  className='accent-accent-yellow w-4 h-4'
+                />
+                Trim silence (start &amp; end)
+              </label>
+              <p className='text-sm leading-snug text-text-subtle'>
+                Cuts anything below -60 dBFS from each end. Applied on export only — pads
+                always audition the original file.
+              </p>
+            </div>
+
             {/* Directly under the slider it belongs to: the batch size decides what this
                 button produces, and reading the count then hunting for the action at the
                 far end of the panel put them out of sight of each other. */}
@@ -1023,45 +1110,6 @@ export default function App() {
                 {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
                 {isExporting ? 'Building Bundle…' : 'Export To Move'}
               </button>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipLoops}
-                  onChange={(e) => toggleSkipLoops(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip loops{loopCount > 0 ? ` (${loopCount} found)` : ''}
-              </label>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={skipNonDrums}
-                  onChange={(e) => toggleSkipNonDrums(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Skip non-drums{nonDrumCount > 0 ? ` (${nonDrumCount} found)` : ''}
-              </label>
-            </div>
-
-            <div>
-              <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={trimSilence}
-                  onChange={(e) => setTrimSilence(e.target.checked)}
-                  className='accent-accent-yellow w-4 h-4'
-                />
-                Trim silence (start & end)
-              </label>
-              <p className='text-sm leading-snug text-text-subtle'>
-                Applied on export only — pads always audition the original file.
-              </p>
             </div>
 
             <div className='pt-6 border-t border-border-dark space-y-1.5'>
@@ -1177,7 +1225,48 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Source Code &amp; Contact</h3>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li>
+                    <strong className='text-text-bright'>Repository:</strong>{' '}
+                    <a
+                      href='https://github.com/Nipheon/kitCreatorMove'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      github.com/Nipheon/kitCreatorMove
+                    </a>{' '}
+                    — the whole app, under the BSD Zero Clause licence: do what you like
+                    with it, no attribution needed.
+                  </li>
+                  <li>
+                    <strong className='text-text-bright'>Bugs and ideas:</strong>{' '}
+                    <a
+                      href='https://github.com/Nipheon/kitCreatorMove/issues'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-accent-yellow hover:underline font-medium'
+                    >
+                      open an issue
+                    </a>
+                    . A sample pack that lays out oddly is the most useful kind of report —
+                    the folder names alone usually explain it.
+                  </li>
+                  <li>
+                    <strong className='text-text-bright'>Contact:</strong>{' '}
+                    <a
+                      href='mailto:uuemoswsq@mozmail.com'
+                      className='text-accent-yellow hover:underline font-mono text-sm'
+                    >
+                      uuemoswsq@mozmail.com
+                    </a>
+                  </li>
+                </ul>
+              </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a
@@ -1210,29 +1299,27 @@ export default function App() {
                     Magnific
                   </a>, used under its attribution licence.
                 </p>
-                <p className='text-text-light'>Other tools for kit creation:</p>
-                <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li>
-                    <a
-                      href='https://www.kit-maker.com/'
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-accent-yellow hover:underline font-medium'
-                    >
-                      Kit-Maker
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href='https://movestudio.reocities.xyz/'
-                      target='_blank'
-                      rel='noopener noreferrer'
-                      className='text-accent-yellow hover:underline font-medium'
-                    >
-                      Move Studio
-                    </a>
-                  </li>
-                </ul>
+                <p className='text-text-light'>
+                  Check out{' '}
+                  <a
+                    href='https://www.kit-maker.com/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Kit Maker
+                  </a>{' '}
+                  and{' '}
+                  <a
+                    href='https://movestudio.reocities.xyz/'
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-accent-yellow hover:underline font-medium'
+                  >
+                    Move Studio
+                  </a>{' '}
+                  for other great tools for kit creation.
+                </p>
               </section>
             </div>
 

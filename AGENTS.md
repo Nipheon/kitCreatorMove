@@ -64,6 +64,20 @@ what it describes. The Preset naming section was dropped in `9828101` while
 against the code at the time. An entry that is merely plausible is the failure mode this
 file exists to prevent.
 
+## Looking at the app with content in it
+
+`npm run dev` then **`http://localhost:3000/?seed`** fills the grid from `src/devSeed.ts`:
+47 real filenames from a real pack, categorised through the same pipeline as a genuine
+drop, with a few milliseconds of silence as the audio so the pads have something loadable.
+
+Both guards are load-bearing. `import.meta.env.DEV` is what lets the bundler drop the seed
+from a production build — verified by grepping `dist/` for the folder name — and the query
+param is what keeps an ordinary dev session starting empty, like the real thing.
+
+**Judge layout changes with the seed on.** An empty grid hides whole classes of problem:
+the choke badge only renders on hat pads, so a header row that overflowed at 125px looked
+perfectly fine until a kit with hats was in it.
+
 ## Before you report success
 
 ```
@@ -593,7 +607,59 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   fill, and puts accent-coloured text on an accent-coloured background in
   `.pad-lock-active`. That fallback always wins, because it is emitted after anything
   hand-written in the same rule. Do not move them out of the block.
-- **Pad Grid Container Dimensions:** The 4x4 pad grid container is fixed to `700px x 700px` (`max-w-[700px] aspect-square`) in `App.tsx` (and `600px x 600px` container wrapper) to maintain aspect ratio and avoid pad overlap.
+- **The pad grid sizes itself to the space left over, not to a fixed 700px.** The middle
+  column is a flex column: a `.pad-stage` that takes the leftover height, with the
+  controls row below it, and `.pad-grid` inside sized `min(100cqw, 100cqh)` so the square
+  follows whichever of the stage's dimensions is scarcer. It was `max-w-[700px]
+  aspect-square`, which overflowed a short window and refused to grow on a large one.
+
+  **Container query units, not viewport units.** The stage is what remains after the
+  header, both sidebars and the controls row; nothing here can subtract those from `100vh`
+  without going stale the first time one of them changes height. The plain
+  `width: 100%; aspect-ratio: 1` rule stands on its own and is what runs if
+  `container-type: size` is unsupported — same `@supports` gating as the `color-mix` rules.
+
+  **Below `lg` the stage carries its own minimum and the section is content-sized.**
+  Stacked, the page scrolls and there is no leftover height for `flex-1` to distribute:
+  it resolved to 32px while the stage kept its 335px minimum, so the grid rendered
+  straight over the sidebar. Measured, not guessed — `flex-1` on the section is
+  `lg:` only for that reason.
+
+  **A pad shrinks with the stage, so its type scales with it** (container queries on
+  `.pad-tile`). Pad text is `clamp(0.75rem, 10.5cqi, 0.875rem)` — **12px floor, 14px
+  ceiling** — where `cqi` is a percentage of the pad's *content* box, padding and border
+  already subtracted, so a 215px pad queries against ~181px. The ceiling is reached from
+  about a 165px pad upward, which is why large pads read exactly as they did before the
+  grid became flexible.
+
+  **Do not lower the 12px floor.** An earlier version floored at 9-10px: it measured fine,
+  fit without clipping, and was too small to read. The hotkey and choke chips are the one
+  exception, floored at 10px — they are labels on a label, and holding them at 12px inside
+  a 100px pad crowds out the sample name beside them.
+
+  Hiding is the last resort, not the first: captions go under 104px of content width and
+  the category line under 88px, because shrinking gets there first.
+
+  **The choke badge keeps its word down to an 88px content width**, which took three
+  attempts and is worth not undoing. Hiding the badge outright lost choke information at
+  ~125px pads — an ordinary window at ordinary zoom. Keeping only the number lost the
+  word at the same size. What finally fits it: the whole header row drops to 11px with no
+  letter-spacing under 130px, the gaps tighten, and the play indicator is hidden — it is
+  the one element there that says nothing on its own, since a playing pad already takes
+  the accent border, the glow and the scale.
+
+  **Measure pad contents against the pad's PADDING box, not its border box.** 16px of
+  padding hid an 11px overflow from a border-box check, and the indicator sat outside the
+  content area while the check reported clean. `.pad-actions` is the exception — it is
+  full-bleed by design, so exclude it from any such check. Under 88px the action
+  bar, its reserved space and the tile padding shrink together — move one without the
+  others and the sample name still clips into the bar.
+
+  Thresholds are content widths, not pad widths: a 125px pad queries at ~99px.
+
+  `Pad` fills its cell (`w-full h-full`) instead of declaring `aspect-square`: the grid is
+  a square with `grid-rows-4`, so the cells are already square and a pad that sized itself
+  would fight the stage for the height.
 - **`index.html` carries the whole SEO surface**: description, canonical, Open Graph and
   Twitter tags, and a `WebApplication` JSON-LD block. The app is client-rendered, so a
   crawler that runs no JavaScript sees only what is in that file — before this it saw a
@@ -621,7 +687,13 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   Do not drop either credit to tidy things up, and do not let the 0BSD licence in
   `LICENSE` be read as covering `public/icon.png`: the README says explicitly that it does
   not. Replacing the icon means removing the credits with it, not before.
-- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Thank You" credits drum-kit-generator and lists the other kit-creation tools, Kit-Maker and Move Studio. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
+- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Source Code & Contact" links the repository and the issue tracker and gives the contact address; section 7 "Thank You" credits drum-kit-generator, the drum icon, and the other kit-creation tools.
+
+  **The contact address is a relay mask** — `uuemoswsq@mozmail.com`. It reaches a real
+  inbox without naming anyone, which the GitHub noreply address it replaced could not do:
+  `users.noreply.github.com` rejects incoming mail, so a `mailto:` to it bounced silently
+  while looking like a working contact. The noreply address still belongs in commit
+  authorship; it is not a contact. No other address may appear in shipped content. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
 
   **A user-visible rule needs a help entry, not only an AGENTS.md entry.** Preview and Grid IDs both shipped without one and went months undocumented, which is how a feature ends up existing only for whoever wrote it.
 - **The export toggles carry no explainer text in the settings panel**, with one exception. Skip Loops, Skip Non-Drums and Trim Silence are a label and a checkbox each; what they do is documented in help section 5. The panel is a column of controls, not documentation — keep new options to one line there and put the explanation in the modal. The silence-trimming bullet was moved out of section 4 at the same time so the three filters read together in one place.
@@ -634,6 +706,38 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   The export progress line moved with it. Error and notice banners still trail the panel:
   they report drops and folder loads as well as exports, so they are panel-level, not
   button-level.
+- **The sidebar's folder list is the only part of it that shrinks.** Heading, drop zone,
+  list and the count block are siblings of the `aside`; the list takes what is left
+  (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`) and scrolls, so twenty folders can
+  never push the sample count or the filters below the fold — they are what you watch
+  while adding folders.
+
+  Two earlier shapes failed and are worth not repeating. Scrolling the whole `aside` put
+  the count a full screen out of view at twenty folders. Wrapping heading, drop zone and
+  list in a `flex-1 min-h-0` block let that block shrink below its own contents on a short
+  window, and its children painted over the count beneath — a flex child that can shrink
+  past its content will overlap its siblings, it does not clip itself. Capping the list
+  height instead stopped the overlap and put the count off screen again.
+
+  Below about 700px of window height with twenty folders the sidebar does scroll as a
+  whole. Everything is reachable and nothing overlaps; there is simply not enough room.
+- **Skip Loops and Skip Non-Drums do not re-roll the kit.** They change the pool the
+  *next* kit draws from. They used to regenerate immediately so the toggle would not look
+  inert; the feedback now sits directly above them instead — the usable count and the
+  per-type figures move the instant either is clicked. A kit generated before the filter
+  changed can therefore still hold a sample the filter would now exclude, which is the
+  intended trade: nothing is taken away from under you mid-listen.
+- **There is no drop zone in the sidebar, only a line of text.** `handleDrop` is on the
+  app root, so the whole window has always been the drop target; the bordered box just
+  claimed vertical space the folder list wanted while implying the drop had to land inside
+  it. Drag feedback comes from the full-window overlay, not from the sidebar.
+- **Skip Loops and Skip Non-Drums live inside the Usable Samples card, between the count
+  and the Breakdown by Type list; Trim Silence sits directly above Export To Move.** Both
+  filters change the total directly above them and the per-type figures directly below, so
+  that slot is the only place where cause and effect are both on screen. They carry the
+  card's own type — `text-sm`, uppercase, medium — not the export panel's. Trimming is an
+  export setting rather than a library filter, which is why it stays with the button that
+  performs it.
 - **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
 
   **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because
