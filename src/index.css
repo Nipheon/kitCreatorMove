@@ -322,11 +322,13 @@
       display: none;
     }
 
-    /* The choke badge is a whole word ("Choke 1") in a header row that also holds the pad
-       number, the hotkey and the play indicator. Below this width it stops fitting and
-       pushes the indicator out through the right edge — visible only on hat pads, which
-       is why an empty grid looked fine. */
-    .pad-choke-badge {
+    /* The badge sits in a header row that also holds the pad number, the hotkey and the
+       play indicator, and below this width the full "Choke 1" stops fitting — it pushed
+       the indicator out through the right edge. Drop the word, keep the number: the
+       badge's border and colour already say what it is, and the group number is the part
+       that differs between pads. Hiding the badge outright was the first attempt and took
+       it away at ~125px pads, which is an ordinary window on an ordinary display. */
+    .pad-choke-word {
       display: none;
     }
   }

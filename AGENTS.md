@@ -638,7 +638,10 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   a 100px pad crowds out the sample name beside them.
 
   Hiding is the last resort, not the first: captions go under 104px of content width and
-  the category line under 88px, because shrinking gets there first. Under 88px the action
+  the category line under 88px, because shrinking gets there first. The choke badge keeps
+  its border and its group number at every size and drops only the word "Choke" under
+  104px — hiding the badge outright was the first attempt and took choke information away
+  at ~125px pads, which is an ordinary window on an ordinary display. Under 88px the action
   bar, its reserved space and the tile padding shrink together — move one without the
   others and the sample name still clips into the bar.
 

@@ -255,8 +255,11 @@ export const Pad: React.FC<PadProps> = ({
             </span>
           )}
           {chokeGroup && (
-            <span className='pad-choke-badge text-[10px] sm:text-xs font-medium uppercase tracking-wider border px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'>
-              Choke {chokeGroup}
+            <span
+              className='pad-choke-badge text-[10px] sm:text-xs font-medium uppercase tracking-wider border px-1 py-0.5 rounded-sm shrink-0 whitespace-nowrap'
+              title={`Choke group ${chokeGroup} — only one pad in this group sounds at a time`}
+            >
+              <span className='pad-choke-word'>Choke </span>{chokeGroup}
             </span>
           )}
         </div>
