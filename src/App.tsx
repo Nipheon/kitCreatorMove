@@ -1167,17 +1167,6 @@ export default function App() {
                 <p>
                   Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export a bundle you can upload to your hardware.
                 </p>
-                <p>
-                  <strong className='text-text-bright'>Your samples never leave your computer.</strong> There is no
-                  server and no upload: the files are read, categorised, trimmed and packaged
-                  into a zip by your browser, and the finished bundle is handed straight back to
-                  your downloads folder. Closing the tab is all it takes to clear it — nothing
-                  was stored anywhere else.
-                </p>
-                <p className='text-text-subtle'>
-                  The one exception is ordinary web analytics: the page counts visits, the same
-                  as any website. It records nothing about your samples, your kits or your files.
-                </p>
               </section>
 
               <section className='space-y-2.5'>
@@ -1237,7 +1226,24 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Source Code &amp; Contact</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Privacy</h3>
+                <p>
+                  <strong className='text-text-bright'>Your samples never leave your computer.</strong> There is no
+                  server and no upload: the files are read, categorised, trimmed and packaged
+                  into a zip by your browser, and the finished bundle is handed straight back to
+                  your downloads folder. Closing the tab is all it takes to clear it — nothing
+                  was stored anywhere else.
+                </p>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-text-bright'>No account, no sign-in:</strong> Nothing about you is asked for, so there is nothing to hold on to.</li>
+                  <li><strong className='text-text-bright'>Your originals are untouched:</strong> The app only ever reads the files you drop. Trimming happens on the copies going into the zip, never on the sample sitting in your folder.</li>
+                  <li><strong className='text-text-bright'>Nothing carries over:</strong> Loaded folders, kits and settings live in the page for as long as the tab is open. Reload and you start from an empty grid.</li>
+                  <li><strong className='text-text-bright'>Visitor counting:</strong> The page uses Cloudflare Web Analytics, which counts page views without cookies and without tracking people between sites. It sees nothing about your samples, your kits or your exports.</li>
+                </ul>
+              </section>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Source Code &amp; Contact</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li>
                     <strong className='text-text-bright'>Repository:</strong>{' '}
@@ -1278,7 +1284,7 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>8. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a
