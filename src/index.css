@@ -298,34 +298,23 @@
    * them further would make them unreadable, not as soon as they stop fitting at 12px.
    */
   /*
-   * `cqi` is a percentage of the pad's *content* box — padding and border are already
-   * subtracted — so a 215px pad queries against ~181px. The coefficients are set from
-   * that: 10.5cqi reaches the 14px maximum at about a 165px pad and falls away below it,
-   * which keeps every size from a 100px pad upward reading as one scale rather than
-   * snapping between two.
+   * Type scales between 12px and 14px, never below: `cqi` is a percentage of the pad's
+   * *content* box — padding and border already subtracted, so a 215px pad queries against
+   * ~181px. An earlier version floored at 9-10px, which measured fine and read badly.
+   *
+   * The chips are the exception. A hotkey letter and a "Choke 1" badge are labels on a
+   * label; holding them at 12px inside a 100px pad crowds out the sample name they sit
+   * next to, so they keep a 10px floor.
    */
-  .pad-number {
-    font-size: clamp(0.625rem, 10.5cqi, 0.875rem);
-  }
-
-  .pad-hotkey {
-    font-size: clamp(0.5rem, 9cqi, 0.75rem);
-  }
-
-  .pad-category {
-    font-size: clamp(0.5625rem, 10.5cqi, 0.875rem);
-  }
-
+  .pad-number,
+  .pad-category,
   .pad-name {
-    font-size: clamp(0.625rem, 10.5cqi, 0.875rem);
+    font-size: clamp(0.75rem, 10.5cqi, 0.875rem);
   }
 
-  .pad-action-label {
-    font-size: clamp(0.5rem, 9cqi, 0.75rem);
-  }
-
+  .pad-hotkey,
   .pad-choke-badge {
-    font-size: clamp(0.5rem, 9cqi, 0.75rem);
+    font-size: clamp(0.625rem, 9cqi, 0.75rem);
   }
 
   @container (max-width: 104px) {
