@@ -689,7 +689,11 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   not. Replacing the icon means removing the credits with it, not before.
 - **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Source Code & Contact" links the repository and the issue tracker and gives the contact address; section 7 "Thank You" credits drum-kit-generator, the drum icon, and the other kit-creation tools.
 
-  **The contact address is the GitHub noreply one** — `2266715+Nipheon@users.noreply.github.com`. It is already in every commit, so it publishes nothing new, and it is the only address that may appear in shipped content. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
+  **The contact address is a relay mask** — `uuemoswsq@mozmail.com`. It reaches a real
+  inbox without naming anyone, which the GitHub noreply address it replaced could not do:
+  `users.noreply.github.com` rejects incoming mail, so a `mailto:` to it bounced silently
+  while looking like a working contact. The noreply address still belongs in commit
+  authorship; it is not a contact. No other address may appear in shipped content. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
 
   **A user-visible rule needs a help entry, not only an AGENTS.md entry.** Preview and Grid IDs both shipped without one and went months undocumented, which is how a feature ends up existing only for whoever wrote it.
 - **The export toggles carry no explainer text in the settings panel**, with one exception. Skip Loops, Skip Non-Drums and Trim Silence are a label and a checkbox each; what they do is documented in help section 5. The panel is a column of controls, not documentation — keep new options to one line there and put the explanation in the modal. The silence-trimming bullet was moved out of section 4 at the same time so the three filters read together in one place.

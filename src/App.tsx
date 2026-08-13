@@ -1256,10 +1256,10 @@ export default function App() {
                   <li>
                     <strong className='text-text-bright'>Contact:</strong>{' '}
                     <a
-                      href='mailto:2266715+Nipheon@users.noreply.github.com'
+                      href='mailto:uuemoswsq@mozmail.com'
                       className='text-accent-yellow hover:underline font-mono text-sm'
                     >
-                      2266715+Nipheon@users.noreply.github.com
+                      uuemoswsq@mozmail.com
                     </a>
                   </li>
                 </ul>
