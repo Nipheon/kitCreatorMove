@@ -886,12 +886,18 @@ export default function App() {
           </div>
         </aside>
 
-        <section className='flex-1 w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 min-h-0'>
-          {/* The stage takes whatever vertical space is left after the controls, and the
-              grid sizes itself to the smaller of the stage's two dimensions — so it is
+        <section className='w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 lg:flex-1 lg:min-h-0'>
+          {/* The grid sizes itself to the smaller of the stage's two dimensions, so it is
               never cut off on a short window and keeps growing on a large one. The old
-              fixed 700px square did both wrongly. */}
-          <div className='pad-stage w-full flex-1 min-h-[min(86vw,60vh)] lg:min-h-0 grid place-items-center'>
+              fixed 700px square did both wrongly.
+
+              The stage gets its height two different ways on purpose. Side by side with
+              the sidebars it takes the row's leftover height (`lg:flex-1`). Stacked, the
+              page scrolls and there IS no leftover height — `flex-1` there resolved to
+              32px while the stage kept its minimum, so the grid painted straight over the
+              sidebar. Below `lg` the section is content-sized and the stage carries its
+              own minimum instead. */}
+          <div className='pad-stage w-full min-h-[min(86vw,60vh)] lg:flex-1 lg:min-h-0 grid place-items-center'>
             <div className='pad-grid grid grid-cols-4 grid-rows-4 gap-2 sm:gap-3'>
               {DISPLAY_INDICES.map((index) => (
                 <Pad

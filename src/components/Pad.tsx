@@ -236,7 +236,7 @@ export const Pad: React.FC<PadProps> = ({
       onClick={sample ? handlePlay : undefined}
       onKeyDown={sample ? handleKeyDown : undefined}
       style={padStyle}
-      className={`group relative overflow-hidden w-full h-full min-h-0 bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
+      className={`pad-tile group relative overflow-hidden w-full h-full min-h-0 bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'pad-tinted pad-glow border-[var(--category-accent)] scale-[0.98]'
@@ -263,7 +263,7 @@ export const Pad: React.FC<PadProps> = ({
         <div className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
-      <div className='w-full mt-auto mb-8 sm:mb-9'>
+      <div className='pad-body w-full mt-auto mb-8 sm:mb-9'>
         <div className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
@@ -298,7 +298,7 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       {/* Split Bottom Bar: 50% Lock + 50% Shuffle */}
-      <div className='absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
+      <div className='pad-actions absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
         <button
           type='button'
           disabled={!sample}
@@ -317,7 +317,7 @@ export const Pad: React.FC<PadProps> = ({
           }`}
         >
           {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-          <span className='text-pad-action uppercase tracking-wider font-semibold'>
+          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
             {isLocked ? 'Locked' : 'Lock'}
           </span>
         </button>
@@ -338,7 +338,7 @@ export const Pad: React.FC<PadProps> = ({
           aria-label={`Shuffle sample on pad ${index + 1}`}
         >
           <RefreshCw size={14} />
-          <span className='text-pad-action uppercase tracking-wider font-semibold'>
+          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
             Shuffle
           </span>
         </button>

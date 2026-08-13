@@ -605,6 +605,18 @@ Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. 
   `width: 100%; aspect-ratio: 1` rule stands on its own and is what runs if
   `container-type: size` is unsupported — same `@supports` gating as the `color-mix` rules.
 
+  **Below `lg` the stage carries its own minimum and the section is content-sized.**
+  Stacked, the page scrolls and there is no leftover height for `flex-1` to distribute:
+  it resolved to 32px while the stage kept its 335px minimum, so the grid rendered
+  straight over the sidebar. Measured, not guessed — `flex-1` on the section is
+  `lg:` only for that reason.
+
+  **A pad shrinks with the stage, so its contents scale in steps** (container queries on
+  `.pad-tile`): under 130px the Lock and Shuffle captions go and the icons carry it, under
+  110px the category line goes too and the action bar, its reserved space and the tile
+  padding all shrink together. The three have to move as one — shrinking only the bar
+  leaves the sample name still clipping into it.
+
   `Pad` fills its cell (`w-full h-full`) instead of declaring `aspect-square`: the grid is
   a square with `grid-rows-4`, so the cells are already square and a pad that sized itself
   would fight the stage for the height.

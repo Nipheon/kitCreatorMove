@@ -277,3 +277,50 @@
     aspect-ratio: auto;
   }
 }
+
+/*
+ * Pads shrink with the stage now, and below roughly 130px the Lock and Shuffle captions
+ * ran into each other — "LOCKSHUFFL" — because the bottom bar splits the tile in half
+ * whatever the tile is worth. Under that width the icons carry the meaning on their own;
+ * both buttons keep their aria-label and title, so nothing is lost to a screen reader.
+ */
+@supports (container-type: inline-size) {
+  .pad-tile {
+    container-type: inline-size;
+  }
+
+  @container (max-width: 130px) {
+    .pad-action-label {
+      display: none;
+    }
+  }
+}
+
+/*
+ * Below roughly 110px a pad cannot show its number, the category it plays and the sample
+ * name without one of them running into the action bar. The category goes first: it is
+ * the least useful of the three once the grid is this small, because the pad's position
+ * already says what the grid asked for, and the number and hotkey stay legible.
+ */
+@supports (container-type: inline-size) {
+  @container (max-width: 110px) {
+    .pad-category {
+      display: none;
+    }
+
+    /* The action bar reserves a fixed 32px whatever the pad is worth, which is most of a
+       78px tile — the sample name was left clipping into it. Shrink the bar, its reserved
+       space and the tile padding together, or the three disagree and the name still cuts. */
+    .pad-tile {
+      padding: 0.5rem;
+    }
+
+    .pad-actions {
+      height: 1.5rem;
+    }
+
+    .pad-body {
+      margin-bottom: 1.5rem;
+    }
+  }
+}
