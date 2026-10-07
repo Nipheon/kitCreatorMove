@@ -10,11 +10,12 @@ import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
   categorizeSample, describeDropReport, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum,
-  newDropReport
+  newDropReport, ScanProgress
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
+import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
 import {
   buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
   lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
@@ -52,6 +53,8 @@ export default function App() {
   const [kitResult, setKitResult] = useState<KitResult>(emptyKit);
   const [lockedPads, setLockedPads] = useState<boolean[]>(new Array(PAD_COUNT).fill(false));
   const [isLoading, setIsLoading] = useState(false);
+  /** One entry per dropped top-level entry while its scan runs; shown as pending rows under Source Folders. */
+  const [scanning, setScanning] = useState<ScanProgress[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   /** True while a kit is being drawn (and its samples checked for duplicates). Controls that edit the kit are off meanwhile. */
   const [isGenerating, setIsGenerating] = useState(false);
@@ -511,8 +514,15 @@ export default function App() {
     setError(null);
 
     const report = newDropReport();
+    const showCount = (p: ScanProgress) =>
+      setScanning(prev => prev.map(row => (row.folder === p.folder ? p : row)));
+    const showCountThrottled = throttle(showCount, SCAN_UI_INTERVAL_MS);
     try {
-      const scanned = await getFilesFromDataTransfer(items, report);
+      const scanned = await getFilesFromDataTransfer(items, report, p => {
+        // The zero-count calls list every dropped entry at once and must not be throttled away.
+        if (p.files === 0) setScanning(prev => (prev.some(row => row.folder === p.folder) ? prev : [...prev, p]));
+        else showCountThrottled(p);
+      });
       const reportNotes = describeDropReport(report);
       if (reportNotes.length > 0) setNotice(prev => [prev, ...reportNotes].filter(Boolean).join(' '));
       // Read after the await: the scan may have outlived edits made through the keyboard.
@@ -572,6 +582,8 @@ export default function App() {
       const allSamples = enabledSamples(updated);
 
       setSourceFolders(updated);
+      // Same batch as the real rows, so a pending row is swapped, not followed by a second one.
+      setScanning([]);
       // The drop itself hashes nothing; only samples drawn into this kit are read. This
       // supersedes any generation still in flight, which then writes nothing.
       const next = allSamples.length > 0
@@ -596,6 +608,7 @@ export default function App() {
       console.error('Failed to process files:', err);
       setError('Error processing files. Please try again.');
     } finally {
+      setScanning([]);
       setIsLoading(false);
     }
   };
@@ -898,27 +911,19 @@ export default function App() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {(isDragging || isLoading) && (
+      {isDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-darkest/90 backdrop-blur-sm border-2 border-dashed border-accent-yellow m-4 rounded-xl">
           <div className="text-center">
-            {isLoading ? (
-              <>
-                <Loader2 className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-spin" />
-                <h2 className="text-2xl font-bold uppercase tracking-widest">Scanning</h2>
-                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">
-                  {checkProgress?.kind === 'pads' ? `Checking samples ${checkProgress.done} / ${checkProgress.total}` : 'Reading audio files…'}
-                </p>
-              </>
-            ) : (
-              <>
-                <FolderUp className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-pulse" />
-                <h2 className="text-2xl font-bold uppercase tracking-widest">Drop Sample Folders Here</h2>
-                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">.wav and .aiff files</p>
-              </>
-            )}
+            <FolderUp className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-pulse" />
+            <h2 className="text-2xl font-bold uppercase tracking-widest">Drop Sample Folders Here</h2>
+            <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">.wav and .aiff files</p>
           </div>
         </div>
       )}
+      {/* Invisible while a drop is processed: it only swallows clicks so the state the scan
+          will merge into cannot change under it. Progress lives in the pending folder rows
+          and, for the duplicate check, under the Generate button. */}
+      {isLoading && !isDragging && <div className="fixed inset-0 z-50 cursor-progress" aria-hidden="true" />}
 
       <header className='header-gradient flex items-center justify-between px-8 py-4 border-b border-border-dark shrink-0'>
         <div className='flex items-center gap-3'>
@@ -999,7 +1004,26 @@ export default function App() {
                 </div>
               </div>
             ))}
-            {sourceFolders.length === 0 && (
+            {scanning.map(row => {
+              const text = describeScanProgress(row.folder, row.files);
+              return (
+                <div key={`scan:${row.folder}`} className='space-y-2 mt-2'>
+                  <div className='relative bg-surface-pad px-3 py-2 rounded overflow-hidden'>
+                    <div className='flex items-center gap-2'>
+                      {/* Same width as the Eye button of a real row, so the name does not shift on swap. */}
+                      <span className='w-[15px] shrink-0' aria-hidden='true' />
+                      <span className='text-sm truncate text-text-bright flex-1'>{row.folder}</span>
+                    </div>
+                    <div className='text-xs text-text-muted mt-0.5 pl-[23px]' aria-hidden='true'>{text.visible}</div>
+                    <div role='status' className='sr-only'>{text.announce}</div>
+                    <div className='scan-bar absolute left-0 right-0 bottom-0 h-0.5 bg-border-main' aria-hidden='true'>
+                      <div className='scan-bar-fill h-full bg-accent-yellow' />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {sourceFolders.length === 0 && scanning.length === 0 && (
               <div className='text-sm text-text-subtle text-center mt-4'>No folders loaded</div>
             )}
           </div>

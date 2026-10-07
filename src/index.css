@@ -249,6 +249,23 @@
   .toast-enter { animation: none; }
 }
 
+/* Pending folder row: a segment sweeps along the track, since a scan has no known total. */
+@keyframes scan-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(300%); }
+}
+
+.scan-bar { overflow: hidden; }
+
+.scan-bar-fill {
+  width: 33%;
+  animation: scan-sweep 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-bar-fill { animation: none; width: 100%; opacity: 0.5; }
+}
+
 /*
  * The pad grid is a square that fits its stage, sized from whichever of the stage's two
  * dimensions is scarcer. It replaced `max-w-[700px] aspect-square`, which was cut off on

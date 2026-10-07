@@ -95,6 +95,7 @@ src/
     kitNaming.ts         # Kit names, held layouts and batch building
     progressVisibility.ts # When the duplicate-check progress indicator may appear
     sampleSignature.ts   # Audio-content signature, read lazily at draw time to skip duplicates
+    scanProgress.ts      # Throttle and wording for the inline scan progress under Source Folders
     wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
 test/
   kit.test.ts           # Kit, naming, export and detection tests

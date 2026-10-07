@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,progressVisibility,sampleSignature,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,progressVisibility,sampleSignature,scanProgress,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -210,7 +210,7 @@ rule exists because a simpler version broke on real packs.
   bypasses its order (a swap can pick a substitute before every pad has its own role) and every call site would have to remember to
   run it. Background hashing of every dropped file reads the whole library (thousands of files) to use sixteen of them.
   **Progress:** `App.runGeneration` shows "Checking samples n / 16" under the Generate button (batch: "Kit n of m" in the export
-  area; during a drop, in the scanning overlay) only once a check has run past `PROGRESS_DELAY_MS` (250 ms,
+  area; during a drop it is the same line under the Generate button) only once a check has run past `PROGRESS_DELAY_MS` (250 ms,
   `utils/progressVisibility.ts`, `shouldShowProgress`), so fast checks never flash it.
   **Races:** while a generation is in flight (`isGenerating`; handlers check the `generating` ref, state lags a render) Generate,
   Preview, pad lock/shuffle/exclude, folder toggle/remove, type toggles and export are disabled or ignore clicks. A newer
@@ -440,6 +440,19 @@ rule exists because a simpler version broke on real packs.
   scrolls, which is acceptable.
 - **There is no drop zone box in the sidebar, only a line of text.** `handleDrop` is on the app root so the whole window is the
   target; drag feedback comes from the full-window overlay.
+- **Scan progress is inline, not an overlay (`ScanProgress` in `fileReader.ts`, `utils/scanProgress.ts`).** `getFilesFromDataTransfer`
+  takes an optional third `onProgress({ folder, files })`: once per top-level entry with `files: 0` before anything is read (loose
+  files share "Dropped Files"), then once per accepted file, unthrottled. `collectAudioFiles` takes an optional `onFound(count)`.
+  `App.processFiles` shows a pending row per entry at the end of Source Folders (name, "Scanning… 240 files", a 2px sweeping bar,
+  `.scan-bar` in `index.css`, static under `prefers-reduced-motion`). Count updates go through `throttle` (`SCAN_UI_INTERVAL_MS`,
+  80 ms; drops calls inside the window, no trailing call) so a 10k-file drop does not render thousands of times; the zero-count
+  calls bypass it. The pending rows are cleared in the same batch as `setSourceFolders` (swap, no second row) and in `finally`
+  (empty or failed scan: the row vanishes and the error/notice shows). There is no total, so the bar is indeterminate and
+  `aria-hidden`; the row carries a visually hidden `role=status` whose count is rounded down to 100 so polite announcements are
+  not ten a second. While `isLoading` a transparent fixed `z-50` layer (`cursor-progress`, `aria-hidden`) still swallows clicks so
+  state cannot change under the scan (the `latest` ref is the second guard); it takes no focus. The old dimmed "Scanning" box is
+  gone. Layout is verified in Chrome only (headless, synthetic drop, ~420 files with a per-file delay); the row is about one text
+  line taller than the real row it becomes.
 - **Placement:** Skip Loops and Skip Non-Drums sit inside the Usable Samples card between the count and the Breakdown by Type list
   (cause and effect both visible), in the card's type (`text-sm`, uppercase, medium). Trim Silence sits directly above Export To
   Move (an export setting). **Export To Move sits directly under the Batch Export Amount slider** (not pinned to the panel bottom),

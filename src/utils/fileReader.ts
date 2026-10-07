@@ -120,9 +120,24 @@ async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSy
   return all;
 }
 
+/**
+ * Scan progress for one top-level dropped entry. There is no total: directories are read in
+ * batches, so nothing knows how many files are still to come. `files` counts audio files
+ * accepted so far and never decreases. Loose files share one entry, "Dropped Files".
+ */
+export interface ScanProgress {
+  folder: string;
+  files: number;
+}
+
+/** Name of the folder that loose dropped files are grouped under. */
+export const LOOSE_FILES_FOLDER = 'Dropped Files';
+
 export async function collectAudioFiles(
   root: FileSystemEntry,
-  report: DropReport = newDropReport()
+  report: DropReport = newDropReport(),
+  /** Called with the running count of accepted files, once per file, unthrottled. */
+  onFound?: (count: number) => void
 ): Promise<DroppedFile[]> {
   const files: DroppedFile[] = [];
   const queue: FileSystemEntry[] = [root];
@@ -137,7 +152,10 @@ export async function collectAudioFiles(
         // The subfolder a sample sits in is often the only clue to what it is.
         if (isAudioFile(file.name)) {
           const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : file;
-          if (ready) files.push({ file: ready, path: directoryOf(entry.fullPath) });
+          if (ready) {
+            files.push({ file: ready, path: directoryOf(entry.fullPath) });
+            onFound?.(files.length);
+          }
         }
       } else if (entry.isDirectory && entry.name !== '__MACOSX') {
         const reader = (entry as FileSystemDirectoryEntry).createReader();
@@ -154,7 +172,13 @@ export async function collectAudioFiles(
 
 export async function getFilesFromDataTransfer(
   items: DataTransferItemList,
-  report: DropReport = newDropReport()
+  report: DropReport = newDropReport(),
+  /**
+   * Called once per top-level entry with `files: 0` before anything is read (so a caller can
+   * list them at once), then once per accepted file. Unthrottled: the caller decides how
+   * often to render.
+   */
+  onProgress?: (progress: ScanProgress) => void
 ): Promise<DroppedFolder[]> {
   const result: DroppedFolder[] = [];
 
@@ -169,14 +193,24 @@ export async function getFilesFromDataTransfer(
   // flood the sidebar.
   const loose: DroppedFile[] = [];
 
+  const folderOf = (entry: FileSystemEntry) => (entry.isFile ? LOOSE_FILES_FOLDER : entry.name);
+  if (onProgress) {
+    for (const name of new Set(entries.map(folderOf))) onProgress({ folder: name, files: 0 });
+  }
+
   for (const entry of entries) {
-    const files = await collectAudioFiles(entry, report);
+    const base = entry.isFile ? loose.length : 0;
+    const files = await collectAudioFiles(
+      entry,
+      report,
+      onProgress && (count => onProgress({ folder: folderOf(entry), files: base + count }))
+    );
     if (files.length === 0) continue;
     if (entry.isFile) loose.push(...files);
     else result.push({ name: entry.name, files });
   }
 
-  if (loose.length > 0) result.push({ name: 'Dropped Files', files: loose });
+  if (loose.length > 0) result.push({ name: LOOSE_FILES_FOLDER, files: loose });
 
   return result;
 }

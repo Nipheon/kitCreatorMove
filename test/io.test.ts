@@ -10,6 +10,7 @@ import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
 import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer } from '../src/utils/fileReader';
 import { readWavFormat } from '../src/utils/wavStripper';
+import { describeScanProgress, throttle } from '../src/utils/scanProgress';
 
 let failures = 0;
 async function test(name: string, fn: () => void | Promise<void>) {
@@ -526,6 +527,60 @@ await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is r
   assert.deepEqual(names(got), ['a.wav']);
   assert.deepEqual(report.rejected.map(r => r.name), ['b.wav']);
 });
+
+// ── Scan progress ─────────────────────────────────────────────────────────────
+
+await test('collectAudioFiles reports a monotonically rising count ending at the files found', async () => {
+  const root = dirEntry('', 'Pack', p => [
+    fileEntry(p, 'a.wav'), fileEntry(p, 'cover.png'), fileEntry(p, 'bad.wav', { reject: true }),
+    dirEntry(p, 'Sub', s => [fileEntry(s, 'b.wav'), fileEntry(s, 'c.aif')], 1)
+  ], 2);
+  const seen: number[] = [];
+  const files = await quiet(() => collectAudioFiles(root, undefined, n => seen.push(n)));
+  assert.equal(files.length, 3);
+  assert.deepEqual(seen, [1, 2, 3]);
+});
+
+await test('collectAudioFiles and getFilesFromDataTransfer work without a progress callback', async () => {
+  const folder = dirEntry('', 'Pack', p => [fileEntry(p, 'a.wav')]);
+  assert.equal((await collectAudioFiles(folder)).length, 1);
+  assert.equal((await getFilesFromDataTransfer(itemList([folder]))).length, 1);
+});
+
+await test('getFilesFromDataTransfer lists every entry at 0 first, then counts per folder', async () => {
+  const one = dirEntry('', 'One', p => [fileEntry(p, 'a.wav'), fileEntry(p, 'b.wav')]);
+  const empty = dirEntry('', 'Empty', () => []);
+  const events: { folder: string; files: number }[] = [];
+  const result = await getFilesFromDataTransfer(
+    itemList([one, empty, fileEntry('', 'x.wav'), fileEntry('', 'y.wav')]), undefined, p => events.push({ ...p })
+  );
+  assert.deepEqual(events.slice(0, 3), [
+    { folder: 'One', files: 0 }, { folder: 'Empty', files: 0 }, { folder: 'Dropped Files', files: 0 }
+  ]);
+  const counts = (name: string) => events.slice(3).filter(e => e.folder === name).map(e => e.files);
+  assert.deepEqual(counts('One'), [1, 2]);
+  assert.deepEqual(counts('Empty'), []);
+  assert.deepEqual(counts('Dropped Files'), [1, 2]);
+  assert.deepEqual(result.map(f => f.name), ['One', 'Dropped Files']);
+});
+
+await test('throttle runs at most once per interval and lets the next window through', () => {
+  let t = 0;
+  const calls: number[] = [];
+  const f = throttle((n: number) => calls.push(n), 100, () => t);
+  f(1); t = 50; f(2); t = 99; f(3); t = 100; f(4); t = 150; f(5); t = 250; f(6);
+  assert.deepEqual(calls, [1, 4, 6]);
+});
+
+await test('describeScanProgress words the pending row and rounds what is announced', () => {
+  assert.deepEqual(describeScanProgress('Kicks', 0), { visible: 'Scanning…', announce: 'Scanning Kicks' });
+  assert.equal(describeScanProgress('Kicks', 1).visible, 'Scanning… 1 file');
+  assert.equal(describeScanProgress('Kicks', 240).visible, 'Scanning… 240 files');
+  assert.equal(describeScanProgress('Kicks', 240).announce, 'Scanning Kicks: 200 files');
+  assert.equal(describeScanProgress('Kicks', 12345).visible, 'Scanning… 12,345 files');
+  assert.equal(describeScanProgress('Kicks', 99).announce, 'Scanning Kicks');
+});
+
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);
