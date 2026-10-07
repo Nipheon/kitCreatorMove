@@ -1,7 +1,7 @@
 import { readWavFormat, WavFormat } from './wavStripper';
 
 /** Amplitude below which a sample counts as silence (-60 dBFS). */
-const SILENCE_THRESHOLD = 0.001;
+export const SILENCE_THRESHOLD = 0.001;
 
 /** Bit depths encodeWav can write back. Anything else is passed through untouched. */
 const SUPPORTED_BIT_DEPTHS = [16, 24];

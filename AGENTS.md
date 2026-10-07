@@ -175,10 +175,18 @@ rule exists because a simpler version broke on real packs.
   the skip.
 - **A folder that names a drum category outranks marker words in it.** `Bass Drums` is `/\bbass drums?\b/`, `bassdrums` is in
   `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
-- **Dedupe goes through `sampleIdentity()`** (`utils/sampleSignature.ts`): `name` plus `Sample.signature`, which is the file size and
-  an FNV-1a hash of the first and last 4 KB, computed once per sample in `processFiles` (never the whole file; `crypto.subtle` is
-  unavailable over http). **Both dedupe sites in `kitGenerator.ts` (full generate and single-pad reroll) must use it**, so they
-  cannot drift. Same-named, same-length files that differ at the edges no longer merge, but the set is still rebuilt in folder
+- **Dedupe goes through `sampleIdentity()`** (`utils/sampleSignature.ts`): the `Sample.signature` alone, a hash of the AUDIO
+  content, not the name or file bytes (`name-size` is only the fallback when there is no signature, the dev seed). The same hit
+  exists under different names, sizes and metadata chunks (LIST/bext/iXML/ID3) in real libraries, and one copy often has its
+  leading silence cut. For 16/24-bit PCM WAV the signature is a 64-bit hash (two 32-bit lanes, synchronous, no `crypto.subtle`,
+  which is unavailable over http) of the frames from the first to the last audible one, using the exporter's `SILENCE_THRESHOLD`
+  (imported from `audioTrimmer`, never copy the number), mixed with channels, sample rate and bit depth. Copies that differ by
+  trimmed silence therefore count as one sample; copies with different gain, fades or bit depth do not. Other WAV (float, 8/32-bit,
+  ADPCM) hashes the whole `data` chunk plus the fmt essentials; AIFF and anything unparseable or truncated hashes the whole file,
+  so AIFF copies with different metadata do not match. Hashed spans up to `FULL_HASH_MAX_BYTES` (1 MiB) are hashed whole, above
+  it the length plus the first and last `EDGE_HASH_BYTES` (64 KB). The chunk walk uses `blob.slice` so a large LIST chunk or data
+  chunk is never loaded just to find it. `processFiles` computes signatures once per sample, 8 files at a time. **Both dedupe sites
+  in `kitGenerator.ts` (full generate and single-pad reroll) must use it**, so they cannot drift. The set is rebuilt in folder
   order and keeps the first occurrence, not the best categorised, which is only safe while both copies categorise identically: a
   file that only one folder can explain is still at the mercy of list order. Accepted cost is silent variety loss, never a wrong
   export. Do **not** add `file.lastModified` (copies that lose their mtime would stop merging and put one hit on two pads).

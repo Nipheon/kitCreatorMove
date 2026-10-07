@@ -45,7 +45,7 @@ import {
   uniqueKitName
 } from '../src/utils/kitNaming';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
-import { fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
+import { FULL_HASH_MAX_BYTES, fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
 const NO_TRIM = { trimSilence: false };
@@ -1819,6 +1819,147 @@ await test('dedupe: same name+size but different content no longer collides; ide
   base[0] = a;
   const r = rerollSinglePad([a, b, aCopy], base, 5);
   assert.ok(r.kit[5] === null || r.kit[5]!.id === b.id);
+});
+
+/** WAV from explicit chunks: fmt, then `before` chunks, data, then `after` chunks. */
+function buildWav(data: Uint8Array, o: { rate?: number; bits?: number; before?: [string, number][]; after?: [string, number][] } = {}): Uint8Array {
+  const { rate = 44100, bits = 16 } = o;
+  const chunk = (id: string, body: Uint8Array) => {
+    const out = new Uint8Array(8 + body.length + (body.length % 2));
+    for (let i = 0; i < 4; i++) out[i] = id.charCodeAt(i);
+    new DataView(out.buffer).setUint32(4, body.length, true);
+    out.set(body, 8);
+    return out;
+  };
+  const fmt = new Uint8Array(16);
+  const fv = new DataView(fmt.buffer);
+  fv.setUint16(0, 1, true); fv.setUint16(2, 1, true); fv.setUint32(4, rate, true);
+  fv.setUint32(8, rate * bits / 8, true); fv.setUint16(12, bits / 8, true); fv.setUint16(14, bits, true);
+  const extras = (list: [string, number][] = []) => list.map(([id, n]) => chunk(id, new Uint8Array(n).fill(0x41)));
+  const parts = [chunk('fmt ', fmt), ...extras(o.before), chunk('data', data), ...extras(o.after)];
+  const body = 4 + parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(8 + body);
+  const ov = new DataView(out.buffer);
+  out.set([0x52, 0x49, 0x46, 0x46], 0); ov.setUint32(4, body, true); out.set([0x57, 0x41, 0x56, 0x45], 8);
+  let at = 12;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
+const audioBytes = (n: number, seed: number) => Uint8Array.from({ length: n }, (_, i) => ((i * 31 + seed * 17) % 251) + 1);
+
+await test('content identity: same audio, different metadata chunks, names and sizes match', async () => {
+  const audio = audioBytes(2000, 1);
+  const plain = buildWav(audio);
+  const withList = buildWav(audio, { before: [['LIST', 301]], after: [['id3 ', 40]] });
+  const withBext = buildWav(audio, { before: [['bext', 602], ['LIST', 99]] });
+  assert.notEqual(plain.length, withList.length);
+  const mk = async (name: string, bytes: Uint8Array): Promise<Sample> => {
+    const s = makeSample(name, 'OHH', '');
+    s.file = new File([bytes], name, { type: 'audio/wav' });
+    s.signature = await fileSignature(s.file);
+    return s;
+  };
+  const a = await mk('BlockWatch-HatOpn.wav', plain);
+  const b = await mk('BlockWatch-HatOpn.wav', withList);
+  const c = await mk('DPHAT03.wav', withBext);
+  assert.equal(a.signature, b.signature);
+  assert.equal(sampleIdentity(a), sampleIdentity(b));
+  assert.equal(sampleIdentity(a), sampleIdentity(c));
+});
+
+await test('content identity: different audio with same name and size, or different fmt, differs', async () => {
+  const audio = audioBytes(2000, 1);
+  const other = audio.slice();
+  other[1000] ^= 0x55;
+  const sig = (b: Uint8Array) => fileSignature(new Blob([b]));
+  assert.equal(buildWav(audio).length, buildWav(other).length);
+  assert.notEqual(await sig(buildWav(audio)), await sig(buildWav(other)));
+  assert.notEqual(await sig(buildWav(audio)), await sig(buildWav(audio, { bits: 24 })));
+  assert.notEqual(await sig(buildWav(audio)), await sig(buildWav(audio, { rate: 48000 })));
+});
+
+/** Mono PCM of a decaying tone with `lead` silent frames in front and `tail` quiet ones behind. */
+function pcm(opts: { bits?: 16 | 24; gain?: number; lead?: number; tail?: number; bump?: boolean } = {}): Uint8Array {
+  const { bits = 16, gain = 1, lead = 0, tail = 0, bump = false } = opts;
+  const width = bits / 8;
+  const body = Array.from({ length: 3000 }, (_, i) => Math.round(Math.sin(i / 7) * Math.exp(-i / 900) * 20000 * gain * 2 ** (bits - 16)) + (bump && i === 1500 ? 1 : 0));
+  const values = [...new Array(lead).fill(0), ...body, ...new Array(tail).fill(1)];
+  const out = new Uint8Array(values.length * width);
+  values.forEach((v, i) => { for (let b = 0; b < width; b++) out[i * width + b] = (v >> (8 * b)) & 0xff; });
+  return out;
+}
+
+await test('content identity: leading and trailing silence is ignored, gain and bit depth are not', async () => {
+  const sig = (b: Uint8Array) => fileSignature(new Blob([b]));
+  const a = buildWav(pcm({ lead: 4698 }), { before: [['LIST', 90]], after: [['id3 ', 10]] });
+  const b = buildWav(pcm({ lead: 164, tail: 500 }), { before: [['LIST', 300], ['CDif', 33]] });
+  assert.notEqual(a.length, b.length);
+  assert.equal(await sig(a), await sig(b));
+  assert.equal(await sig(buildWav(pcm())), await sig(a));
+  assert.notEqual(await sig(a), await sig(buildWav(pcm({ bump: true }))));
+  assert.notEqual(await sig(a), await sig(buildWav(pcm({ gain: 0.5 }))));
+  assert.notEqual(await sig(a), await sig(buildWav(pcm({ bits: 24 }), { bits: 24 })));
+  assert.equal(await sig(buildWav(new Uint8Array(400))), await sig(buildWav(new Uint8Array(900), { before: [['LIST', 8]] })));
+  assert.notEqual(await sig(buildWav(new Uint8Array(400))), await sig(buildWav(new Uint8Array(400), { rate: 48000 })));
+});
+
+await test('content identity: audio above the cap hashes length plus head and tail', async () => {
+  const big = audioBytes(FULL_HASH_MAX_BYTES + 5000, 3);
+  const tailChanged = big.slice();
+  tailChanged[tailChanged.length - 10] ^= 1;
+  const middleChanged = big.slice();
+  middleChanged[Math.floor(big.length / 2)] ^= 1; // unseen by design
+  const sig = (b: Uint8Array) => fileSignature(new Blob([b]));
+  const base = await sig(buildWav(big));
+  assert.equal(base, await sig(buildWav(big, { before: [['LIST', 77]] })));
+  assert.notEqual(base, await sig(buildWav(tailChanged)));
+  assert.equal(base, await sig(buildWav(middleChanged)));
+  assert.notEqual(base, await sig(buildWav(big.subarray(0, big.length - 1))));
+});
+
+await test('content identity: truncated, headerless and non-RIFF blobs do not throw', async () => {
+  const wav = buildWav(audioBytes(500, 2));
+  for (const blob of [
+    new Blob([wav.subarray(0, 30)]),
+    new Blob([wav.subarray(0, 200)]),
+    new Blob([wav.subarray(0, 11)]),
+    new Blob([wav.subarray(0, 44 + 4)]),
+    new Blob([]),
+    new Blob(['not a wav at all, just text'])
+  ]) {
+    const s = await fileSignature(blob);
+    assert.equal(typeof s, 'string');
+    assert.equal(s, await fileSignature(blob));
+  }
+  const lying = wav.slice();
+  new DataView(lying.buffer).setUint32(wav.length - 500 - 4, 0xffffffff, true);
+  assert.equal(typeof (await fileSignature(new Blob([lying]))), 'string');
+});
+
+await test('kit generation never puts two content-identical samples on different pads', async () => {
+  const pool: Sample[] = [];
+  for (let h = 0; h < 5; h++) {
+    const audio = audioBytes(1500, 10 + h);
+    for (const copy of [0, 1]) {
+      const bytes = buildWav(audio, copy ? { before: [['LIST', 120 + h]] } : {});
+      const s = makeSample(copy ? `Pack2/Hat${h}-v2.wav` : `Hat${h}.wav`, 'OHH', '');
+      s.file = new File([bytes], s.name, { type: 'audio/wav' });
+      s.signature = await fileSignature(s.file);
+      pool.push(s);
+    }
+  }
+  for (let i = 0; i < 50; i++) {
+    const { kit } = generateRandomKit(pool);
+    const used = kit.filter((s): s is Sample => s !== null);
+    assert.equal(new Set(used.map(sampleIdentity)).size, used.length);
+    const pad = i % PAD_COUNT;
+    const base: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+    base[(pad + 1) % PAD_COUNT] = pool[i % pool.length];
+    const r = rerollSinglePad(pool, base, pad);
+    const after = r.kit.filter((s): s is Sample => s !== null);
+    assert.equal(new Set(after.map(sampleIdentity)).size, after.length);
+  }
 });
 
 await test('mergeScannedFolders merges against the current list', () => {

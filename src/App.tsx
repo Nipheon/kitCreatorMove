@@ -475,7 +475,12 @@ export default function App() {
 
       for (const folder of accepted) {
         const samples: Sample[] = [];
-        for (const { file, path } of folder.files) {
+        const signatures: string[] = [];
+        // Bounded parallel: hashing reads each file's audio, so overlap the I/O without opening thousands at once.
+        for (let i = 0; i < folder.files.length; i += 8) {
+          signatures.push(...await Promise.all(folder.files.slice(i, i + 8).map(f => fileSignature(f.file))));
+        }
+        for (const [index, { file, path }] of folder.files.entries()) {
           const url = URL.createObjectURL(file);
 
           const category = categorizeSample(file.name, path);
@@ -490,7 +495,7 @@ export default function App() {
             isLoop: looksLikeLoop(file.name, path, category),
             isNonDrum: looksNonDrum(category, file.name, path),
             url,
-            signature: await fileSignature(file)
+            signature: signatures[index]
           });
         }
 
