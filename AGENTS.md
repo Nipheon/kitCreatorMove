@@ -492,12 +492,12 @@ rule exists because a simpler version broke on real packs.
   pad. **Reroll:** rerolling a closed-hat pad re-applies the rule to the pad on its right unless that pad is locked (`lockedPads`
   travels in the last argument, `DrawHooks`); rerolling an open pad draws as before. `substituted`/`empty` are computed on the
   final kit. Enforced by tests in `test/kit.test.ts`.
-- **Choke is a kit-level rule, `chokeGroupsFor(kit)` in `padLayout.ts` (owner's decision, NOT verified on hardware).** A kit chokes only
+- **Choke is a kit-level rule, `chokeGroupsFor(kit)` in `padLayout.ts` (owner's decision, verified on a real Move by the owner on 2026-10-07).** A kit chokes only
   when it holds both a closed hat (`CHH` or generic `Hat`) and an open hat (`OHH`): then every hat pad, closed and open, is group 1.
   Otherwise nothing chokes (closed only, open only). `Crash` (rides, cymbals included) never chokes; group 2 is retired. Empty pads
   never choke. The exporter's `chokeGroups` and the Pad badges (App passes each Pad its group) both come from this one function over the
   same kit, so preset and badges cannot disagree; a test parses the exported preset and compares. Removing the only open hat (exclude,
-  reroll, shuffle) flips the closed hats to no choke. Hardware-verified earlier: hats cutting each other in group 1.
+  reroll, shuffle) flips the closed hats to no choke. Verified on hardware: hats cutting each other in group 1, and the whole kit-level rule.
 - **Empty pads are deliberately not lockable**, asserted explicitly on the lock button.
 - **The pad is a plain `<div>` with a separate play `<button>` filling it, and lock/shuffle/exclude are sibling buttons**, so no
   interactive element nests in another (the old `<div role="button">` rule is obsolete). The visible content sits above the play
@@ -706,7 +706,7 @@ rule exists because a simpler version broke on real packs.
 **Verified on a real Move (settled, do not re-litigate):** `$schema` `song/1.7.0/devicePreset.json`; `Macro0` as an object beside
 plain-float `Macro1`-`Macro7`; `BundleInfo.json`; percent-encoded `sampleUri`; `STORE` bundles; pad order (UI pad 1 is the device's
 bottom-left, `DISPLAY_INDICES` bottom-left-origin with the `receivingNote`/`sendingNote` mapping, both pinned by a test because a
-wrong mapping still sounds on every pad, just not the one shown); choke groups (only hats cutting each other in group 1 was verified on hardware; the kit-dependent rule, hats choke only when the kit has both closed and open hats and crashes never choke, is the owner's decision and is **not** verified); trimming at both
+wrong mapping still sounds on every pad, just not the one shown); choke groups (the kit-dependent rule, hats choke only when the kit has both closed and open hats and crashes never choke, was verified on a real Move by the owner on 2026-10-07); trimming at both
 ends (`0.001` does not clip tails); drum cell `color` (see Preset generation). Do not "modernise" the `$schema` version, flatten
 `Macro0`, invert the grid or change the note mapping because they look wrong; they were guesses once and are not any more.
 
