@@ -2298,15 +2298,18 @@ await test('lazy dedupe: isDuplicate stays out of later draws and out of usable 
   // Every kick is the same audio, so a kick pad drains the whole kick pool and flags the repeats.
   const kicksAreOne = async (s: Sample) => (s.category === 'Kick' ? 'one-kick' : identityOf(s));
   await generateRandomKit(lib, [], {}, undefined, { identityOf: kicksAreOne });
-  const flagged = lib.filter(s => s.isDuplicate);
+  // The open-hat twins in this pool can be flagged too whenever two open-hat pads draw both
+  // copies of one hat, so only the kicks have a fixed count.
+  const flaggedAll = lib.filter(s => s.isDuplicate);
+  const flagged = flaggedAll.filter(s => s.category === 'Kick');
   assert.equal(flagged.length, 5);
-  assert.ok(flagged.every(s => s.category === 'Kick' && !isUsableSample(s)));
-  assert.equal(lib.filter(s => isUsableSample(s)).length, lib.length - flagged.length);
+  assert.ok(flaggedAll.every(s => (s.category === 'Kick' || s.category === 'OHH') && !isUsableSample(s)));
+  assert.equal(lib.filter(s => isUsableSample(s)).length, lib.length - flaggedAll.length);
   const excludedCopy: Sample = { ...flagged[0], isDuplicate: false, isExcluded: true };
   assert.ok(!isUsableSample(excludedCopy), 'exclusion is a separate flag');
   const seen: string[] = [];
   await generateRandomKit(lib, [], {}, undefined, { identityOf: async s => { seen.push(s.id); return kicksAreOne(s); } });
-  assert.ok(flagged.every(f => !seen.includes(f.id)), 'a flagged sample was looked at again');
+  assert.ok(flaggedAll.every(f => !seen.includes(f.id)), 'a flagged sample was looked at again');
 });
 
 await test('lazy dedupe: progress reaches the number of pads to fill', async () => {
