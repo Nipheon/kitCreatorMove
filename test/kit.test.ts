@@ -1776,6 +1776,18 @@ await test('empty-pad notice counts kits with at least one empty pad', () => {
   );
 });
 
+await test('dots in folder names are kept; only the file extension is stripped', () => {
+  assert.equal(categorizeSample('Sample 01.wav', 'Packs/Hats.Open'), 'OHH');
+  assert.equal(categorizeSample('Sample 01.wav', 'Packs/808.Kicks'), 'Kick');
+  assert.equal(categorizeSample('Kick.01.wav'), 'Kick');
+  assert.equal(categorizeSample('Snare.v2.aif'), 'Snare');
+  assert.equal(looksLikeLoop('Hit 01.wav', 'Packs/Drum.Loops'), true);
+  assert.equal(looksLikeLoop('Loop.01.wav'), true);
+  assert.equal(looksLikeLoop('Kick.01.wav', '', 'Kick'), false);
+  assert.equal(looksNonDrum('Other', 'Hit.wav', 'Packs/Vocal.Chops'), true);
+  assert.equal(looksNonDrum('Other', 'Fx.01.wav'), true);
+});
+
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);
   process.exit(1);

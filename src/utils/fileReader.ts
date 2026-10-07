@@ -103,9 +103,9 @@ export async function getFilesFromDataTransfer(
  * yield the abbreviation on its own. Matching whole tokens rather than substrings
  * is what stops "custom" reading as a tom and "bassdrop" as a snare.
  */
-function tokenize(name: string): string[] {
-  return name
-    .replace(/\.[a-z0-9]+$/i, '')          // drop the extension
+function tokenize(name: string, isFile = false): string[] {
+  // Only a file name has an extension; a folder called "808.Kicks" keeps its last part.
+  return (isFile ? name.replace(/\.[a-z0-9]+$/i, '') : name)
     .replace(/([a-z])(\d)/gi, '$1 $2')     // BD01 -> BD 01
     .replace(/(\d)([a-z])/gi, '$1 $2')     // 808bass -> 808 bass
     // BohmSlappAltOpenHat -> Bohm Slapp Alt Open Hat. Without this the whole name is one
@@ -178,8 +178,8 @@ const PHRASES: [RegExp, Category][] = [
   [/\bhi hat\b/, 'Hat']
 ];
 
-function classify(text: string): Category | null {
-  const tokens = tokenize(text);
+function classify(text: string, isFile = false): Category | null {
+  const tokens = tokenize(text, isFile);
   if (tokens.length === 0) return null;
   // Short abbreviations must be whole tokens — "tom" inside "custom" is not a tom.
   // Words of four characters or more are also matched glued to a prefix or suffix,
@@ -269,8 +269,8 @@ const LOOP_WORDS = ['loop', 'loops', 'bpm'];
  * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
  * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
  */
-function textLooksLikeLoop(text: string, tempoCounts = true): boolean {
-  const tokens = tokenize(text);
+function textLooksLikeLoop(text: string, tempoCounts = true, isFile = false): boolean {
+  const tokens = tokenize(text, isFile);
   const joined = tokens.join(' ');
 
   // A tempo has to say so: "130bpm", "[130bpm]", "128 bpm". A bare number —
@@ -342,10 +342,10 @@ const NON_DRUM_FOLDERS = [
 export function looksNonDrum(category: Category, name: string, directory = ''): boolean {
   if (category !== 'Other') return false;
 
-  const hasWord = (text: string, list: string[]) =>
-    tokenize(text).some(t => list.includes(t));
+  const hasWord = (text: string, list: string[], isFile = false) =>
+    tokenize(text, isFile).some(t => list.includes(t));
 
-  if (hasWord(name, NON_DRUM_WORDS)) return true;
+  if (hasWord(name, NON_DRUM_WORDS, true)) return true;
 
   return folderCandidates(directory).some(folder => {
     // A folder that names a drum category outranks any marker word inside it. Without
@@ -370,7 +370,7 @@ export function looksNonDrum(category: Category, name: string, directory = ''): 
 const BREAK_WORDS = ['break', 'breaks', 'breakbeat', 'breakbeats'];
 
 function nameLooksLikeBreak(name: string): boolean {
-  return tokenize(name).some(t => BREAK_WORDS.includes(t));
+  return tokenize(name, true).some(t => BREAK_WORDS.includes(t));
 }
 
 /**
@@ -381,7 +381,7 @@ function nameLooksLikeBreak(name: string): boolean {
  * app passes it.
  */
 export function looksLikeLoop(name: string, directory = '', category: Category = 'Other'): boolean {
-  if (textLooksLikeLoop(name)) return true;
+  if (textLooksLikeLoop(name, true, true)) return true;
   if (category === 'Other' && nameLooksLikeBreak(name)) return true;
   return folderCandidates(directory).some(folder => textLooksLikeLoop(folder, false));
 }
@@ -391,7 +391,7 @@ export function looksLikeLoop(name: string, directory = '', category: Category =
  * sample sits in. There is no audio analysis.
  */
 export function categorizeSample(name: string, directory = ''): Category {
-  const fromName = classify(name);
+  const fromName = classify(name, true);
 
   /**
    * The one case where a folder may overrule the filename, and only to sharpen it: a
