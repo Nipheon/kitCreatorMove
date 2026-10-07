@@ -921,32 +921,45 @@ await test('tmb is a tambourine, but a hat word in the name still wins', async (
   assert.equal(categorizeSample('b06_ac2ftmbsh_01.wav'), 'Other');
 });
 
-await test('OpHat written as one word is a weak open-hat hint that an explicit hat folder overrides', async () => {
-  // Open hats by name, or by the Open Hats folder.
-  assert.equal(categorizeSample('OpHat (Deezy).wav'), 'OHH');
-  assert.equal(categorizeSample('OpHat (Deezy).wav', '/Pack/Open Hats'), 'OHH');
-  assert.equal(categorizeSample('wadrm_ophat_acc0_r5.wav'), 'OHH');
-  assert.equal(categorizeSample('wadrm_ophat_acc0_r5.wav', '/wa_drm_drums/open hat'), 'OHH');
-  assert.equal(categorizeSample('pbs - stingray [ OpHat ].wav', '/The Lunch77 Shawty Redd Drumkit/Open Hats'), 'OHH');
-  assert.equal(categorizeSample('XR10ophat.wav', '/drums/kits/_new/huge shit/Akai_XR-10/Akai XR-10'), 'OHH');
-  assert.equal(categorizeSample('RockOpHat.wav', '/drums/hat open'), 'OHH');
-  // An explicit closed-hat folder wins: the owner hears these as closed.
-  for (const name of ['OpHat (Mafia).wav', 'OpHat (Atl).wav', 'OpHat (Coop).wav']) {
-    assert.equal(categorizeSample(name, '/Pack/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'CHH', name);
+await test('op next to a hat word is an open hat, even in a closed-hat folder', async () => {
+  // "op" is hip-hop shorthand for "overpowered"; the owner confirmed these three sets by ear.
+  for (const n of ['100 OP HAT.wav', '101 OP HAT 2.wav', '135 OP HAT.wav']) {
+    assert.equal(categorizeSample(n, 'e:/music/samples/drums/hat closed'), 'OHH', n);
+    assert.equal(categorizeSample(n), 'OHH', n);
   }
-  assert.equal(categorizeSample('ophat.wav', '/drums/hat closed'), 'CHH');
-  // The spaced "OP HAT" is not the glued form: no hint, so a closed folder keeps its files closed.
-  for (const name of ['100 OP HAT.wav', '135 OP HAT.wav', '129 OP HAT 2.wav']) {
-    assert.equal(categorizeSample(name, '/drums/hat closed'), 'CHH', name);
-    assert.equal(categorizeSample(name), 'Hat', name);
+  for (const n of ['Boom-Bap Hat OP 100.wav', 'Boom-Bap Hat OP 104.wav', 'Boom-Bap Hat OP 54.wav', 'Boom-Bap Hat OP 78.wav', 'Boom-Bap Hat OP 83.wav', 'Boom-Bap Hat OP 85.wav', 'Boom-Bap Hat OP 89.wav']) {
+    assert.equal(categorizeSample(n, '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH', n);
   }
-  // A letter in front is another word: skophat, Dophat, YChopHat.
-  for (const name of ['skophat.wav', 'Dophat01.wav']) assert.equal(categorizeSample(name), 'Other', name);
-  assert.equal(categorizeSample('YChopHat3.wav', '/Pack/Closed Hats'), 'CHH');
+  for (const n of ['OpHat (Atl).wav', 'OpHat (Coop).wav', 'OpHat (Mafia).wav']) {
+    assert.equal(categorizeSample(n, '/Southside (Periscope & Instagram Live) Drumkit/Closed Hats'), 'OHH', n);
+  }
+  // Either order and every separator or glue.
+  for (const n of ['OpHat (Deezy).wav', 'wadrm_ophat_acc0_r5.wav', 'RockOpHat.wav', 'XR10ophat.wav', 'op-hat.wav', 'op_hh_1.wav',
+    'Hi Hat Op.wav', 'hihat_op_2.wav', 'Hat-OP.wav', 'op hi hat.wav', 'OPHAT.wav']) {
+    assert.equal(categorizeSample(n), 'OHH', n);
+    assert.equal(categorizeSample(n, '/drums/hats'), 'OHH', n);
+    assert.equal(categorizeSample(n, '/drums/Closed Hats'), 'OHH', n);
+    assert.equal(categorizeSample(n, '/drums/Open Hats'), 'OHH', n);
+  }
+  // A stray `c` is not a closed word here; a real one is.
+  assert.equal(categorizeSample('Op Hat [C4RT1].wav', '/The Lunch77 Mexikodro Drumkit/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('pbs - power-c [ OpHat ].wav', '/The Lunch77 Shawty Redd Drumkit/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('Op Hat closed.wav'), 'CHH');
+  // `op` inside another word is not `op`.
+  assert.equal(categorizeSample('skophat.wav'), 'Other');
+  assert.equal(categorizeSample('Dophat01.wav'), 'Other');
+  for (const n of ['YChopHat3.wav', 'Hop Hat.wav', 'Chop Hat.wav', 'Stop Hat.wav', 'Drop Hat.wav', 'Cop Hat.wav']) {
+    assert.notEqual(categorizeSample(n, '/Pack/Closed Hats'), 'OHH', n);
+    assert.equal(categorizeSample(n, '/Pack/Closed Hats'), 'CHH', n);
+  }
+  // `op` not next to a hat word is untouched, and another category in the name still wins.
+  assert.equal(categorizeSample('OP 1 kick.wav'), 'Kick');
+  assert.equal(categorizeSample('Op Snare.wav'), 'Snare');
+  assert.equal(categorizeSample('ophat kick.wav'), 'Kick');
+  assert.equal(categorizeSample('OP 3 hat.wav', '/drums/hat closed'), 'CHH');
   // Strong words keep today's behaviour: the filename beats the folder.
   assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
-  // Another category in the name still wins over the hint.
-  assert.equal(categorizeSample('ophat kick.wav'), 'Kick');
+  assert.equal(categorizeSample('closed hat.wav', '/Open Hats'), 'CHH');
 });
 
 await test('the preset prefix follows the folder that is actually loaded', async () => {

@@ -484,12 +484,21 @@ const VARIANT_CODES: [RegExp, Category][] = [
 ];
 
 /**
- * "OpHat" / "ophat" glued into one written word (`OpHat (Deezy)`, `wadrm_ophat_acc0_r5`, `RockOpHat`):
- * an open hat in 171 dump files, but only weak evidence. The spaced `OP HAT` is not matched (the
- * owner's `hat closed/100 OP HAT.wav` is closed), and `skophat`/`Dophat`/`YChopHat` have a letter in
- * front. Tested on the raw name because `tokenize` splits the camelCase and loses the difference.
+ * `op` next to a hat word is an OPEN hat: "op" is hip-hop shorthand for "overpowered" (`100 OP HAT`,
+ * `Boom-Bap Hat OP 100`, `OpHat (Atl)`, `wadrm_ophat_acc0_r5`, `RockOpHat`, `Hi Hat Op`). The owner
+ * confirmed by ear three sets that sit in closed-hat folders, so this is strong name evidence.
+ * Tested on the name with camelCase split and lowercased: `op` must start a word (no letter in front,
+ * so `skophat`, `Dophat`, `Hop Hat`, `Chop Hat`, `YChopHat`, `Stop Hat`, `Drop Hat`, `Cop Hat` do not
+ * match) and must not continue into a longer word (`open`, `opening`); only spaces, `_`, `-`, `.` or
+ * nothing may separate it from the hat word, so `OP 1 kick` and `Op Snare` do not match.
  */
-const GLUED_OPEN_HAT = /(?<![A-Za-z])(?:Op|op|OP)(?:Hat|hat|HAT)s?(?![a-z])|(?<=[a-z])OpHats?(?![a-z])/;
+const OP_BEFORE_HAT = /(?<![a-z])op[ _.-]*(?:hi[ _.-]?hat|hihat|hat|hh)s?(?![a-z])/;
+const OP_AFTER_HAT = /(?<![a-z])(?:hi[ _.-]?hat|hihat|hat|hh)s?[ _.-]+op(?![a-z])/;
+
+function nameHasOpHat(name: string): boolean {
+  const text = name.replace(/\.[a-z0-9]+$/i, '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  return OP_BEFORE_HAT.test(text) || OP_AFTER_HAT.test(text);
+}
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
@@ -744,10 +753,14 @@ export function looksLikeLoop(name: string, directory = '', category: Category =
  */
 export function categorizeSample(name: string, directory = ''): Category {
   const classified = classify(name, true);
-  // "OpHat" / "ophat" written as ONE word is weak evidence of an open hat: it reads as a bare Hat
-  // (so an explicit open or closed hat folder decides, below) and is OHH only when no folder does.
-  const weakOpen = (classified === null || classified === 'Hat') && GLUED_OPEN_HAT.test(name.replace(/\.[a-z0-9]+$/i, ''));
-  const fromName = weakOpen ? 'Hat' : classified;
+  // `op` ("overpowered") next to a hat word is an open hat, and the filename beats a closed-hat
+  // folder. A name that already says something else (kick, snare, closed ...) keeps that.
+  // A lone `c` token (`Op Hat [C4RT1]`, `power-c [ OpHat ]`) is the only closed word that does not count against it.
+  if (nameHasOpHat(name)) {
+    const nameClass = classified === 'CHH' ? classify(name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' '), true) : classified;
+    if (nameClass === null || nameClass === 'Hat') return 'OHH';
+  }
+  const fromName = classified;
 
   /**
    * The one case where a folder may overrule the filename, and only to sharpen it: a
@@ -765,7 +778,6 @@ export function categorizeSample(name: string, directory = ''): Category {
       if (fromFolder === 'CHH' || fromFolder === 'OHH') return fromFolder;
     }
   }
-  if (weakOpen) return 'OHH';
 
   if (fromName) return fromName;
 

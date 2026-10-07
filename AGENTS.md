@@ -216,8 +216,7 @@ rule exists because a simpler version broke on real packs.
   (one library, two copies), `cymcra` (21 files, one folder), `bdrm`/`bdeq` (one Alesis set), `cowbl`, `cnga*`/`cng`, `drmsn`/`drmsnd`,
   `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tam` (the Tama brand in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
   `closed` as hat qualifiers without a hat word (163 name-only files, 122 already rescued by a hat folder, the rest `DOOR OPEN`,
-  `Open Up`, `Open Hi` percussion), and the spaced `op hat` as an open qualifier (the
-  owner's `hat closed/NN OP HAT.wav` has 69 files that the owner calls closed; only the glued `OpHat`/`ophat` is read, see below). `close` (singular) is not in the closed list on
+  `Open Up`, `Open Hi` percussion), and the spaced `op hat`, which was refused then and is read now (see the `op` rule below). `close` (singular) is not in the closed list on
   purpose: it would only relabel generic `Hat` as `CHH`, the same pool.
 - **Owner exceptions to the evidence bar (round 3).** `klp`, `klap` and `klapz` are Clap although they come from one library (Klub
   Klapz, 320 files, plus `Klap [Lou]` / `Dre KLP (2)` in the Lunch77 kits); `klap` is `WHOLE_TOKEN_ONLY` (German "Klappe") and
@@ -225,15 +224,20 @@ rule exists because a simpler version broke on real packs.
   made them Clap, and `looksNonDrum` only runs for `Other`; by name alone the `fx` token had marked them non-drum, now `klp` places
   them first. `tmb` is Perc (tambourine, with the shakers): the nine `FA####_tmb` files in `hat open`/`hat closed` now read Perc
   (the owner filed them as hats), and `88 HAT+TMB` stays a hat because a hat word wins over a Perc word.
-- **`OpHat` / `ophat` written as one word is weak open-hat evidence** (`GLUED_OPEN_HAT`, tested on the raw name because `tokenize`
-  splits camelCase): in `categorizeSample` such a name that classifies as null or bare `Hat` is treated as a bare `Hat`, so an
-  explicit open or closed hat folder decides (`OpHat (Mafia)` in `Closed Hats` is CHH, in `Open Hats` OHH) and with no hat folder it
-  is OHH. The spaced `OP HAT` is not matched (69 owner files in `hat closed`), nor a letter in front (`skophat`, `Dophat`,
-  `YChopHat`). Strong words (`OPENHAT_X` in `Closed Hats`) keep "the filename wins". Moves 145 name-only files in the dumps.
+- **`op` next to a hat word is an OPEN hat, and the filename beats a closed-hat folder** (`OP_BEFORE_HAT`/`OP_AFTER_HAT`, tested on the
+  camelCase-split lower-cased name). `op` is hip-hop shorthand for "overpowered"; the owner confirmed by ear three sets that sit in
+  closed-hat folders: `hat closed/NN OP HAT[ N].wav` (69 files in the dump), `The Lunch77 MF DOOM Drumkit/Closed Hats/Boom-Bap Hat OP NN`
+  and `Southside .../Closed Hats/OpHat (Atl|Coop|Mafia)`. Either order (`OP HAT`, `Hat OP`, `Hi Hat Op`, `op_hh`), separated by space,
+  `_`, `-`, `.` or glued (`OpHat`, `ophat`, `RockOpHat`). `op` must be a whole word: a letter in front disqualifies (`skophat`, `Dophat`,
+  `Hop Hat`, `Chop Hat`, `YChopHat`, `Stop Hat`, `Drop Hat`, `Cop Hat`), it must not run on into a word (`open`), and `op` not adjacent
+  to a hat word (`OP 1 kick`, `Op Snare`) is untouched. It applies when the name says nothing else (null, bare `Hat`, or `CHH` only via a
+  stray `c` token as in `Op Hat [C4RT1]`); another category or a real closed word (`Op Hat closed`) keeps its meaning. The narrow folder
+  sharpening for bare `Hat` is unchanged. Replaces the round 3 weak glued-`OpHat` rule. Not read: `OPHHcDIR`-style names where letters
+  follow `hh` (40 files in one acoustic kit, still `Other`).
 - **Unqualified `Hat` in a generic hat folder is counted closed, and nothing in the name can change that.** `overkill/hats` (4,023
   files, duplicated under `kits/drums overkill`) is `HIHAT_NNNN.wav` throughout: no open/closed token anywhere, so all are `Hat`. Across
   both dumps 22,573 files read as generic `Hat` by name, 7,692 of them are sharpened by an open or closed folder, and 14,881 stay
-  generic. Of those only `op` (20 files, now read when glued) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
+  generic. Of those only `op` (20 files, now read next to a hat word) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
   are all recognised (0 left over).
 - **Name-only accuracy ceiling.** Of the owner's 6,276 hand-sorted files 1,904 are still missed by name alone after round 2: 975 are
   numbered or code-only (`Audio_086`, `track21_003`, `19_02_08`, `x1`), 473 carry words but no drum vocabulary, 450 are the rejected
