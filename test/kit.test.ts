@@ -1661,6 +1661,28 @@ await test('rerollSinglePad changes only target pad and preserves locked pads', 
   assert.equal(new Set(placed).size, placed.length, 'no duplicate samples across pads');
 });
 
+await test('rerollSinglePad holds the layout it is given when the options have since changed', () => {
+  // The skip toggles do not regenerate the kit, so a reroll after one must not swap the
+  // grid under the other fifteen pads.
+  const samples: Sample[] = [
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
+    makeSample('clap.wav', 'Clap'),
+    ...Array.from({ length: 3 }, (_, i) => ({
+      ...makeSample(`open_hat_loop_${i}.wav`, 'OHH' as const),
+      isLoop: true
+    }))
+  ];
+  const built = generateRandomKit(samples, [], { skipLoops: false });
+  const recomputed = rerollSinglePad(samples, built.kit, 0, { skipLoops: true });
+  assert.notEqual(recomputed.layout.id, built.layout.id, 'premise: the layouts must differ');
+
+  const held = rerollSinglePad(samples, built.kit, 0, { skipLoops: true }, built.layout);
+  assert.equal(held.layout, built.layout);
+  const outOfRange = rerollSinglePad(samples, built.kit, PAD_COUNT, { skipLoops: true }, built.layout);
+  assert.equal(outOfRange.layout, built.layout);
+});
+
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);
   process.exit(1);

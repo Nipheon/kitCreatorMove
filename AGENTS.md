@@ -472,6 +472,12 @@ real packs.
   pools into `Perc` first, so a crash can now legitimately land on an `Other` pad; it
   still chokes as a crash, because `chokeGroupFor` reads the real category.
 
+- **A single-pad reroll holds the kit's layout.** `rerollSinglePad` takes the layout the
+  kit was built under (`kitResult.layout`) instead of recomputing it. The skip toggles do
+  not regenerate the kit, so recomputing could swap the grid under the other 15 pads and
+  make roles, warnings and the exported grid id describe a different grid. Candidate pools
+  still follow the current options; only the layout is fixed.
+
   **`satisfiesRole` had to learn it too**, or the warning toast would fire on nearly every
   kit holding both: an `Other` on a percussion pad is the design, not a lost draw.
 - **`substituted` means the pad's category existed and the pad still did not get it.**

@@ -623,7 +623,7 @@ export default function App() {
 
   const rerollPad = (index: number) => {
     if (samples.length > 0 && !lockedPads[index]) {
-      setKitResult(rerollSinglePad(samples, kit, index, kitOptions));
+      setKitResult(rerollSinglePad(samples, kit, index, kitOptions, kitResult.layout));
       setAudition(prev => ({ index, token: prev.token + 1 }));
     }
   };

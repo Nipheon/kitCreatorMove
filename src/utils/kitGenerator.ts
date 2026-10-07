@@ -237,17 +237,22 @@ export function generateRandomKit(
  * Re-rolls a single pad in the kit while leaving all other pads (and locked pads) untouched.
  * Selects a replacement sample for targetIndex from usable pools, avoiding samples already
  * placed on other pads.
+ *
+ * Pass `layout` (the one the kit was built under) to hold it fixed. The skip toggles do
+ * not regenerate the kit, so recomputing the layout here could swap the grid under the
+ * other 15 pads; candidate pools still follow the current options.
  */
 export function rerollSinglePad(
   samples: Sample[],
   currentKit: (Sample | null)[],
   targetIndex: number,
-  options: KitOptions = {}
+  options: KitOptions = {},
+  layout?: PadLayout
 ): KitResult {
   if (targetIndex < 0 || targetIndex >= PAD_COUNT) {
     return {
       kit: [...currentKit],
-      layout: chooseLayout(samples.filter(s => isUsableSample(s, options))),
+      layout: layout ?? chooseLayout(samples.filter(s => isUsableSample(s, options))),
       substituted: [],
       empty: [],
       unavailableRoles: []
@@ -255,7 +260,7 @@ export function rerollSinglePad(
   }
 
   const usable = samples.filter(s => isUsableSample(s, options));
-  const layout = chooseLayout(usable);
+  const heldLayout = layout ?? chooseLayout(usable);
   const nextKit = [...currentKit];
 
   const current = nextKit[targetIndex];
@@ -269,7 +274,7 @@ export function rerollSinglePad(
     }
   });
 
-  const preferences = layout.preferences[targetIndex];
+  const preferences = heldLayout.preferences[targetIndex];
 
   const pools: Record<Category, Sample[]> = {
     Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Hat: [], Crash: [], Perc: [], Other: []
@@ -306,5 +311,5 @@ export function rerollSinglePad(
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;
 
-  return { kit: nextKit, layout, ...summarisePads(nextKit, layout, availableRoles(usable)) };
+  return { kit: nextKit, layout: heldLayout, ...summarisePads(nextKit, heldLayout, availableRoles(usable)) };
 }
