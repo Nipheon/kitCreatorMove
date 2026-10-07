@@ -204,26 +204,36 @@ rule exists because a simpler version broke on real packs.
 - **Vocabulary round 2 (two owner dumps, 120k files in 220 packs and a 108k-file hand-sorted library).** Added to the word lists:
   `kck bdrum bdrums` (Kick), `snar` (Snare, **whole token only** via `WHOLE_TOKEN_ONLY`: glued it reads `snarl`/`snary`/`snaroll`
   as snares), `crs` (Crash), `prc shk` (Perc). `hhd1kck05` is now a Kick (it was a hat because it starts with `hh`).
-  **`VARIANT_CODES`: `bd` or `sd` plus one letter a-e** (`bdeHOE36024hard1`, `BDaEXT`, `28-bde03`, `SDbOH`, `Arc_SDe07_S_V1`) is a
-  Kick/Snare. It sits after the kick, snare, clap and hat words and before the bare `ch`/`oh` rule, and a crash or percussion word
+  **`VARIANT_CODES`: `bd` plus one letter a-e, `sd` plus one letter b-e** (`bdeHOE36024hard1`, `BDaEXT`, `28-bde03`, `SDbOH`, `Arc_SDe07_S_V1`) is a
+  Kick/Snare. `sda` is out on purpose (owner decision): the `sda-disco` files in `claps` are claps, so they fall back to the folder. It sits after the kick, snare, clap and hat words and before the bare `ch`/`oh` rule, and a crash or percussion word
   still wins, so `clap [sdyn]`, `SDF_HAT`, `Crisp Bdk Snare` and `808 (sdp interlude)` keep what they were. Putting it before the
   hat check moves Battery's overhead-mic files (`SDbOH`, `BDaOH`, 10 files, were OHH). Letters beyond e were seen in one library
   only; `bdy` is the udu "body" (8 files the owner filed as Perc) and `sdp` is a producer tag.
 - **Evidence bar for a new abbreviation: at least three independent libraries, not three folders.** The Lunch77 and "Shows the
   Screen" kits copy the same files between packs (`SNC (9).wav` is in 21 of them) and the owner's library copies folders too
   (`hi_c_03e.wav` is in `hat closed` and `unsorted`), so count distinct file names (digits stripped) as well as packs. Rejected on
-  that bar, do not re-add without new evidence: `klp`/`klapz` (320 files, all in `claps/Klub Klapz 2`), `hi_c_*`/`hi_o_*`/`wi_c_*`
+  that bar, do not re-add without new evidence: `hi_c_*`/`hi_o_*`/`wi_c_*`
   (one library, two copies), `cymcra` (21 files, one folder), `bdrm`/`bdeq` (one Alesis set), `cowbl`, `cnga*`/`cng`, `drmsn`/`drmsnd`,
-  `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tmb` (the owner filed 10 as hats and 2 as Perc);
-  `tam` (the Tama brand in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
+  `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tam` (the Tama brand in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
   `closed` as hat qualifiers without a hat word (163 name-only files, 122 already rescued by a hat folder, the rest `DOOR OPEN`,
-  `Open Up`, `Open Hi` percussion), and `op` as an open qualifier next to a hat word (20 generic hats would become open, but the
-  owner's `hat closed/NN OP HAT.wav` has 69 files that the owner calls closed). `close` (singular) is not in the closed list on
+  `Open Up`, `Open Hi` percussion), and the spaced `op hat` as an open qualifier (the
+  owner's `hat closed/NN OP HAT.wav` has 69 files that the owner calls closed; only the glued `OpHat`/`ophat` is read, see below). `close` (singular) is not in the closed list on
   purpose: it would only relabel generic `Hat` as `CHH`, the same pool.
+- **Owner exceptions to the evidence bar (round 3).** `klp`, `klap` and `klapz` are Clap although they come from one library (Klub
+  Klapz, 320 files, plus `Klap [Lou]` / `Dre KLP (2)` in the Lunch77 kits); `klap` is `WHOLE_TOKEN_ONLY` (German "Klappe") and
+  `klaps` (a slap) is not listed. The `FX Klapz 1/2` files (65) were never non-drum with their folders: the `claps` parent already
+  made them Clap, and `looksNonDrum` only runs for `Other`; by name alone the `fx` token had marked them non-drum, now `klp` places
+  them first. `tmb` is Perc (tambourine, with the shakers): the nine `FA####_tmb` files in `hat open`/`hat closed` now read Perc
+  (the owner filed them as hats), and `88 HAT+TMB` stays a hat because a hat word wins over a Perc word.
+- **`OpHat` / `ophat` written as one word is weak open-hat evidence** (`GLUED_OPEN_HAT`, tested on the raw name because `tokenize`
+  splits camelCase): in `categorizeSample` such a name that classifies as null or bare `Hat` is treated as a bare `Hat`, so an
+  explicit open or closed hat folder decides (`OpHat (Mafia)` in `Closed Hats` is CHH, in `Open Hats` OHH) and with no hat folder it
+  is OHH. The spaced `OP HAT` is not matched (69 owner files in `hat closed`), nor a letter in front (`skophat`, `Dophat`,
+  `YChopHat`). Strong words (`OPENHAT_X` in `Closed Hats`) keep "the filename wins". Moves 145 name-only files in the dumps.
 - **Unqualified `Hat` in a generic hat folder is counted closed, and nothing in the name can change that.** `overkill/hats` (4,023
   files, duplicated under `kits/drums overkill`) is `HIHAT_NNNN.wav` throughout: no open/closed token anywhere, so all are `Hat`. Across
   both dumps 22,573 files read as generic `Hat` by name, 7,692 of them are sharpened by an open or closed folder, and 14,881 stay
-  generic. Of those only `op` (20 files) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
+  generic. Of those only `op` (20 files, now read when glued) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
   are all recognised (0 left over).
 - **Name-only accuracy ceiling.** Of the owner's 6,276 hand-sorted files 1,904 are still missed by name alone after round 2: 975 are
   numbered or code-only (`Audio_086`, `track21_003`, `19_02_08`, `x1`), 473 carry words but no drum vocabulary, 450 are the rejected

@@ -403,7 +403,12 @@ const SNARE = [
   // "snarl", "snary" and "snaroll" as snares.
   'snar'
 ];
-const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
+const CLAP = [
+  'clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap',
+  // Klub Klapz ("klp24fx1", folder "FX Klapz 1") and the Lunch77 "Klap [Lou]" / "Dre KLP (2)": a
+  // "k" spelling of clap. `klap` is whole token only (German "Klappe"); `klaps` (a slap) is left out.
+  'klp', 'klapz', 'klap'
+];
 /**
  * Cymbals are one category, `Crash`: the owner decided rides and bare "cymbal" belong with
  * the crashes (they pool with percussion and never choke). `cymb` is the
@@ -430,7 +435,9 @@ const PERC = [
   // leading hh in the filename is what tells them apart — see isHat below.
   'hc', 'mc', 'lc',
   // "Lst_Prc9", "PRC-F1_S" (14 packs) and "Hi_Shk3", "Vb_Shk8" (6 packs).
-  'prc', 'shk'
+  'prc', 'shk',
+  // "DJPR_TMB_002", "88 HAT+TMB": tambourine, with the shakers.
+  'tmb'
 ];
 
 const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
@@ -461,19 +468,28 @@ const GLUE_FALSE_FRIENDS = [
 ];
 
 /** Four-character words that must not glue to a neighbouring word, only match as a token. */
-const WHOLE_TOKEN_ONLY = ['snar'];
+const WHOLE_TOKEN_ONLY = ['snar', 'klap'];
 
 /**
  * A drum code plus one variant letter: Battery's multi-mic kit ("BDaEXT", "SDbOH"), the
  * Uberschall house set ("bdeHOE30011house1", "sdeHOE40013snare3"), "28-bde03", "Arc_SDe07_S_V1".
  * Tried only after the kick, snare, clap and hat words, and a crash or percussion word still
- * wins: `clap [sdyn]` and `SDF_HAT` keep the word that names them. Letters a-e only: that is the
- * range seen in more than one library. `bdy` (udu "body") and `sdp` (a producer tag) stay outside.
+ * wins: `clap [sdyn]` and `SDF_HAT` keep the word that names them. Letters a-e only (snare b-e: `sda` is
+ * also a producer tag and the `sda-disco` claps are not snares): that is the range seen in more than one
+ * library. `bdy` (udu "body") and `sdp` (a producer tag) stay outside.
  */
 const VARIANT_CODES: [RegExp, Category][] = [
   [/^bd[a-e]$/, 'Kick'],
-  [/^sd[a-e]$/, 'Snare']
+  [/^sd[b-e]$/, 'Snare']
 ];
+
+/**
+ * "OpHat" / "ophat" glued into one written word (`OpHat (Deezy)`, `wadrm_ophat_acc0_r5`, `RockOpHat`):
+ * an open hat in 171 dump files, but only weak evidence. The spaced `OP HAT` is not matched (the
+ * owner's `hat closed/100 OP HAT.wav` is closed), and `skophat`/`Dophat`/`YChopHat` have a letter in
+ * front. Tested on the raw name because `tokenize` splits the camelCase and loses the difference.
+ */
+const GLUED_OPEN_HAT = /(?<![A-Za-z])(?:Op|op|OP)(?:Hat|hat|HAT)s?(?![a-z])|(?<=[a-z])OpHats?(?![a-z])/;
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
@@ -727,7 +743,11 @@ export function looksLikeLoop(name: string, directory = '', category: Category =
  * sample sits in. There is no audio analysis.
  */
 export function categorizeSample(name: string, directory = ''): Category {
-  const fromName = classify(name, true);
+  const classified = classify(name, true);
+  // "OpHat" / "ophat" written as ONE word is weak evidence of an open hat: it reads as a bare Hat
+  // (so an explicit open or closed hat folder decides, below) and is OHH only when no folder does.
+  const weakOpen = (classified === null || classified === 'Hat') && GLUED_OPEN_HAT.test(name.replace(/\.[a-z0-9]+$/i, ''));
+  const fromName = weakOpen ? 'Hat' : classified;
 
   /**
    * The one case where a folder may overrule the filename, and only to sharpen it: a
@@ -745,6 +765,7 @@ export function categorizeSample(name: string, directory = ''): Category {
       if (fromFolder === 'CHH' || fromFolder === 'OHH') return fromFolder;
     }
   }
+  if (weakOpen) return 'OHH';
 
   if (fromName) return fromName;
 

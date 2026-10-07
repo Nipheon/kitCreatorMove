@@ -823,7 +823,6 @@ await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as
     ['bda-disco27.wav', '/basehouse', 'Kick'],
     ['SDbPZM.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
     ['Arc_SDe07_S_V1.wav', '/Arcocen samples', 'Snare'],
-    ['sda-disco25.wav', '/house', 'Snare'],
     // The "oh" is the overhead mic of the snare, not an open hat.
     ['SDbOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
     ['BDaOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Kick']
@@ -837,6 +836,12 @@ await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as
   assert.equal(categorizeSample('clap [sdyn].wav', '/Artist Drumkits/Claps-A'), 'Clap');
   assert.equal(categorizeSample('SDF_HAT.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'CHH');
   assert.equal(categorizeSample('808 (sdp interlude).wav', '/The Lunch77 Travis Scott Drumkit/808s'), 'Kick');
+  // `sda` is not a snare code: the owner's `sda-disco` files in `claps` are claps again, and the
+  // Battery `SDaPZM` files are no longer guessed.
+  assert.equal(categorizeSample('sda-disco25.wav', '/house'), 'Other');
+  assert.equal(categorizeSample('sda-disco06.wav', '/drums/claps'), 'Clap');
+  assert.equal(categorizeSample('sda-disco07.wav'), 'Other');
+  assert.equal(categorizeSample('SDbPZM.wav'), 'Snare');
   // Outside a-e: "BDY" is the udu body, not a kick (the UDU folder still makes it a Perc).
   assert.equal(categorizeSample('BDY_THM2.wav'), 'Other');
   assert.equal(categorizeSample('BDY_THM2.wav', '/UDU'), 'Perc');
@@ -882,6 +887,66 @@ await test('openhat, ophh and clhh are whole-token hat qualifiers', async () => 
   assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
   // Whole tokens only, like chat and ohat.
   for (const name of ['openhatch.wav', 'ophhx.wav', 'clhhh.wav']) assert.equal(categorizeSample(name), 'Other', name);
+});
+
+await test('klp, klap and klapz are claps, whole token for klap', async () => {
+  const cases: [string, string, string][] = [
+    ['klp01mno.wav', '/drums/claps/Klub Klapz 2/Mono Klapz', 'Clap'],
+    ['klp24fx1.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1', 'Clap'],
+    ['klp25fx1.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1', 'Clap'],
+    ['klp27kl2.wav', '/drums/_battery/_own/hiphop3 Samples', 'Clap'],
+    ['Klap [Lou].wav', '/The Lunch77 Mexikodro Drumkit/Claps', 'Clap'],
+    ['Dre KLP (14).wav', '/The Lunch77 Dr. Dre Drumkit/Claps', 'Clap'],
+    ['PLUGG KLAP (MEXIKODRO).wav', '/The Lunch77 Mexikodro Drumkit/Claps', 'Clap']
+  ];
+  for (const [name, dir, expected] of cases) {
+    assert.equal(categorizeSample(name), expected, name);
+    assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
+  }
+  // The folder alone (Klapz, with the FX word beside it) is a clap folder too.
+  assert.equal(categorizeSample('01.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1'), 'Clap');
+  // `klap` never glues (German "Klappe"), and `klaps` (a slap) is not listed.
+  for (const name of ['klappe.wav', 'klapper.wav', 'klaps.wav']) assert.equal(categorizeSample(name), 'Other', name);
+});
+
+await test('tmb is a tambourine, but a hat word in the name still wins', async () => {
+  assert.equal(categorizeSample('DJPR_TMB_002.wav'), 'Perc');
+  assert.equal(categorizeSample('Tmb_3.wav', '/drums/kits/9th Wonder Kit/Percussions'), 'Perc');
+  // The owner filed these in `hat open` / `hat closed`; the name now says Perc.
+  assert.equal(categorizeSample('FA2314_tmb.wav'), 'Perc');
+  assert.equal(categorizeSample('FA2314_tmb.wav', '/drums/hat open'), 'Perc');
+  assert.equal(categorizeSample('FA9803_tmb.wav', '/drums/hat closed'), 'Perc');
+  assert.equal(categorizeSample('88 HAT+TMB.wav', '/drums/hat closed'), 'CHH');
+  // Whole token only: no glue for three letters.
+  assert.equal(categorizeSample('b06_ac2ftmbsh_01.wav'), 'Other');
+});
+
+await test('OpHat written as one word is a weak open-hat hint that an explicit hat folder overrides', async () => {
+  // Open hats by name, or by the Open Hats folder.
+  assert.equal(categorizeSample('OpHat (Deezy).wav'), 'OHH');
+  assert.equal(categorizeSample('OpHat (Deezy).wav', '/Pack/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('wadrm_ophat_acc0_r5.wav'), 'OHH');
+  assert.equal(categorizeSample('wadrm_ophat_acc0_r5.wav', '/wa_drm_drums/open hat'), 'OHH');
+  assert.equal(categorizeSample('pbs - stingray [ OpHat ].wav', '/The Lunch77 Shawty Redd Drumkit/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('XR10ophat.wav', '/drums/kits/_new/huge shit/Akai_XR-10/Akai XR-10'), 'OHH');
+  assert.equal(categorizeSample('RockOpHat.wav', '/drums/hat open'), 'OHH');
+  // An explicit closed-hat folder wins: the owner hears these as closed.
+  for (const name of ['OpHat (Mafia).wav', 'OpHat (Atl).wav', 'OpHat (Coop).wav']) {
+    assert.equal(categorizeSample(name, '/Pack/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'CHH', name);
+  }
+  assert.equal(categorizeSample('ophat.wav', '/drums/hat closed'), 'CHH');
+  // The spaced "OP HAT" is not the glued form: no hint, so a closed folder keeps its files closed.
+  for (const name of ['100 OP HAT.wav', '135 OP HAT.wav', '129 OP HAT 2.wav']) {
+    assert.equal(categorizeSample(name, '/drums/hat closed'), 'CHH', name);
+    assert.equal(categorizeSample(name), 'Hat', name);
+  }
+  // A letter in front is another word: skophat, Dophat, YChopHat.
+  for (const name of ['skophat.wav', 'Dophat01.wav']) assert.equal(categorizeSample(name), 'Other', name);
+  assert.equal(categorizeSample('YChopHat3.wav', '/Pack/Closed Hats'), 'CHH');
+  // Strong words keep today's behaviour: the filename beats the folder.
+  assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
+  // Another category in the name still wins over the hint.
+  assert.equal(categorizeSample('ophat kick.wav'), 'Kick');
 });
 
 await test('the preset prefix follows the folder that is actually loaded', async () => {
