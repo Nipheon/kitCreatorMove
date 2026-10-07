@@ -338,7 +338,7 @@ const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
  * "cymbal" stay percussion: a ride is meant to ring out, and an ambiguous "cymbal"
  * is safer left unchoked than wrongly cut off.
  */
-const CRASH = ['crash', 'crashes', 'splash', 'china', 'cc', 'csh'];
+const CRASH = ['crash', 'crashes', 'crsh', 'splash', 'china', 'cc', 'csh'];
 
 const PERC = [
   'perc', 'percussion', 'tom', 'toms', 'bongo', 'bongos', 'conga', 'congas',
@@ -366,6 +366,13 @@ const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
  */
 const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH' };
 
+/**
+ * Ordinary words that end in a hat word and would match it glued: "whats" ends in "hats",
+ * so `TakeWhatsMine-Crsh1.wav` read as a hat. They match nothing glued; a listed word
+ * still matches as a whole token.
+ */
+const GLUE_FALSE_FRIENDS = ['whats', 'thats', 'chats'];
+
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
   // Plural included: a folder called "Bass Drums" used to match nothing here, fall
@@ -389,7 +396,7 @@ function classify(text: string, isFile = false): Category | null {
   const GLUE_MIN = 4;
   const has = (list: string[]) =>
     tokens.some(t =>
-      list.some(k => t === k || (k.length >= GLUE_MIN && (t.startsWith(k) || t.endsWith(k))))
+      list.some(k => t === k || (k.length >= GLUE_MIN && !GLUE_FALSE_FRIENDS.includes(t) && (t.startsWith(k) || t.endsWith(k))))
     );
 
   const joined = tokens.join(' ');
@@ -575,6 +582,17 @@ function nameLooksLikeBreak(name: string): boolean {
 }
 
 /**
+ * "Lp" as a whole token in a filename (`Watchmen-PercLp.wav`). Two letters, and "LP" also
+ * means low-pass or a record, so it is evidence only for a sample the categoriser left
+ * as `Other` or generic `Perc`: `Kick LP.wav` stays a kick. Never read from folders.
+ */
+const LOOP_ABBREVIATIONS = ['lp'];
+
+function nameHasLoopAbbreviation(name: string): boolean {
+  return tokenize(name, true).some(t => LOOP_ABBREVIATIONS.includes(t));
+}
+
+/**
  * A loop is a bar of music, not a drum hit, so it has no business on a pad.
  *
  * `category` is optional and defaults to `Other`, which is the permissive reading: a
@@ -584,6 +602,7 @@ function nameLooksLikeBreak(name: string): boolean {
 export function looksLikeLoop(name: string, directory = '', category: Category = 'Other'): boolean {
   if (textLooksLikeLoop(name, true, true)) return true;
   if (category === 'Other' && nameLooksLikeBreak(name)) return true;
+  if ((category === 'Other' || category === 'Perc') && nameHasLoopAbbreviation(name)) return true;
   return folderCandidates(directory).some(folder => textLooksLikeLoop(folder, false));
 }
 

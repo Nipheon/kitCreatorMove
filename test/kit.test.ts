@@ -281,6 +281,45 @@ await test('sn and snr are recognised as snares', async () => {
   }
 });
 
+await test('Music Weapons names: Crsh is a crash, a ride is Perc, FxRev is an effect, "Whats" is not a hat', async () => {
+  const packDirs = ['/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS', '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV SORTED/Extras'];
+  for (const dir of packDirs) {
+    for (const name of ['TakeWhatsMine-Crsh1.wav', 'TakeWhatsMine-Crsh2.wav', 'Watchmen-Crsh1.wav', 'Watchmen-Crsh2.wav']) {
+      assert.equal(categorizeSample(name, dir), 'Crash', name);
+    }
+    for (const name of ['TakeWhatsMine-Ride1.wav', 'TakeWhatsMine-Ride2.wav', 'TakeWhatsMine-Ride3.wav', 'BlockWatch-Ride1.wav']) {
+      assert.equal(categorizeSample(name, dir), 'Perc', name);
+    }
+    const fx = categorizeSample('TakeWhatsMine-FxRev.wav', dir);
+    assert.equal(fx, 'Other');
+    assert.equal(looksNonDrum(fx, 'TakeWhatsMine-FxRev.wav', dir), true);
+    for (const name of ['SpacedOut-VoxFx1.wav', 'SpacedOut-VoxFx2.wav']) {
+      assert.equal(looksNonDrum(categorizeSample(name, dir), name, dir), true, name);
+    }
+  }
+  // The rest of the same pack was already right and must stay so.
+  const dir = packDirs[0];
+  for (const [name, want] of [
+    ['TakeWhatsMine-Kik1.wav', 'Kick'], ['TakeWhatsMine-Snr1.wav', 'Snare'], ['TakeWhatsMine-SnrVrb.wav', 'Snare'],
+    ['LettingGo-SnrRol.wav', 'Snare'], ['TakeWhatsMine-Hat.wav', 'Hat'], ['TakeWhatsMine-HatOpn.wav', 'OHH'],
+    ['BlockWatch-Crash.wav', 'Crash']
+  ] as const) {
+    assert.equal(categorizeSample(name, dir), want, name);
+  }
+  // Only the glued match is switched off for those words; a real hat is still found.
+  assert.equal(categorizeSample('Whats Hat.wav'), 'Hat');
+  assert.equal(categorizeSample('Thats Closed Hat.wav'), 'CHH');
+});
+
+await test('"Lp" marks an unplaced or percussion file as a loop, never a kick', async () => {
+  const dir = '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS';
+  assert.equal(categorizeSample('Watchmen-PercLp.wav', dir), 'Perc');
+  assert.equal(looksLikeLoop('Watchmen-PercLp.wav', dir, 'Perc'), true);
+  assert.equal(looksLikeLoop('Kick LP.wav', '', 'Kick'), false);
+  assert.equal(looksLikeLoop('Perc.wav', '/Pack/LP Sounds', 'Perc'), false);
+  assert.equal(looksLikeLoop('Clap.wav', '', 'Perc'), false);
+});
+
 await test('rides and hand percussion classify as Perc', async () => {
   for (const name of [
     'Ride 01.wav', 'Ride Bell.wav', 'Cym 2.wav', 'Cymbal.wav', 'Clave.wav',

@@ -181,6 +181,12 @@ rule exists because a simpler version broke on real packs.
 - **Plurals of 2-3 letter abbreviations are listed explicitly** (`bds kds sds sns snrs rims kiks hhs chhs ohhs`); the glue rule
   starts at four characters. `chhs`/`ohhs` also need listing in the bare-token fallback at the end of `classify`. `timp` covers
   timpani via glue.
+- **`crsh` is a crash** (`TakeWhatsMine-Crsh1.wav`). **A ride stays Perc** (`Ride1`, unchoked, verified on hardware) and a bare
+  `cym`/`cymbal` too; do not move them to Crash.
+- **`GLUE_FALSE_FRIENDS` (`whats thats chats`) never match glued**: `whats` ends in `hats`, so every `TakeWhatsMine-*` file that
+  was not a kick or snare (`Crsh1`, `Ride1`, `FxRev`) filed as a hat. Whole-token matching of a listed word is unchanged.
+- **`lp` is a loop marker in a filename** (`Watchmen-PercLp.wav`), only for a sample categorised `Other` or `Perc` (`Kick LP`
+  stays a kick, "LP" being low-pass or a record), never read from folders. Pinned by a test.
 - **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
   token only.
 - **The filename always wins over any folder**, with one narrow exception: an explicit open or closed hat folder sharpens a name
