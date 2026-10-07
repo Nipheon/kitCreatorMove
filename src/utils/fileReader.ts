@@ -415,18 +415,21 @@ const SNARE = [
 ];
 const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
 /**
- * Crashes get their own choke group, so they are their own category. Rides and bare
- * "cymbal" stay percussion: a ride is meant to ring out, and an ambiguous "cymbal"
- * is safer left unchoked than wrongly cut off.
+ * Cymbals are one category, `Crash`: the owner decided rides and bare "cymbal" belong with
+ * the crashes (they pool with percussion and share the crash choke group). `cymb` is the
+ * truncated spelling ("RYTM Cymb"); `cy` and `rd` are the 808-style abbreviations.
  */
-const CRASH = ['crash', 'crashes', 'crsh', 'splash', 'china', 'cc', 'csh'];
+const CRASH = [
+  'crash', 'crashes', 'crsh', 'splash', 'china', 'cc', 'csh',
+  'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cymb', 'cy'
+];
 
 const PERC = [
   'perc', 'percussion', 'tom', 'toms', 'bongo', 'bongos', 'conga', 'congas',
   'shaker', 'tamb', 'tambourine', 'cowbell', 'woodblock', 'block', 'wood',
   'clave', 'claves', 'cabasa', 'guiro', 'triangle', 'timbale', 'timbales',
   'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'maraca', 'maracas',
-  'tabla', 'udu', 'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cy',
+  'tabla', 'udu',
   // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
   'timp', 'timpani',
   // TR-808 style: high/mid/low toms, cowbell, claves, maracas.
@@ -448,11 +451,15 @@ const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
 const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH' };
 
 /**
- * Ordinary words that end in a hat word and would match it glued: "whats" ends in "hats",
- * so `TakeWhatsMine-Crsh1.wav` read as a hat. They match nothing glued; a listed word
- * still matches as a whole token.
+ * Ordinary words that contain a listed word glued and would match it: "whats" ends in
+ * "hats", so `TakeWhatsMine-Crsh1.wav` read as a hat; "rider" starts with "ride", so
+ * `night_rider` melodies and `Horse Rider` bass patches read as cymbals. They match
+ * nothing glued; a listed word still matches as a whole token.
  */
-const GLUE_FALSE_FRIENDS = ['whats', 'thats', 'chats'];
+const GLUE_FALSE_FRIENDS = [
+  'whats', 'thats', 'chats',
+  'rider', 'riders', 'bride', 'pride', 'strider', 'cymbalium'
+];
 
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category][] = [
@@ -518,6 +525,10 @@ function classify(text: string, isFile = false): Category | null {
    * happens to sit next to a real word.
    */
   if (tokens.includes('808')) return 'Kick';
+
+  // Cans and bottles shaken like a shaker ("Shaking A Full Unopened Coca Cola Can"). A weak
+  // word, so it is checked after the 808 rule: "808 Shaking" in an 808s folder is a kick.
+  if (tokens.includes('shaking')) return 'Perc';
 
   return null;
 }
@@ -663,14 +674,19 @@ function nameLooksLikeBreak(name: string): boolean {
 }
 
 /**
- * "Lp" as a whole token in a filename (`Watchmen-PercLp.wav`). Two letters, and "LP" also
- * means low-pass or a record, so it is evidence only for a sample the categoriser left
- * as `Other` or generic `Perc`: `Kick LP.wav` stays a kick. Never read from folders.
+ * "Lp" as the LAST token of a file name (`Watchmen-PercLp.wav`, `Perc_Lp.wav`). Two
+ * letters, and "LP" also means low-pass or a record, so it is evidence only at the end of
+ * the name, ignoring a trailing index (`Lp Kick.wav` and `LP Filter Snare.wav` are not loops) and only for a sample
+ * the categoriser left as `Other` or generic `Perc`: `Kick LP.wav` stays a kick. Never
+ * read from folders.
  */
 const LOOP_ABBREVIATIONS = ['lp'];
 
 function nameHasLoopAbbreviation(name: string): boolean {
-  return tokenize(name, true).some(t => LOOP_ABBREVIATIONS.includes(t));
+  const tokens = tokenize(name, true);
+  // A trailing index is not part of the wording: `Perc Lp 2.wav` still ends in "lp".
+  while (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1])) tokens.pop();
+  return tokens.length > 0 && LOOP_ABBREVIATIONS.includes(tokens[tokens.length - 1]);
 }
 
 /**

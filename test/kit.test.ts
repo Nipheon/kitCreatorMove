@@ -282,14 +282,14 @@ await test('sn and snr are recognised as snares', async () => {
   }
 });
 
-await test('Music Weapons names: Crsh is a crash, a ride is Perc, FxRev is an effect, "Whats" is not a hat', async () => {
+await test('Music Weapons names: Crsh is a crash, a ride is a crash too, FxRev is an effect, "Whats" is not a hat', async () => {
   const packDirs = ['/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS', '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV SORTED/Extras'];
   for (const dir of packDirs) {
     for (const name of ['TakeWhatsMine-Crsh1.wav', 'TakeWhatsMine-Crsh2.wav', 'Watchmen-Crsh1.wav', 'Watchmen-Crsh2.wav']) {
       assert.equal(categorizeSample(name, dir), 'Crash', name);
     }
     for (const name of ['TakeWhatsMine-Ride1.wav', 'TakeWhatsMine-Ride2.wav', 'TakeWhatsMine-Ride3.wav', 'BlockWatch-Ride1.wav']) {
-      assert.equal(categorizeSample(name, dir), 'Perc', name);
+      assert.equal(categorizeSample(name, dir), 'Crash', name);
     }
     const fx = categorizeSample('TakeWhatsMine-FxRev.wav', dir);
     assert.equal(fx, 'Other');
@@ -312,6 +312,18 @@ await test('Music Weapons names: Crsh is a crash, a ride is Perc, FxRev is an ef
   assert.equal(categorizeSample('Thats Closed Hat.wav'), 'CHH');
 });
 
+await test('"Lp" is a loop marker only as the last token of the name', async () => {
+  const dir = '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS';
+  assert.equal(looksLikeLoop('Perc_Lp.wav', dir, 'Perc'), true);
+  assert.equal(looksLikeLoop('Perc Lp 2.wav', dir, 'Perc'), true);
+  // Not at the end: the Lp is a prefix or a low-pass remark, and the name is a drum.
+  assert.equal(looksLikeLoop('Lp Kick.wav', '', categorizeSample('Lp Kick.wav')), false);
+  assert.equal(looksLikeLoop('LP Thick.wav', '/All Encompassing Kit/Low_Mid', 'Perc'), false);
+  assert.equal(looksLikeLoop('LP Cardiak String Drop.wav', '/The Lunch77 Cardiak Drumkit/Extras', 'Other'), false);
+  // Still a low-pass 808 at the end, and a kick stays a kick.
+  assert.equal(looksLikeLoop('Kryptic Samples-808 Son LP.wav', '/KRYPTIC SAMPLES TRAP/808s', 'Kick'), false);
+});
+
 await test('"Lp" marks an unplaced or percussion file as a loop, never a kick', async () => {
   const dir = '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS';
   assert.equal(categorizeSample('Watchmen-PercLp.wav', dir), 'Perc');
@@ -321,9 +333,9 @@ await test('"Lp" marks an unplaced or percussion file as a loop, never a kick', 
   assert.equal(looksLikeLoop('Clap.wav', '', 'Perc'), false);
 });
 
-await test('rides and hand percussion classify as Perc', async () => {
+await test('hand percussion classifies as Perc', async () => {
   for (const name of [
-    'Ride 01.wav', 'Ride Bell.wav', 'Cym 2.wav', 'Cymbal.wav', 'Clave.wav',
+    'Clave.wav',
     'Cabasa.wav', 'Guiro.wav', 'Triangle.wav', 'Timbale.wav', 'Djembe.wav',
     'Cajon.wav', 'Agogo.wav', 'Tambourine.wav', 'Wood Block.wav'
   ]) {
@@ -331,13 +343,55 @@ await test('rides and hand percussion classify as Perc', async () => {
   }
 });
 
-await test('crashes are their own category, rides are not', async () => {
-  for (const name of ['Crash 01.wav', 'Crash Cymbal.wav', 'Crashes.wav', 'Splash 2.wav', 'China.wav']) {
+await test('crashes, rides and cymbals are all the Crash category', async () => {
+  for (const name of [
+    'Crash 01.wav', 'Crash Cymbal.wav', 'Crashes.wav', 'Splash 2.wav', 'China.wav',
+    'Ride 01.wav', 'Ride Bell.wav', 'Rides.wav', 'Cym 2.wav', 'Cymbal.wav', 'Cymbals.wav'
+  ]) {
     assert.equal(categorizeSample(name), 'Crash', name);
   }
-  // A ride is meant to ring out, and a bare "cymbal" is too ambiguous to choke.
-  assert.equal(categorizeSample('Ride 01.wav'), 'Perc');
-  assert.equal(categorizeSample('Cymbal.wav'), 'Perc');
+});
+
+await test('cymbal names from the owner dump: rides, cymbals and the Cymb abbreviation are Crash', async () => {
+  for (const [name, dir] of [
+    ['Ride-04.wav', '/Spliced/Ride'],
+    ['Ride_04.wav', '/The Lunch77 Dr. Dre Drumkit/Crashes & Cymbals'],
+    ['TBRide06.wav', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
+    ['CHEAPRIDE.WAV', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
+    ['KEEF CYMBAL 3.wav', '/Chief Keef (Shows the Screen) Drumkit/Crashes & Cymbals'],
+    ['CY_FDHC_25.wav', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
+    ['Bobeats RYTM Cymb.wav', '/COFFEE & BEATS VOL/6. SAMPLES/Sonic Treats'],
+    ['808CymbRev.wav', '/T-Minus (Shows the Screen) Drumkit/Crashes & Cymbals']
+  ]) {
+    assert.equal(categorizeSample(name, dir), 'Crash', `${dir}/${name}`);
+  }
+});
+
+await test('"rider", "pride" and "bride" are not rides, "cymbalium" is not a cymbal', async () => {
+  for (const [name, dir] of [
+    ['SUPAH_MARIO_melody_night_rider_dark_demons_Cmin.wav', '/Supah Mario (Shows the Screen) Drumkit/Extras'],
+    ['BS Horse Rider-000-076-e4.wav', '/Zampler Soundbanks - Part 2/Zampler Peaktime'],
+    ['pride 160.wav', '/CashmoneyAP (Shows the Screen) Drumkit/Extras'],
+    ['PRINCESS BRIDE.wav', '/The Lunch77 F1lthy Drumkit/Extras'],
+    ['LD Cymbalium-000-044-g#1.wav', '/Zampler Soundbanks - Part 2/Zampler Ethnic Symphony']
+  ]) {
+    assert.notEqual(categorizeSample(name, dir), 'Crash', name);
+    assert.equal(categorizeSample(name, dir), 'Other', name);
+  }
+  // The whole word is still a ride, and a ride glued to another word still is.
+  assert.equal(categorizeSample('Ride.wav', '/Pack/HatsOpen'), 'Crash');
+  assert.equal(categorizeSample('illride.wav', '/Pack/Samples'), 'Crash');
+});
+
+await test('"shaking" is a shaker sound', async () => {
+  for (const name of [
+    'Shaking A Full Unopened Coca Cola Can-24.wav',
+    'Shaking Opening Cap Inside Empty coca Cola Can Can.wav-5.wav'
+  ]) {
+    assert.equal(categorizeSample(name, '/Signature Drum Kit #1 (SignatureSamples.Co.Uk)/Coca Cola Drum Kit (SignatureSamples.Co.Uk)/Shaking A Full Unopened Coca Cola Can'), 'Perc', name);
+  }
+  // A weak word: an 808 that happens to be called Shaking is still the kick voice.
+  assert.equal(categorizeSample('808 Shaking.wav', '/Cardo Got Wingz (Shows the Screen) Drumkit/808s'), 'Kick');
 });
 
 await test('multi-word names are read as phrases', async () => {
@@ -367,7 +421,7 @@ await test('TR-808 style abbreviations classify', async () => {
     ['RS.WAV', '808', 'Snare'],
     ['CB.WAV', '808', 'Perc'],
     ['CL.WAV', '808', 'Perc'],
-    ['CY0000.WAV', '808cy', 'Perc'],
+    ['CY0000.WAV', '808cy', 'Crash'],
     ['HT00.WAV', '808ht', 'Perc'],
     ['MT00.WAV', '808mt', 'Perc'],
     ['LT00.WAV', '808lt', 'Perc'],
@@ -381,7 +435,7 @@ await test('TR-808 style abbreviations classify', async () => {
 
 await test('velocity codes glued to the instrument name still classify', async () => {
   // Dirt-Samples appends a two-character level code with no separator.
-  assert.equal(categorizeSample('RIDED0.wav', 'cr'), 'Perc');
+  assert.equal(categorizeSample('RIDED0.wav', 'cr'), 'Crash');
   assert.equal(categorizeSample('CSHD0.wav', 'cc'), 'Crash');
   assert.equal(categorizeSample('HHOD0.wav', 'ho'), 'Hat');
   assert.equal(categorizeSample('HHCD0.wav', 'hc'), 'Hat');
@@ -397,7 +451,7 @@ await test('instrument words glued into a compound name classify', async () => {
     ['linnhats', 'Hat'], ['realclaps', 'Clap'],
     ['003_VoodooSnare.wav', 'Snare'], ['023_snareslack.wav', 'Snare'],
     ['002_brushsnare.wav', 'Snare'], ['011_hcsnare2.wav', 'Snare'],
-    ['007_cymbalgrab.wav', 'Perc'], ['018_ridebell.wav', 'Perc'],
+    ['007_cymbalgrab.wav', 'Crash'], ['018_ridebell.wav', 'Crash'],
     ['000_hh3closedhh.wav', 'CHH'], ['007_hh3openhh.wav', 'OHH']
   ];
   for (const [name, expected] of cases) {
@@ -431,7 +485,7 @@ await test('Sonic Pi naming classifies', async () => {
   const cases: [string, string][] = [
     ['drum_heavy_kick.flac', 'Kick'], ['elec_hollow_kick.flac', 'Kick'],
     ['drum_snare_soft.flac', 'Snare'], ['elec_filt_snare.flac', 'Snare'],
-    ['drum_splash_hard.flac', 'Crash'], ['drum_cymbal_open.flac', 'Perc'],
+    ['drum_splash_hard.flac', 'Crash'], ['drum_cymbal_open.flac', 'Crash'],
     ['drum_tom_mid_hard.flac', 'Perc'], ['drum_cowbell.flac', 'Perc'],
     ['perc_snap.flac', 'Clap'], ['elec_triangle.flac', 'Perc'],
     // Synth blips must stay Other so they do not crowd out real drums.
@@ -1503,7 +1557,7 @@ await test('hats choke in group 1, crashes in group 2, nothing else chokes', asy
   kit[6] = makeSample('hat.wav', 'Hat');
   kit[12] = makeSample('clap.wav', 'Clap');
   kit[14] = makeSample('crash.wav', 'Crash');
-  kit[15] = makeSample('ride.wav', 'Perc');
+  kit[15] = makeSample('conga.wav', 'Perc');
 
   const blob = await createPresetBundle(kit, 'Choke_Test', NO_TRIM);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
@@ -1516,7 +1570,13 @@ await test('hats choke in group 1, crashes in group 2, nothing else chokes', asy
   assert.equal(groups[14], 2, 'crash');
   assert.equal(groups[0], null, 'kick');
   assert.equal(groups[12], null, 'clap');
-  assert.equal(groups[15], null, 'ride must ring out');
+  assert.equal(groups[15], null, 'percussion rings out');
+});
+
+await test('a ride is a Crash and so shares the crash choke group (not verified on hardware)', async () => {
+  const ride = makeSample('Ride-04.wav', categorizeSample('Ride-04.wav', '/Spliced/Ride'));
+  assert.equal(ride.category, 'Crash');
+  assert.equal(chokeGroupFor(ride), CHOKE_CRASHES);
 });
 
 await test('a crash still chokes as a crash, not as percussion', async () => {

@@ -196,12 +196,22 @@ rule exists because a simpler version broke on real packs.
 - **Plurals of 2-3 letter abbreviations are listed explicitly** (`bds kds sds sns snrs rims kiks hhs chhs ohhs`); the glue rule
   starts at four characters. `chhs`/`ohhs` also need listing in the bare-token fallback at the end of `classify`. `timp` covers
   timpani via glue.
-- **`crsh` is a crash** (`TakeWhatsMine-Crsh1.wav`). **A ride stays Perc** (`Ride1`, unchoked, verified on hardware) and a bare
-  `cym`/`cymbal` too; do not move them to Crash.
-- **`GLUE_FALSE_FRIENDS` (`whats thats chats`) never match glued**: `whats` ends in `hats`, so every `TakeWhatsMine-*` file that
-  was not a kick or snare (`Crsh1`, `Ride1`, `FxRev`) filed as a hat. Whole-token matching of a listed word is unchanged.
-- **`lp` is a loop marker in a filename** (`Watchmen-PercLp.wav`), only for a sample categorised `Other` or `Perc` (`Kick LP`
-  stays a kick, "LP" being low-pass or a record), never read from folders. Pinned by a test.
+- **All cymbals are `Crash`** (owner decision, replacing the earlier "ride stays Perc"): `crash crashes crsh splash china cc csh`
+  plus `ride rides rd cymbal cymbals cym cymb cy`. Moved 1,264 files from Perc in the owner's 120k-file dump. **Consequence:
+  rides now choke in group 2 with the crashes. That is NOT verified on hardware** (the verified note covers hats and crashes
+  cutting each other and, at the time, rides ringing through); `chokeGroupFor` is unchanged and reads `Crash`.
+- **`GLUE_FALSE_FRIENDS` never match glued**: `whats thats chats` (`whats` ends in `hats`, so every `TakeWhatsMine-*` file that
+  was not a kick or snare filed as a hat) and `rider riders bride pride strider cymbalium` (`ride` is four characters and glues:
+  `night_rider` melodies and `Horse Rider` patches read as cymbals, 67 files, and with rides now choking that would be a wrong
+  choke). Whole-token matching of a listed word is unchanged.
+- **`shaking` is Perc, checked after the `808` rule** (`Shaking A Full Unopened Coca Cola Can`, 74 files; `808 Shaking` stays a kick). Deliberately NOT added after measuring on a 120k-file
+  dump: `hit shot shots bell stomp thud hiss pot pan can cola tap click`. Most of their files sit in `FX`/`Vox`/`Extras` folders
+  and are correctly non-drum; promoting them to Perc would bypass `looksNonDrum` (it only runs for `Other`) and `Perc` and `Other`
+  already share one draw pool, so a household sound left `Other` is as playable as a `Perc`. `shots` also names every "One Shots"
+  folder. Do not add them without a rule that keeps the non-drum folders out.
+- **`lp` is a loop marker only as the LAST token of a filename**, ignoring a trailing index (`Watchmen-PercLp.wav`,
+  `Perc Lp 2.wav`), only for a sample categorised `Other` or `Perc`, never read from folders. `Lp Kick`, `LP Thick`, `LP Cardiak
+  String Drop` are not loops, and `Kick LP`/`808 Son LP` stay kicks ("LP" being low-pass or a record). Pinned by tests.
 - **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
   token only.
 - **The filename always wins over any folder**, with one narrow exception: an explicit open or closed hat folder sharpens a name
@@ -384,7 +394,7 @@ rule exists because a simpler version broke on real packs.
   pad. **Reroll:** rerolling a closed-hat pad re-applies the rule to the pad on its right unless that pad is locked (`lockedPads`
   travels in the last argument, `DrawHooks`); rerolling an open pad draws as before. `substituted`/`empty` are computed on the
   final kit. Enforced by tests in `test/kit.test.ts`.
-- **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay percussion and unchoked.
+- **Hats choke in group 1, crashes in group 2.** Rides and cymbals are `Crash` (see Sample detection) so they choke in group 2; unverified on hardware.
 - **Empty pads are deliberately not lockable**, asserted explicitly on the lock button.
 - **The pad is a plain `<div>` with a separate play `<button>` filling it, and lock/shuffle/exclude are sibling buttons**, so no
   interactive element nests in another (the old `<div role="button">` rule is obsolete). The visible content sits above the play
@@ -565,7 +575,7 @@ rule exists because a simpler version broke on real packs.
 **Verified on a real Move (settled, do not re-litigate):** `$schema` `song/1.7.0/devicePreset.json`; `Macro0` as an object beside
 plain-float `Macro1`-`Macro7`; `BundleInfo.json`; percent-encoded `sampleUri`; `STORE` bundles; pad order (UI pad 1 is the device's
 bottom-left, `DISPLAY_INDICES` bottom-left-origin with the `receivingNote`/`sendingNote` mapping, both pinned by a test because a
-wrong mapping still sounds on every pad, just not the one shown); choke groups (hats and crashes cut each other, rides ring through); trimming at both
+wrong mapping still sounds on every pad, just not the one shown); choke groups (hats and crashes cut each other; this was verified when rides were still Perc and rang through, so rides now sharing the crash group is **not** verified); trimming at both
 ends (`0.001` does not clip tails); drum cell `color` (see Preset generation). Do not "modernise" the `$schema` version, flatten
 `Macro0`, invert the grid or change the note mapping because they look wrong; they were guesses once and are not any more.
 
