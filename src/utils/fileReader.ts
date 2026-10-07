@@ -41,7 +41,7 @@ async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSy
   return all;
 }
 
-async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> {
+export async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> {
   const files: DroppedFile[] = [];
   const queue: FileSystemEntry[] = [root];
 
