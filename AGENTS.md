@@ -51,7 +51,7 @@ path with more than three segments means you are in the wrong place.
   audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
-- **Analytics:** Cloudflare Web Analytics in `index.html` is the only telemetry. Do not add a second provider.
+- **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only; never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
 
 ## React and lifecycle (`App.tsx`)
 

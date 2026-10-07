@@ -57,7 +57,7 @@ npm run build        # Production build
 ## Project Layout
 
 ```
-index.html              # Entry page: SEO tags, JSON-LD, static fallback content, analytics
+index.html              # Entry page: SEO tags, JSON-LD, static fallback content, Cloudflare analytics beacon
 package.json
 package-lock.json
 tsconfig.json
@@ -75,7 +75,7 @@ public/                 # Copied to the site root by Vite
   sitemap.xml
 src/
   App.tsx               # Main application component & layout
-  main.tsx              # React entry point
+  main.tsx              # React entry point (also mounts the Vercel analytics component)
   types.ts              # Core TypeScript interfaces & types
   padLayout.ts          # Grid derivation, grid IDs, pooling & choking
   devSeed.ts            # Dev-only sample set, loaded with /?seed

@@ -13,6 +13,7 @@
     "test": "tsx test/kit.test.ts && tsx test/io.test.ts"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.546.0",
     "react": "^19.0.1",

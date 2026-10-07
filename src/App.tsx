@@ -1338,8 +1338,10 @@ export default function App() {
                   was stored anywhere else.
                 </p>
                 <p className='text-text-subtle'>
-                  The one exception is ordinary web analytics: the page counts visits, the same
-                  as any website. It records nothing about your samples, your kits or your files.
+                  The one exception is ordinary web analytics: Cloudflare Web Analytics and Vercel
+                  Web Analytics count visits (page views, referrer, country, browser and device
+                  type), the same as any website. Your samples, your kits and your file names
+                  never leave the page.
                 </p>
               </section>
 
