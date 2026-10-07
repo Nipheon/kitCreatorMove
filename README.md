@@ -93,8 +93,8 @@ src/
     folderMerge.ts       # Folder de-duplication across drops
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit names, held layouts and batch building
-    sampleSignature.ts   # Audio-content signature used to de-duplicate samples
-    signatureScheduler.ts # Computes those signatures in the background after a drop
+    progressVisibility.ts # When the duplicate-check progress indicator may appear
+    sampleSignature.ts   # Audio-content signature, read lazily at draw time to skip duplicates
     wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
 test/
   kit.test.ts           # Kit, naming, export and detection tests

@@ -2,7 +2,7 @@ import {
   chooseLayout, drawGroupFor, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
 } from '../padLayout';
 import { Category, Sample } from '../types';
-import { sampleIdentity } from './sampleSignature';
+import { identityOf } from './sampleSignature';
 
 export interface KitResult {
   kit: (Sample | null)[];
@@ -23,6 +23,11 @@ export interface KitResult {
    * out the pads that had genuinely lost a draw.
    */
   unavailableRoles: Category[];
+  /**
+   * Locked pads holding the same audio as an earlier locked pad. A lock is the user's choice,
+   * so both stay; this only reports them.
+   */
+  lockedDuplicates?: number[];
 }
 
 export function emptyKit(): KitResult {
@@ -66,7 +71,59 @@ export function isUsableSample(
   if (skipLoops && sample.isLoop) return false;
   if (skipNonDrums && sample.isNonDrum) return false;
   if (disabledTypes?.has(poolCategoryFor(sample))) return false;
-  return !sample.isExcluded;
+  return !sample.isExcluded && !sample.isDuplicate;
+}
+
+export type IdentityFn = (sample: Sample) => Promise<string>;
+
+export interface DrawHooks {
+  /** Injected so tests can run deterministically and count calls. Defaults to the memoised real one. */
+  identityOf?: IdentityFn;
+  /** Called with (pads decided, pads to fill); the last call has checked === total. */
+  onProgress?: (checked: number, total: number) => void;
+}
+
+/**
+ * Pops candidates off `pool` until one has audio no pad in this kit holds yet, claiming its
+ * identity. A repeat is flagged `isDuplicate` (it stays out of every later draw) and the next
+ * candidate comes from the SAME pool, so the pad's role and the pass order are untouched.
+ */
+async function claimFrom(pool: Sample[], used: Set<string>, identity: IdentityFn): Promise<Sample | null> {
+  while (pool.length > 0) {
+    const candidate = pool.pop()!;
+    const id = await identity(candidate);
+    if (!used.has(id)) {
+      used.add(id);
+      return candidate;
+    }
+    candidate.isDuplicate = true;
+  }
+  return null;
+}
+
+/** One draw for a role: re-picks a group pool whenever the picked one ran dry on duplicates. */
+async function drawRole(
+  pools: Record<Category, Sample[]>, category: Category, used: Set<string>, identity: IdentityFn
+): Promise<Sample | null> {
+  for (let pool = pickGroupPool(pools, category); pool; pool = pickGroupPool(pools, category)) {
+    const found = await claimFrom(pool, used, identity);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** Nothing in the preference list: whichever pool is deepest, until one yields a distinct sample. */
+async function drawDeepest(
+  pools: Record<Category, Sample[]>, used: Set<string>, identity: IdentityFn
+): Promise<Sample | null> {
+  for (;;) {
+    const deepest = (Object.keys(pools) as Category[])
+      .sort((a, b) => pools[b].length - pools[a].length)
+      .find(cat => pools[cat].length > 0);
+    if (!deepest) return null;
+    const found = await claimFrom(pools[deepest], used, identity);
+    if (found) return found;
+  }
 }
 
 /**
@@ -160,12 +217,13 @@ function availableRoles(usable: Sample[]): Set<Category> {
   return available;
 }
 
-export function generateRandomKit(
+export async function generateRandomKit(
   samples: Sample[],
   lockedSamples: (Sample | null)[] = [],
   options: KitOptions = {},
-  heldLayout?: PadLayout
-): KitResult {
+  heldLayout?: PadLayout,
+  { identityOf: identity = identityOf, onProgress }: DrawHooks = {}
+): Promise<KitResult> {
   // Filtered before choosing the layout too: a folder of hat loops must not decide
   // which layout the kit uses.
   const usable = samples.filter(s => isUsableSample(s, options));
@@ -179,35 +237,37 @@ export function generateRandomKit(
     Kick: [], Snare: [], Clap: [], CHH: [], OHH: [], Hat: [], Crash: [], Perc: [], Other: []
   };
 
-  const locked = lockedSamples.filter((s): s is Sample => s !== null && s !== undefined);
-  const lockedIds = new Set(locked.map(s => s.id));
-  // Same file dropped from two folders should not be able to fill two pads.
-  const seenSignatures = new Set(locked.map(s => sampleIdentity(s)));
+  const lockedIds = new Set<string>();
+  lockedSamples.forEach(s => { if (s) lockedIds.add(s.id); });
+  // Locked pads claim their audio first; a second locked pad with the same audio is the
+  // user's doing, so it is reported and left alone.
+  const used = new Set<string>();
+  const lockedDuplicates: number[] = [];
+  for (let i = 0; i < PAD_COUNT; i++) {
+    const locked = lockedSamples[i];
+    if (!locked) continue;
+    const id = await identity(locked);
+    if (used.has(id)) lockedDuplicates.push(i);
+    used.add(id);
+  }
 
   usable.forEach(s => {
-    const signature = sampleIdentity(s);
-    if (!lockedIds.has(s.id) && !seenSignatures.has(signature) && !s.isExcluded) {
-      pools[poolCategoryFor(s)].push(s);
-      seenSignatures.add(signature);
-    }
+    if (!lockedIds.has(s.id)) pools[poolCategoryFor(s)].push(s);
   });
 
   (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
 
-  const take = (index: number): { sample: Sample | null } => {
-    const preferences = layout.preferences[index];
+  const total = kit.filter((_, i) => !lockedSamples[i]).length;
+  let checked = 0;
+  const tick = () => onProgress?.(++checked, total);
+  onProgress?.(0, total);
 
-    for (const cat of preferences) {
-      const pool = pickGroupPool(pools, cat);
-      if (pool) return { sample: pool.pop()! };
+  const take = async (index: number): Promise<Sample | null> => {
+    for (const cat of layout.preferences[index]) {
+      const found = await drawRole(pools, cat, used, identity);
+      if (found) return found;
     }
-
-    // Nothing in the preference list — fall back to whichever pool is deepest.
-    const deepest = (Object.keys(pools) as Category[])
-      .sort((a, b) => pools[b].length - pools[a].length)
-      .find(cat => pools[cat].length > 0);
-
-    return deepest ? { sample: pools[deepest].pop()! } : { sample: null };
+    return drawDeepest(pools, used, identity);
   };
 
   /**
@@ -219,17 +279,13 @@ export function generateRandomKit(
    * nearest sound; by the time the top row was reached the extras were gone and it held
    * three snares. The top row exists precisely to not be that.
    */
-  const ownSound = (index: number): Sample | null => {
-    const pool = pickGroupPool(pools, layout.preferences[index][0]);
-    return pool ? pool.pop()! : null;
-  };
-
   for (let i = 0; i < PAD_COUNT; i++) {
     if (lockedSamples[i]) {
       kit[i] = lockedSamples[i];
       continue;
     }
-    kit[i] = ownSound(i);
+    kit[i] = await drawRole(pools, layout.preferences[i][0], used, identity);
+    if (kit[i]) tick();
   }
 
   /**
@@ -244,10 +300,13 @@ export function generateRandomKit(
 
   for (const i of substituteOrder) {
     if (kit[i] || lockedSamples[i]) continue;
-    kit[i] = take(i).sample;
+    kit[i] = await take(i);
+    tick();
   }
 
-  return { kit, layout, ...summarisePads(kit, layout, availableRoles(usable)) };
+  const result: KitResult = { kit, layout, ...summarisePads(kit, layout, availableRoles(usable)) };
+  if (lockedDuplicates.length > 0) result.lockedDuplicates = lockedDuplicates;
+  return result;
 }
 
 /**
@@ -259,13 +318,14 @@ export function generateRandomKit(
  * not regenerate the kit, so recomputing the layout here could swap the grid under the
  * other 15 pads; candidate pools still follow the current options.
  */
-export function rerollSinglePad(
+export async function rerollSinglePad(
   samples: Sample[],
   currentKit: (Sample | null)[],
   targetIndex: number,
   options: KitOptions = {},
-  layout?: PadLayout
-): KitResult {
+  layout?: PadLayout,
+  { identityOf: identity = identityOf, onProgress }: DrawHooks = {}
+): Promise<KitResult> {
   if (targetIndex < 0 || targetIndex >= PAD_COUNT) {
     return {
       kit: [...currentKit],
@@ -282,14 +342,15 @@ export function rerollSinglePad(
 
   const current = nextKit[targetIndex];
   const usedIds = new Set<string>();
-  const usedSignatures = new Set<string>();
+  const used = new Set<string>();
 
-  nextKit.forEach(sample => {
+  // Every pad counts, the target's own sample included: shuffle never returns the audio the pad has.
+  for (const sample of nextKit) {
     if (sample) {
       usedIds.add(sample.id);
-      usedSignatures.add(sampleIdentity(sample));
+      used.add(await identity(sample));
     }
-  });
+  }
 
   const preferences = heldLayout.preferences[targetIndex];
 
@@ -298,32 +359,21 @@ export function rerollSinglePad(
   };
 
   usable.forEach(s => {
-    const signature = sampleIdentity(s);
-    if (!usedIds.has(s.id) && !usedSignatures.has(signature) && !s.isExcluded) {
-      pools[poolCategoryFor(s)].push(s);
-    }
+    if (!usedIds.has(s.id)) pools[poolCategoryFor(s)].push(s);
   });
 
   (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
 
+  onProgress?.(0, 1);
   let chosenSample: Sample | null = null;
 
   for (const cat of preferences) {
-    const pool = pickGroupPool(pools, cat);
-    if (pool) {
-      chosenSample = pool[0];
-      break;
-    }
+    chosenSample = await drawRole(pools, cat, used, identity);
+    if (chosenSample) break;
   }
 
-  if (!chosenSample) {
-    const deepest = (Object.keys(pools) as Category[])
-      .sort((a, b) => pools[b].length - pools[a].length)
-      .find(cat => pools[cat].length > 0);
-    if (deepest) {
-      chosenSample = pools[deepest][0];
-    }
-  }
+  if (!chosenSample) chosenSample = await drawDeepest(pools, used, identity);
+  onProgress?.(1, 1);
 
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;

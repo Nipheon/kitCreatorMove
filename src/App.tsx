@@ -14,7 +14,7 @@ import {
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
-import { computeSignaturesInBackground } from './utils/signatureScheduler';
+import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import {
   buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
   lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
@@ -53,6 +53,9 @@ export default function App() {
   const [lockedPads, setLockedPads] = useState<boolean[]>(new Array(PAD_COUNT).fill(false));
   const [isLoading, setIsLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  /** True while a kit is being drawn (and its samples checked for duplicates). Controls that edit the kit are off meanwhile. */
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [checkProgress, setCheckProgress] = useState<{ kind: 'pads' | 'kits'; done: number; total: number } | null>(null);
   const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,6 +82,8 @@ export default function App() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [autoPreview, setAutoPreview] = useState(false);
   const [spinningPads, setSpinningPads] = useState<boolean[]>(new Array(PAD_COUNT).fill(false));
+  const generationId = useRef(0);
+  const generating = useRef(false);
   const previewTimerIds = useRef<number[]>([]);
   const spinTimerIds = useRef<number[]>([]);
   const lastStoppedTime = useRef(0);
@@ -108,12 +113,14 @@ export default function App() {
     // `?seed=20` fakes twenty folders, which is how the sidebar's scrolling gets tested.
     const count = Math.min(Math.max(parseInt(seed || '1', 10) || 1, 1), 50);
     let cancelled = false;
-    import('./devSeed').then(({ devSeedFolders }) => {
+    import('./devSeed').then(async ({ devSeedFolders }) => {
       if (cancelled) return;
       const folders = devSeedFolders(count);
       const samples = folders.flatMap(f => f.samples);
       setSourceFolders(folders);
-      setKitResult(generateRandomKit(samples, [], { skipLoops: true, skipNonDrums: true }));
+      const seeded = await generateRandomKit(samples, [], { skipLoops: true, skipNonDrums: true });
+      if (cancelled) return;
+      setKitResult(seeded);
       setKitPrefix(prefixForFolders(folders));
       setKitSuffix(generateKitName(folders[0].name).suffix);
     });
@@ -269,6 +276,7 @@ export default function App() {
       return;
     }
 
+    if (generating.current) return;
     startPreview(kitResult.kit);
   }, [isPreviewing, stopPreview, startPreview, kitResult.kit]);
 
@@ -392,7 +400,12 @@ export default function App() {
   );
   const usableCount = useMemo(
     () => samples.filter(s => isUsableSample(s, kitOptions)).length,
-    [samples, skipLoops, skipNonDrums, disabledTypes]
+    [samples, skipLoops, skipNonDrums, disabledTypes, kitResult]
+  );
+  // The generator flags duplicates in place, so a new kit result is the signal to recount.
+  const skippedDuplicates = useMemo(
+    () => samples.filter(s => s.isDuplicate).length,
+    [samples, kitResult]
   );
   const categoryStats = useMemo(() => {
     const stats: Record<Category, { usable: number; total: number }> = {
@@ -417,7 +430,7 @@ export default function App() {
       }
     });
     return stats;
-  }, [samples, skipLoops, skipNonDrums, disabledTypes]);
+  }, [samples, skipLoops, skipNonDrums, disabledTypes, kitResult]);
 
   const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
   const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
@@ -431,7 +444,7 @@ export default function App() {
    * built entirely from "BBBB" still exported as "AAAA-…".
    */
   const syncPrefix = (folders: SourceFolder[]) => {
-    if (!prefixEdited) setKitPrefix(prefixForFolders(folders));
+    if (!latest.current.prefixEdited) setKitPrefix(prefixForFolders(folders));
   };
 
   const lockedFrom = (current: (Sample | null)[]) =>
@@ -453,8 +466,45 @@ export default function App() {
 
   // The newest committed state, for code that resumes after an await and would otherwise
   // read the values captured when the drop started.
-  const latest = useRef({ sourceFolders, kit, lockedPads, kitOptions, prefixEdited });
-  latest.current = { sourceFolders, kit, lockedPads, kitOptions, prefixEdited };
+  const latest = useRef({ sourceFolders, kit, lockedPads, kitOptions, prefixEdited, autoPreview });
+  latest.current = { sourceFolders, kit, lockedPads, kitOptions, prefixEdited, autoPreview };
+
+  /**
+   * Runs one generation and reports to `checkProgress` only once it has taken longer than
+   * PROGRESS_DELAY_MS. A newer generation supersedes an older one: the older resolves to
+   * `null` and its caller must write nothing. The ref (not the state) is what click handlers
+   * check, since state lags a render behind.
+   */
+  const runGeneration = async <T,>(
+    job: (report: (done: number, total: number, kind?: 'pads' | 'kits') => void) => Promise<T>
+  ): Promise<T | null> => {
+    const id = ++generationId.current;
+    generating.current = true;
+    setIsGenerating(true);
+    const started = Date.now();
+    let last: { kind: 'pads' | 'kits'; done: number; total: number } | null = null;
+    const show = () => {
+      if (id === generationId.current && last && shouldShowProgress(Date.now() - started)) setCheckProgress(last);
+    };
+    const timer = window.setTimeout(show, PROGRESS_DELAY_MS);
+    try {
+      const result = await job((done, total, kind = 'pads') => { last = { kind, done, total }; show(); });
+      return id === generationId.current ? result : null;
+    } finally {
+      window.clearTimeout(timer);
+      if (id === generationId.current) {
+        generating.current = false;
+        setIsGenerating(false);
+        setCheckProgress(null);
+      }
+    }
+  };
+
+  const lockedDuplicatesNotice = (result: KitResult) => {
+    if (!result.lockedDuplicates?.length) return;
+    const pads = result.lockedDuplicates.map(i => i + 1).join(', ');
+    setNotice(prev => [prev, `Locked pad${result.lockedDuplicates!.length > 1 ? 's' : ''} ${pads} hold${result.lockedDuplicates!.length > 1 ? '' : 's'} the same audio as another locked pad; locks are left as they are.`].filter(Boolean).join(' '));
+  };
 
   const processFiles = async (items: DataTransferItemList) => {
     setIsLoading(true);
@@ -522,20 +572,23 @@ export default function App() {
       const allSamples = enabledSamples(updated);
 
       setSourceFolders(updated);
-      if (allSamples.length > 0) {
-        setKitResult(generateRandomKit(
+      // The drop itself hashes nothing; only samples drawn into this kit are read. This
+      // supersedes any generation still in flight, which then writes nothing.
+      const next = allSamples.length > 0
+        ? await runGeneration(report => generateRandomKit(
           allSamples,
           current.lockedPads.map((locked, idx) => (locked ? current.kit[idx] : null)),
-          current.kitOptions
-        ));
+          current.kitOptions,
+          undefined,
+          { onProgress: report }
+        ))
+        : null;
+      if (next) {
+        setKitResult(next);
+        lockedDuplicatesNotice(next);
       }
-      // Content signatures are filled in afterwards, off the drop's critical path.
-      for (const folder of newFolders) {
-        void computeSignaturesInBackground(folder.samples, {
-          isAlive: () => latest.current.sourceFolders.some(f => f.id === folder.id)
-        });
-      }
-      if (!current.prefixEdited) setKitPrefix(prefixForFolders(updated));
+      // Re-read: the prefix may have been typed while the draw ran.
+      if (!latest.current.prefixEdited) setKitPrefix(prefixForFolders(updated));
       // The suffix is only rolled for the first drop; after that it is the user's,
       // changed by the Randomize Suffix button.
       if (wasEmpty) setKitSuffix(generateKitName(newFolders[0].name).suffix);
@@ -563,7 +616,8 @@ export default function App() {
   // empty-library layout must not be held.
   const heldLayoutFor = () => heldLayout(kit, kitResult.layout);
 
-  const removeFolder = (id: string) => {
+  const removeFolder = async (id: string) => {
+    if (generating.current) return;
     const removed = sourceFolders.find(f => f.id === id);
     const updated = sourceFolders.filter(f => f.id !== id);
     const remaining = enabledSamples(updated);
@@ -575,8 +629,8 @@ export default function App() {
       lockedPads[idx] || (sample && !removedIds.has(sample.id)) ? sample : null
     );
 
-    const next: KitResult = remaining.length > 0
-      ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
+    const next: KitResult | null = remaining.length > 0
+      ? await runGeneration(report => generateRandomKit(remaining, survivors, kitOptions, heldLayout, { onProgress: report }))
       : {
         kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
         layout: chooseLayout(remaining),
@@ -584,6 +638,7 @@ export default function App() {
         empty: [],
         unavailableRoles: []
       };
+    if (!next) return; // superseded: nothing stale is written
 
     setSourceFolders(updated);
     setKitResult(next);
@@ -599,7 +654,8 @@ export default function App() {
     });
   };
 
-  const toggleFolder = (id: string) => {
+  const toggleFolder = async (id: string) => {
+    if (generating.current) return;
     const target = sourceFolders.find(f => f.id === id);
     if (!target) return;
     const willDisable = target.isEnabled !== false;
@@ -614,22 +670,24 @@ export default function App() {
       return sample;
     });
 
+    const next: KitResult | null = remaining.length > 0
+      ? await runGeneration(report => generateRandomKit(remaining, survivors, kitOptions, heldLayout, { onProgress: report }))
+      : {
+        kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
+        layout: chooseLayout(remaining),
+        substituted: [],
+        empty: [],
+        unavailableRoles: []
+      };
+    if (!next) return;
+
     setSourceFolders(updated);
-    setKitResult(
-      remaining.length > 0
-        ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
-        : {
-          kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
-          layout: chooseLayout(remaining),
-          substituted: [],
-          empty: [],
-          unavailableRoles: []
-        }
-    );
+    setKitResult(next);
     syncPrefix(updated);
   };
 
-  const handleExcludeSample = (sampleId: string, padIndex?: number) => {
+  const handleExcludeSample = async (sampleId: string, padIndex?: number) => {
+    if (generating.current) return;
     const updated = sourceFolders.map(f => ({
       ...f,
       samples: f.samples.map(s => (s.id === sampleId ? { ...s, isExcluded: true } : s))
@@ -638,28 +696,32 @@ export default function App() {
     const survivors = kit.map(sample => (sample?.id !== sampleId ? sample : null));
     const heldLayout = heldLayoutFor();
 
+    const next: KitResult | null = remaining.length > 0
+      ? await runGeneration(report => generateRandomKit(remaining, survivors, kitOptions, heldLayout, { onProgress: report }))
+      : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] };
+    if (!next) return;
+
     // The lock belonged to the excluded sample; its replacement was never chosen by the user.
     setLockedPads(prev => prev.map((locked, idx) => (kit[idx]?.id === sampleId ? false : locked)));
     setSourceFolders(updated);
-    setKitResult(
-      remaining.length > 0
-        ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
-        : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] }
-    );
+    setKitResult(next);
     if (padIndex !== undefined) {
       setAudition(prev => ({ index: padIndex, token: prev.token + 1 }));
     }
   };
 
-  const randomizeKit = () => {
+  const randomizeKit = async () => {
+    if (generating.current) return;
     stopPreview();
     stopSpinAnimation();
 
     if (samples.length > 0) {
-      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
+      const next = await runGeneration(report => generateRandomKit(samples, lockedFrom(kit), kitOptions, undefined, { onProgress: report }));
+      if (!next) return;
       setKitResult(next);
+      lockedDuplicatesNotice(next);
 
-      if (autoPreview) {
+      if (latest.current.autoPreview) {
         startPreview(next.kit);
       } else {
         // All pads start spinning simultaneously
@@ -681,9 +743,12 @@ export default function App() {
     }
   };
 
-  const rerollPad = (index: number) => {
+  const rerollPad = async (index: number) => {
+    if (generating.current) return;
     if (samples.length > 0 && !lockedPads[index]) {
-      setKitResult(rerollSinglePad(samples, kit, index, kitOptions, kitResult.layout));
+      const next = await runGeneration(report => rerollSinglePad(samples, kit, index, kitOptions, kitResult.layout, { onProgress: report }));
+      if (!next) return;
+      setKitResult(next);
       setAudition(prev => ({ index, token: prev.token + 1 }));
     }
   };
@@ -708,7 +773,8 @@ export default function App() {
    * is passed explicitly rather than read back from state, which would still hold the old
    * one this tick.
    */
-  const toggleType = (category: Category) => {
+  const toggleType = async (category: Category) => {
+    if (generating.current) return;
     const next = new Set(disabledTypes);
     if (next.has(category)) {
       next.delete(category);
@@ -717,11 +783,16 @@ export default function App() {
     }
     setDisabledTypes(next);
     if (samples.length > 0) {
-      setKitResult(generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, disabledTypes: next }));
+      const result = await runGeneration(report => generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, disabledTypes: next }, undefined, { onProgress: report }));
+      if (result) {
+        setKitResult(result);
+        lockedDuplicatesNotice(result);
+      }
     }
   };
 
   const toggleLock = (index: number) => {
+    if (generating.current) return;
     setLockedPads(prev => {
       const next = [...prev];
       next[index] = !next[index];
@@ -730,17 +801,19 @@ export default function App() {
   };
 
   const buildBatch = () =>
-    buildBatchFor({
+    runGeneration(report => buildBatchFor({
       kit, layout: kitResult.layout, exportName, exportedNames: exportedNames.current,
-      samples, kitOptions, batchSize, prefix: kitPrefix, lockedPads
-    });
+      samples, kitOptions, batchSize, prefix: kitPrefix, lockedPads,
+      onKit: (done, total) => report(done, total, 'kits')
+    }));
 
   const exportKit = async () => {
-    if (kit.every(s => s === null)) return;
+    if (generating.current || kit.every(s => s === null)) return;
 
     // Built before the confirm so the guard sums the real kits 2..n, not the on-screen kit
     // times the batch size. Trimming only shrinks, hence "at most".
-    const batch = batchSize > 1 ? buildBatch() : null;
+    const batch = batchSize > 1 ? await buildBatch() : null;
+    if (batchSize > 1 && !batch) return; // superseded by a newer generation
     // Separate downloads hold one bundle at a time, so the largest kit is what matters;
     // the zip holds every bundle at once, so it stays the sum.
     const kitBytes = batch ? batch.map(entry => kitSizeBytes(entry.kit)) : [kitSizeBytes(kit)];
@@ -832,7 +905,9 @@ export default function App() {
               <>
                 <Loader2 className="w-16 h-16 text-accent-yellow mx-auto mb-4 animate-spin" />
                 <h2 className="text-2xl font-bold uppercase tracking-widest">Scanning</h2>
-                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">Reading audio files…</p>
+                <p className="text-text-muted mt-2 text-sm uppercase tracking-wider">
+                  {checkProgress?.kind === 'pads' ? `Checking samples ${checkProgress.done} / ${checkProgress.total}` : 'Reading audio files…'}
+                </p>
               </>
             ) : (
               <>
@@ -903,7 +978,8 @@ export default function App() {
                   <div className='flex items-center gap-2 overflow-hidden flex-1'>
                     <button
                       onClick={() => toggleFolder(folder.id)}
-                      className='text-text-muted-dark hover:text-text-bright transition-colors shrink-0'
+                      disabled={isGenerating}
+                      className='text-text-muted-dark hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
                       title={folder.isEnabled === false ? 'Enable folder' : 'Disable folder'}
                       aria-label={folder.isEnabled === false ? `Enable ${folder.name}` : `Disable ${folder.name}`}
                     >
@@ -914,7 +990,8 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => removeFolder(folder.id)}
-                    className='text-sm font-bold text-text-muted-dark group-hover:text-danger-text ml-2'
+                    disabled={isGenerating}
+                    className='text-sm font-bold text-text-muted-dark group-hover:text-danger-text ml-2 disabled:opacity-40 disabled:cursor-not-allowed'
                     aria-label={`Remove ${folder.name}`}
                   >
                     ✕
@@ -995,7 +1072,7 @@ export default function App() {
                             <button
                               type='button'
                               onClick={() => toggleType(cat)}
-                              disabled={total === 0}
+                              disabled={total === 0 || isGenerating}
                               aria-pressed={isOff}
                               className='text-text-subtle hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
                               title={isOff ? `Use ${label} samples again` : `Leave ${label} samples out of every kit`}
@@ -1016,6 +1093,11 @@ export default function App() {
                       );
                     })}
                   </div>
+                  {skippedDuplicates > 0 && (
+                    <div className='pt-2 text-xs text-text-muted uppercase tracking-wider font-medium'>
+                      Skipped duplicates: {skippedDuplicates.toLocaleString()}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1043,6 +1125,7 @@ export default function App() {
                   expectedCategory={kitResult.layout.roles[index]}
                   chokeGroup={chokeGroupFor(kit[index])}
                   isLocked={lockedPads[index]}
+                  isBusy={isGenerating}
                   onToggleLock={() => toggleLock(index)}
                   onExclude={handleExcludeSample}
                   onReroll={rerollPad}
@@ -1061,18 +1144,25 @@ export default function App() {
             onClose={dismissWarning}
           />
 
-          <div className='flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
+          <div className='relative flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
+            {/* Only appears once a check has run past PROGRESS_DELAY_MS; absolutely placed so
+                it never moves the grid. */}
+            {checkProgress?.kind === 'pads' && (
+              <div role='status' className='pointer-events-none absolute top-full left-0 right-0 mt-2 text-sm text-text-muted uppercase tracking-wider text-center'>
+                Checking samples {checkProgress.done} / {checkProgress.total}
+              </div>
+            )}
             <button
               onClick={randomizeKit}
               className='px-8 py-3 bg-accent-yellow text-text-inverse font-bold uppercase text-sm tracking-widest rounded-full hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_24px_var(--accent-yellow-glow)] cursor-pointer'
-              disabled={usableCount === 0}
+              disabled={usableCount === 0 || isGenerating}
             >
               Generate Random Kit
             </button>
             <div className='flex items-center gap-3'>
               <button
                 onClick={previewKit}
-                disabled={isEmpty}
+                disabled={isEmpty || isGenerating}
                 className='px-6 py-3 bg-surface-pad border border-border-main hover:border-accent-teal text-text-bright hover:text-accent-teal font-bold uppercase text-sm tracking-widest rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2'
                 title={isPreviewing ? 'Stop preview' : 'Preview each pad in sequence'}
                 aria-label={isPreviewing ? 'Stop previewing kit' : 'Preview kit'}
@@ -1192,14 +1282,17 @@ export default function App() {
                 button produces, and reading the count then hunting for the action at the
                 far end of the panel put them out of sight of each other. */}
             <div>
-              {isExporting && exportProgress && exportProgress.total > 1 && (
-                <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
-                  Kit {Math.min(exportProgress.done + 1, exportProgress.total)} of {exportProgress.total}
-                </div>
-              )}
+              {(checkProgress?.kind === 'kits' || (isExporting && exportProgress && exportProgress.total > 1)) && (() => {
+                const p = checkProgress?.kind === 'kits' ? checkProgress : exportProgress!;
+                return (
+                  <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
+                    Kit {Math.min(p.done + 1, p.total)} of {p.total}
+                  </div>
+                );
+              })()}
               <button
                 onClick={exportKit}
-                disabled={isEmpty || isExporting}
+                disabled={isEmpty || isExporting || isGenerating}
                 className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
               >
                 {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}

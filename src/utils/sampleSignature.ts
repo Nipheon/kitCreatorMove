@@ -192,3 +192,24 @@ export async function fileSignature(file: Blob): Promise<string> {
 export function sampleIdentity(s: Pick<Sample, 'name' | 'file' | 'signature'>): string {
   return s.signature ?? `${s.name}-${s.file.size}`;
 }
+
+const identityCache = new WeakMap<Blob, Promise<string>>();
+
+/**
+ * Lazy, memoised identity: the content signature is computed the first time a sample is
+ * considered for a kit, never on drop and never in the background. Keyed on the `File`, not
+ * the `Sample`, so the copies `handleExcludeSample` makes share one read; concurrent callers
+ * share one promise, so a file is read at most once per session. An unreadable file resolves
+ * to a unique value (see `fileSignature`) and so never dedupes. A sample with no `File` or a
+ * preset `signature` falls back to `sampleIdentity`.
+ */
+export function identityOf(s: Pick<Sample, 'name' | 'file' | 'signature'>): Promise<string> {
+  if (s.signature !== undefined) return Promise.resolve(s.signature);
+  if (!s.file) return Promise.resolve(`${s.name}-0`);
+  let pending = identityCache.get(s.file);
+  if (!pending) {
+    pending = fileSignature(s.file);
+    identityCache.set(s.file, pending);
+  }
+  return pending;
+}

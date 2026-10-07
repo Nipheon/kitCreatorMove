@@ -456,7 +456,7 @@ await test('MS ADPCM handles a short final block', async () => {
   assert.ok(Math.abs(n - frames) <= 1, `got ${n}, want ${frames}`);
 });
 
-await test('MS ADPCM rejects an invalid predictor index and an empty data chunk', () => {
+await test('MS ADPCM rejects an invalid predictor index and an empty data chunk', async () => {
   const buf = asBuffer(encodeAdpcm(wave(300, 500), 1, 22050, 256));
   const view = new DataView(buf);
   let off = 12;

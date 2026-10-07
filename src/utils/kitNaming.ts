@@ -136,13 +136,17 @@ export interface BatchInput {
   lockedPads: boolean[];
   generate?: typeof generateRandomKit;
   suffix?: () => string;
+  /** Called before kit `done + 1` of `total` is built (kit 1 is the on-screen one). */
+  onKit?: (done: number, total: number) => void;
 }
 
-export function buildBatch({
+/** Kits 2..n are generated one after another: they share the identity cache, and each sees the same locks. */
+export async function buildBatch({
   kit, layout, exportName, exportedNames, samples, kitOptions, batchSize, prefix, lockedPads,
   generate = generateRandomKit,
   suffix = () => generateKitName('').suffix,
-}: BatchInput): { kit: (Sample | null)[]; name: string }[] {
+  onKit,
+}: BatchInput): Promise<{ kit: (Sample | null)[]; name: string }[]> {
   // Seeded from what has actually been exported, so a kit generated and discarded
   // never pushes a number onto a later name.
   const taken = new Set(exportedNames);
@@ -157,7 +161,8 @@ export function buildBatch({
   kits.push({ kit: [...kit], name: first });
 
   for (let i = 1; i < batchSize; i++) {
-    const next = generate(samples, lockedFrom(lockedPads, kit), kitOptions, held);
+    onKit?.(i, batchSize);
+    const next = await generate(samples, lockedFrom(lockedPads, kit), kitOptions, held);
     // Every kit in a batch is built from the same library, so they all share a grid
     // and the id is the same for each — which is the point: a batch is swappable.
     let name = '';

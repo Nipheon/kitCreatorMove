@@ -68,11 +68,13 @@ interface PadProps {
    */
   auditionToken?: number;
   isSpinning?: boolean;
+  /** A kit is being generated: lock, shuffle and exclude are off until it lands. */
+  isBusy?: boolean;
 }
 
 export const Pad: React.FC<PadProps> = ({
   index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onReroll,
-  auditionToken = 0, isSpinning = false
+  auditionToken = 0, isSpinning = false, isBusy = false
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -284,7 +286,8 @@ export const Pad: React.FC<PadProps> = ({
               <button
                 type='button'
                 onClick={() => onExclude(sample.id, index)}
-                className='text-text-subtle hover:text-danger-text transition-colors p-1'
+                disabled={isBusy}
+                className='text-text-subtle hover:text-danger-text transition-colors p-1 disabled:opacity-40 disabled:cursor-not-allowed'
                 title='Exclude sample'
                 aria-label={`Exclude ${sample.name}`}
               >
@@ -299,7 +302,7 @@ export const Pad: React.FC<PadProps> = ({
       <div className='pad-actions absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
         <button
           type='button'
-          disabled={!sample}
+          disabled={!sample || isBusy}
           onClick={onToggleLock}
           aria-pressed={isLocked}
           aria-label={isLocked ? `Unlock pad ${index + 1}` : `Lock pad ${index + 1}`}
@@ -319,10 +322,10 @@ export const Pad: React.FC<PadProps> = ({
 
         <button
           type='button'
-          disabled={!sample || isLocked || !onReroll}
+          disabled={!sample || isLocked || !onReroll || isBusy}
           onClick={() => onReroll?.(index)}
           className={`w-1/2 border-l border-border-bar flex items-center justify-center gap-1.5 transition-colors ${
-            !sample || isLocked || !onReroll
+            !sample || isLocked || !onReroll || isBusy
               ? 'text-border-main cursor-not-allowed'
               : 'pad-shuffle text-text-medium hover:bg-surface-hover cursor-pointer'
           }`}

@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,sampleSignature,signatureScheduler,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,progressVisibility,sampleSignature,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -68,7 +68,9 @@ path with more than three segments means you are in the wrong place.
   below).
 - **`processFiles` reads the newest state from the `latest` ref after its async scan** (`latest.current` holds `sourceFolders`,
   `kit`, `lockedPads`, `kitOptions`, `prefixEdited`, refreshed every render). Never read those from the closure after an `await`: a
-  folder removed, a pad locked or a prefix typed during a long scan would be overwritten by the stale values.
+  folder removed, a pad locked or a prefix typed during a long scan would be overwritten by the stale values. The drop does no
+  hashing; its kit comes from the same async, lazily-deduping `generateRandomKit` (see Dedupe), and the same rule holds after that
+  await.
 - **Duplicate folders are skipped by lowercased name** through `mergeScannedFolders` (`utils/folderMerge.ts`, pure, takes the
   *current* list); a name repeated within one drop counts once, and a drop where everything was skipped reports "already loaded".
 - **Skip Loops / Skip Non-Drums do not re-roll the kit.** They change the pool the next kit draws from; the usable count and
@@ -175,31 +177,52 @@ rule exists because a simpler version broke on real packs.
   the skip.
 - **A folder that names a drum category outranks marker words in it.** `Bass Drums` is `/\bbass drums?\b/`, `bassdrums` is in
   `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
-- **Dedupe goes through `sampleIdentity()`** (`utils/sampleSignature.ts`): the `Sample.signature` alone, a hash of the AUDIO
-  content, not the name or file bytes (`name-size` is only the fallback when there is no signature, the dev seed). The same hit
-  exists under different names, sizes and metadata chunks (LIST/bext/iXML/ID3) in real libraries, and one copy often has its
-  leading silence cut. For 16/24-bit PCM WAV the signature is a 64-bit hash (two 32-bit lanes, synchronous, no `crypto.subtle`,
-  which is unavailable over http) of the frames from the first to the last audible one, using the exporter's `SILENCE_THRESHOLD`
-  (imported from `audioTrimmer`, never copy the number), mixed with channels, sample rate and bit depth. Copies that differ by
-  trimmed silence therefore count as one sample; copies with different gain, fades or bit depth do not. Other WAV (float, 8/32-bit,
-  ADPCM) hashes the whole `data` chunk plus the fmt essentials; AIFF and anything unparseable or truncated hashes the whole file,
-  so AIFF copies with different metadata do not match. Hashed spans up to `FULL_HASH_MAX_BYTES` (1 MiB) are hashed whole, above
-  it the length plus the first and last `EDGE_HASH_BYTES` (64 KB). The chunk walk uses `blob.slice` so a large LIST chunk or data
-  chunk is never loaded just to find it. `processFiles` never awaits signatures: samples are created without one and `utils/signatureScheduler.ts`
-  (`computeSignaturesInBackground`) fills `Sample.signature` in place afterwards, 4 files per step with a yield to the event loop
-  between steps, skipping samples whose folder was removed (in-place mutation is deliberate: nothing renders from it, generation reads
-  it at call time). Until it is set `sampleIdentity` falls back to `name-size`, so a kit generated right after a drop can still hold
-  a duplicate pair; generation stays synchronous. **Both dedupe sites
-  in `kitGenerator.ts` (full generate and single-pad reroll) must use it**, so they cannot drift. The set is rebuilt in folder
-  order and keeps the first occurrence, not the best categorised, which is only safe while both copies categorise identically: a
-  file that only one folder can explain is still at the mercy of list order. Accepted cost is silent variety loss, never a wrong
-  export. Do **not** add `file.lastModified` (copies that lose their mtime would stop merging and put one hit on two pads).
+- **Dedupe is lazy, inside the draw, by audio content.** `identityOf()` (`utils/sampleSignature.ts`) is a memoised
+  `Promise<string>`: the first time a sample is *considered for a kit* its `fileSignature` is computed, never on drop and never in
+  the background. A library of thousands of files costs about 16 reads per kit (measured 16 `identityOf` calls per generate on a
+  600-sample library; a batch of 10 made 144 calls for kits 2..10, since the cache is shared). The cache is a `WeakMap` keyed on
+  the `File`, not the `Sample`, so the copies `handleExcludeSample` makes and concurrent callers share one read. An unreadable file
+  gets a unique identity and never dedupes; a sample with a preset `signature` or no `File` falls back to `sampleIdentity()`
+  (`name-size`).
+  `fileSignature` is the identity: a hash of the AUDIO, not the name or file bytes. The same hit exists under different names,
+  sizes and metadata chunks (LIST/bext/iXML/ID3) in real libraries, and one copy often has its leading silence cut. For 16/24-bit
+  PCM WAV it is a 64-bit hash (two 32-bit lanes, synchronous, no `crypto.subtle`, which is unavailable over http) of the frames from
+  the first to the last audible one, using the exporter's `SILENCE_THRESHOLD` (imported from `audioTrimmer`, never copy the
+  number), mixed with channels, sample rate and bit depth. Copies that differ by trimmed silence count as one sample; copies with
+  different gain, fades or bit depth do not. Other WAV (float, 8/32-bit, ADPCM) hashes the whole `data` chunk plus the fmt
+  essentials; AIFF and anything unparseable or truncated hashes the whole file, so AIFF copies with different metadata do not
+  match. Hashed spans up to `FULL_HASH_MAX_BYTES` (1 MiB) are hashed whole, above it the length plus the first and last
+  `EDGE_HASH_BYTES` (64 KB). The chunk walk uses `blob.slice` so a large LIST or data chunk is never loaded just to find it. Do
+  **not** add `file.lastModified` (copies that lose their mtime would stop merging and put one hit on two pads).
+  **The check is in `generateRandomKit` and `rerollSinglePad` (both async)**, at the moment a candidate is popped from a pool
+  (own-sound pass, substitute pass, deepest-pool fallback, reroll pick): `await identityOf(candidate)`; if a pad in this kit already
+  holds that audio the candidate is flagged `isDuplicate`, discarded, and the next one comes from the SAME pool, so the two-pass
+  fill order and every pad's role are untouched. A pool that runs dry falls back or leaves the pad empty exactly as before. Locked
+  pads' identities are seeded first and a lock is never replaced; two locked pads with the same audio stay and come back in
+  `KitResult.lockedDuplicates` (`App` shows a notice). The identity function and an `onProgress(checked, total)` callback are an
+  optional last argument (`DrawHooks`) so tests inject a deterministic one and count calls.
+  **`Sample.isDuplicate` is separate from `isExcluded`** (the user's choice). `isUsableSample` treats both as unusable, so a flagged
+  sample stays out of every later draw and of the usable counts; the Breakdown card shows "Skipped duplicates: N" when N > 0 and
+  only reads the flag, it never hashes. Flags are set in place on the sample, so the card's counts depend on `kitResult` to
+  recompute. Accepted cost: a flag lasts the session, so if the pad that held the other copy is later excluded, the flagged copy is
+  not drawn either; silent variety loss, never a wrong export.
+  **Why not a post-check on the finished kit, and why not background hashing:** a post-check swaps pads after the two-pass fill, which
+  bypasses its order (a swap can pick a substitute before every pad has its own role) and every call site would have to remember to
+  run it. Background hashing of every dropped file reads the whole library (thousands of files) to use sixteen of them.
+  **Progress:** `App.runGeneration` shows "Checking samples n / 16" under the Generate button (batch: "Kit n of m" in the export
+  area; during a drop, in the scanning overlay) only once a check has run past `PROGRESS_DELAY_MS` (250 ms,
+  `utils/progressVisibility.ts`, `shouldShowProgress`), so fast checks never flash it.
+  **Races:** while a generation is in flight (`isGenerating`; handlers check the `generating` ref, state lags a render) Generate,
+  Preview, pad lock/shuffle/exclude, folder toggle/remove, type toggles and export are disabled or ignore clicks. A newer
+  generation (a drop) supersedes an older one via `generationId`: the older resolves to `null` and its caller writes nothing. After
+  an await, state that the user can still change (prefix typed, auto preview) is read from `latest`. The set is rebuilt in
+  pool order, not folder order, so which of two copies survives is random; only the audio is guaranteed unique.
 
 ### Loop and non-drum filtering
 
 - **Loops are filtered before `chooseLayout` runs**, otherwise a folder of hat loops makes a generic-hat library look like it has
   split hats. `isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), switched-off types (`disabledTypes`) and
-  excluded samples (`sample.isExcluded`); both toggles default on. It also keeps the "Usable Samples" count in step with UI
+  excluded (`sample.isExcluded`) or duplicate (`sample.isDuplicate`) samples; both toggles default on. It also keeps the "Usable Samples" count in step with UI
   exclusions.
 - **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** Never add `breaks`/`breakbeat`: the list is matched against folders too, and `70s
   Breakbeats` / `Breaks Vol 2` are full of one-shots.
@@ -264,8 +287,8 @@ rule exists because a simpler version broke on real packs.
   it becomes a bundle directory name, and `+`-like characters get URL-encoded or rejected. **Name length and character set are
   unverified on Move hardware.**
 - **Layout is held, not re-derived, wherever pads do not all change.** `heldLayout`, `lockedFrom`, `kitNameFor`, `buildBatch` and
-  `SUFFIX_ATTEMPTS` (8) live in `utils/kitNaming.ts`, extracted from `App.tsx` so they can be tested; `buildBatch` takes injectable
-  `generate`/`suffix`, and tests pin the behaviour below.
+  `SUFFIX_ATTEMPTS` (8) live in `utils/kitNaming.ts`, extracted from `App.tsx` so they can be tested; `buildBatch` is async (kits 2..n are awaited
+  one after another) and takes injectable `generate`/`suffix`; tests pin the behaviour below.
   - Removing, disabling or excluding a source (`removeFolder`, `toggleFolder`, `handleExcludeSample`) passes the current
     `kitResult.layout` as `generateRandomKit`'s fourth argument; otherwise losing the only open hats re-derives the grid under pads
     that did not move. Availability is still read from the current library. An empty kit passes nothing (`heldLayout` returns
@@ -482,6 +505,6 @@ on `#root`'s first element child (not `window`: React listens at the root, below
 way to see a filled grid without a real sample folder, and the empty grid hides most of what the theme does.
 
 **Suite coverage:** `test/kit.test.ts` (Node-only, via `tsx`, no components) covers kit generation, bundle building, sample
-detection, preset shape, pad-to-note mapping, choke grouping, kit naming, batch building and WAV handling; `test/io.test.ts` covers
+detection, preset shape, pad-to-note mapping, choke grouping, kit naming, batch building, WAV handling and the lazy dedupe (call counts, same-pool replacement, locked pads, progress, the visibility helper). The generation races in `App` (`isGenerating`, superseding) are not reachable from Node and are confirmed by reading only; `test/io.test.ts` covers
 drop handling and trimming with fakes for `FileSystemEntry` and `OfflineAudioContext`.
 

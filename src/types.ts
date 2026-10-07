@@ -8,7 +8,12 @@ export interface Sample {
   category: Category;
   url: string; // Object URL for preview
   isExcluded?: boolean;
-  /** Hash of the audio content; see `fileSignature`. Used to dedupe. Filled in place in the background after a drop. */
+  /**
+   * Set by the generator when this sample's audio matched a pad already in a kit. Separate from
+   * `isExcluded` (the user's choice); both make the sample unusable for later draws.
+   */
+  isDuplicate?: boolean;
+  /** Hash of the audio content; see `fileSignature`. Optional preset identity; normally computed lazily by `identityOf` at draw time. */
   signature?: string;
   /** Looks like a bar of music rather than a one-shot — skipped unless asked for. */
   isLoop?: boolean;
