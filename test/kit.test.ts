@@ -29,7 +29,7 @@ import {
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
-import { createPresetBundle } from '../src/utils/exporter';
+import { createPresetBundle, ExportError, exportBatchKits, isOutOfMemory } from '../src/utils/exporter';
 import {
   categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
 } from '../src/utils/fileReader';
@@ -1829,6 +1829,39 @@ await test('mergeScannedFolders merges against the current list', () => {
   const twice = mergeScannedFolders([], [{ name: 'A' }, { name: 'a' }]);
   assert.equal(twice.accepted.length, 1);
   assert.equal(twice.skippedDuplicates, 1);
+});
+
+await test('export failures name the stage, sample and kit; memory errors are recognised', async () => {
+  const kit = new Array(PAD_COUNT).fill(null);
+  kit[3] = makeSample('Snare.wav', 'Snare');
+  const throwing = (err: unknown) => ({ trim: async () => { throw err; } }) as any;
+
+  const plain = await createPresetBundle(kit, 'K1', { trimSilence: true }, throwing(new Error('decode boom'))).catch(e => e);
+  assert.ok(plain instanceof ExportError);
+  assert.equal(plain.stage, 'trim');
+  assert.equal(plain.outOfMemory, false);
+  assert.match(plain.userMessage, /"Snare\.wav"/);
+  assert.match(plain.userMessage, /"K1"/);
+  assert.match(plain.userMessage, /Nothing was downloaded/);
+  assert.equal((plain.cause as Error).message, 'decode boom');
+
+  const oom = await createPresetBundle(kit, 'K1', { trimSilence: true }, throwing(new RangeError('Array buffer allocation failed'))).catch(e => e);
+  assert.ok(oom instanceof ExportError && oom.outOfMemory);
+  assert.match(oom.userMessage, /ran out of memory/);
+
+  assert.ok(isOutOfMemory(Object.assign(new Error('x'), { name: 'QuotaExceededError' })));
+  assert.ok(!isOutOfMemory(new Error('bad wav')));
+
+  // An unreadable sample is named at the read stage.
+  const bad = new File(['x'], 'Bad.wav');
+    const readError = new Error('read boom');
+  (bad as any).arrayBuffer = () => Promise.reject(readError);
+  const unreadable = [...kit];
+  unreadable[0] = { ...makeSample('Bad.wav', 'Kick'), file: bad };
+  const archive = await exportBatchKits([{ kit: unreadable, name: 'K2' }], 'B', NO_TRIM).catch(e => e);
+  assert.ok(archive instanceof ExportError, String(archive));
+  assert.equal(archive.stage, 'read');
+  assert.match(archive.userMessage, /Bad\.wav/);
 });
 
 if (failures > 0) {

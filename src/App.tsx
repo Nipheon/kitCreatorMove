@@ -7,7 +7,7 @@ import {
   PAD_COUNT, poolCategoryFor
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
-import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
+import { ExportError, exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
   categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
 } from './utils/fileReader';
@@ -769,10 +769,15 @@ export default function App() {
   const exportKit = async () => {
     if (kit.every(s => s === null)) return;
 
-    const bytes = kitSizeBytes(kit) * batchSize;
+    // Built before the confirm so the guard sums the real kits 2..n, not the on-screen kit
+    // times the batch size. Trimming only shrinks, hence "at most".
+    const batch = batchSize > 1 ? buildBatch() : null;
+    const bytes = batch
+      ? batch.reduce((total, entry) => total + kitSizeBytes(entry.kit), 0)
+      : kitSizeBytes(kit);
     if (bytes > SIZE_WARN_BYTES) {
       const proceed = window.confirm(
-        `This export is roughly ${formatMb(bytes)} of audio. Bundles are built in memory and may fail at this size. Continue?`
+        `This export is at most ${formatMb(bytes)} of audio. Bundles are built in memory and may fail at this size. Continue?`
       );
       if (!proceed) return;
     }
@@ -786,8 +791,7 @@ export default function App() {
       const names: string[] = [];
       let report;
       let emptyNote: string | null = null;
-      if (batchSize > 1) {
-        const batch = buildBatch();
+      if (batch) {
         emptyNote = emptyPadsNotice(batch);
         names.push(...batch.map(entry => entry.name));
         report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
@@ -817,7 +821,11 @@ export default function App() {
       }
     } catch (err) {
       console.error('Export failed:', err);
-      setError('Export failed. Try a smaller batch or fewer samples.');
+      setError(
+        err instanceof ExportError
+          ? err.userMessage
+          : 'Export failed. Nothing was downloaded. Details are in the browser console.'
+      );
     } finally {
       setIsExporting(false);
       setExportProgress(null);
