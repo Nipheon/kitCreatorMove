@@ -3,6 +3,7 @@ import {
 } from '../padLayout';
 import { Category, Sample } from '../types';
 import { buildPartnerIndex, partnerPads } from './hatPartner';
+import { KIND_LABELS, KINDS_BY_CATEGORY, SampleKind } from './kinds';
 import { identityOf } from './sampleSignature';
 
 export interface KitResult {
@@ -63,15 +64,22 @@ export interface KitOptions {
    * crashes, or a row that reads as off still fills pads.
    */
   disabledTypes?: ReadonlySet<Category>;
+  /**
+   * Kinds the user has switched off in the breakdown card's kind sub-lists ("no toms"). Kind
+   * names are unique across categories, so this needs no category: it filters the sample
+   * wherever it would be drawn, a Perc-category sample used as a substitute included.
+   */
+  disabledKinds?: ReadonlySet<SampleKind>;
 }
 
 export function isUsableSample(
   sample: Sample,
-  { skipLoops = true, skipNonDrums = true, disabledTypes }: KitOptions = {}
+  { skipLoops = true, skipNonDrums = true, disabledTypes, disabledKinds }: KitOptions = {}
 ): boolean {
   if (skipLoops && sample.isLoop) return false;
   if (skipNonDrums && sample.isNonDrum) return false;
   if (disabledTypes?.has(poolCategoryFor(sample))) return false;
+  if (disabledKinds?.has(sample.kind)) return false;
   return !sample.isExcluded && !sample.isDuplicate;
 }
 
@@ -87,13 +95,60 @@ export interface DrawHooks {
 }
 
 /**
+ * Variety: categories whose kinds are capped (`KIND_CAP` pads each) while another kind is still available.
+ * Perc and Crash are one group because crashes are drawn from the percussion pool; kind names
+ * are unique across categories, so a group needs no per-category bookkeeping.
+ */
+const VARIETY_GROUPS: Category[][] = [['Perc', 'Crash']];
+
+const varietyGroupOf = (category: Category): Category[] | undefined =>
+  VARIETY_GROUPS.find(group => group.includes(category));
+
+/** Tells whether a candidate is welcome now; only a candidate this rejects can be skipped over. */
+export type Preference = (candidate: Sample) => boolean;
+
+/** At most this many pads of one kind within a variety group, while other candidates exist. */
+export const KIND_CAP = 2;
+
+/**
+ * A soft cap per kind: a candidate is welcome while fewer than `KIND_CAP` pads of its variety
+ * group already hold its kind. `pads` is read at every pop, so it sees the pads placed so far
+ * (and locked pads, which the caller includes up front). A candidate outside every variety
+ * group is always welcome.
+ */
+export function preferNewKinds(pads: () => readonly (Sample | null)[]): Preference {
+  return candidate => {
+    const group = varietyGroupOf(candidate.category);
+    if (!group) return true;
+    return pads().filter(s => !!s && group.includes(s.category) && s.kind === candidate.kind).length < KIND_CAP;
+  };
+}
+
+/**
+ * Takes the pool's end, or, when a preference is given, the last candidate it welcomes. The
+ * pools are shuffled, so the last welcome candidate is uniform among the welcome ones. When
+ * none is welcome the normal pop happens, so variety can never empty a pad. The pick still
+ * goes through the caller's identity check.
+ */
+function popPreferred(pool: Sample[], prefer?: Preference): Sample {
+  if (prefer) {
+    for (let i = pool.length - 1; i >= 0; i--) {
+      if (prefer(pool[i])) return pool.splice(i, 1)[0];
+    }
+  }
+  return pool.pop()!;
+}
+
+/**
  * Pops candidates off `pool` until one has audio no pad in this kit holds yet, claiming its
  * identity. A repeat is flagged `isDuplicate` (it stays out of every later draw) and the next
  * candidate comes from the SAME pool, so the pad's role and the pass order are untouched.
  */
-async function claimFrom(pool: Sample[], used: Set<string>, identity: IdentityFn): Promise<Sample | null> {
+async function claimFrom(
+  pool: Sample[], used: Set<string>, identity: IdentityFn, prefer?: Preference
+): Promise<Sample | null> {
   while (pool.length > 0) {
-    const candidate = pool.pop()!;
+    const candidate = popPreferred(pool, prefer);
     const id = await identity(candidate);
     if (!used.has(id)) {
       used.add(id);
@@ -106,10 +161,11 @@ async function claimFrom(pool: Sample[], used: Set<string>, identity: IdentityFn
 
 /** One draw for a role: re-picks a group pool whenever the picked one ran dry on duplicates. */
 async function drawRole(
-  pools: Record<Category, Sample[]>, category: Category, used: Set<string>, identity: IdentityFn
+  pools: Record<Category, Sample[]>, category: Category, used: Set<string>, identity: IdentityFn,
+  prefer?: Preference
 ): Promise<Sample | null> {
   for (let pool = pickGroupPool(pools, category); pool; pool = pickGroupPool(pools, category)) {
-    const found = await claimFrom(pool, used, identity);
+    const found = await claimFrom(pool, used, identity, prefer);
     if (found) return found;
   }
   return null;
@@ -117,14 +173,14 @@ async function drawRole(
 
 /** Nothing in the preference list: whichever pool is deepest, until one yields a distinct sample. */
 async function drawDeepest(
-  pools: Record<Category, Sample[]>, used: Set<string>, identity: IdentityFn
+  pools: Record<Category, Sample[]>, used: Set<string>, identity: IdentityFn, prefer?: Preference
 ): Promise<Sample | null> {
   for (;;) {
     const deepest = (Object.keys(pools) as Category[])
       .sort((a, b) => pools[b].length - pools[a].length)
       .find(cat => pools[cat].length > 0);
     if (!deepest) return null;
-    const found = await claimFrom(pools[deepest], used, identity);
+    const found = await claimFrom(pools[deepest], used, identity, prefer);
     if (found) return found;
   }
 }
@@ -282,6 +338,41 @@ export function emptyPadsNotice(kits: { kit: (Sample | null)[] }[]): string | nu
   return `${count} of ${kits.length} kits have empty pads: the library has fewer usable samples than pads.`;
 }
 
+/** One kind of a breakdown row: how many of its samples are usable, out of how many are loaded. */
+export interface KindCount {
+  kind: SampleKind;
+  label: string;
+  usable: number;
+  total: number;
+}
+
+/**
+ * Per-kind counts for the breakdown card, grouped by the row (pool category) the samples are
+ * drawn from, in taxonomy order. Only kinds the library holds appear. Counted exactly like the
+ * type rows: `total` is every loaded sample of the kind, `usable` those `isUsableSample` accepts.
+ */
+export function kindCountsByRow(samples: Sample[], options: KitOptions = {}): Partial<Record<Category, KindCount[]>> {
+  const rows: Partial<Record<Category, Map<SampleKind, KindCount>>> = {};
+  for (const s of samples) {
+    const row = poolCategoryFor(s);
+    const map = (rows[row] ??= new Map());
+    const entry = map.get(s.kind) ?? { kind: s.kind, label: kindRowLabel(s.kind), usable: 0, total: 0 };
+    entry.total += 1;
+    if (isUsableSample(s, options)) entry.usable += 1;
+    map.set(s.kind, entry);
+  }
+  // Perc before Crash: the percussion row lists its own kinds first, the crashes it carries after.
+  const order = (['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Hat', 'Perc', 'Crash', 'Other'] as Category[]).flatMap(c => KINDS_BY_CATEGORY[c]);
+  const result: Partial<Record<Category, KindCount[]>> = {};
+  for (const [row, map] of Object.entries(rows) as [Category, Map<SampleKind, KindCount>][]) {
+    result[row] = [...map.values()].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  }
+  return result;
+}
+
+/** Sub-list label: the pad label, except plain `percussion`, which would read as the row itself. */
+export const kindRowLabel = (kind: SampleKind): string => (kind === 'percussion' ? 'Plain perc' : KIND_LABELS[kind]);
+
 function availableRoles(usable: Sample[]): Set<Category> {
   const available = new Set<Category>();
   usable.forEach(s => {
@@ -337,12 +428,15 @@ export async function generateRandomKit(
   const tick = () => onProgress?.(++checked, total);
   onProgress?.(0, total);
 
+  // Locked pads count as present from the first draw, wherever they sit.
+  const prefer = preferNewKinds(() => kit.map((s, i) => s ?? lockedSamples[i] ?? null));
+
   const take = async (index: number): Promise<Sample | null> => {
     for (const cat of layout.preferences[index]) {
-      const found = await drawRole(pools, cat, used, identity);
+      const found = await drawRole(pools, cat, used, identity, prefer);
       if (found) return found;
     }
-    return drawDeepest(pools, used, identity);
+    return drawDeepest(pools, used, identity, prefer);
   };
 
   /**
@@ -359,7 +453,7 @@ export async function generateRandomKit(
       kit[i] = lockedSamples[i];
       continue;
     }
-    kit[i] = await drawRole(pools, layout.preferences[i][0], used, identity);
+    kit[i] = await drawRole(pools, layout.preferences[i][0], used, identity, prefer);
     if (kit[i]) tick();
   }
 
@@ -458,12 +552,15 @@ export async function rerollSinglePad(
   onProgress?.(0, 1);
   let chosenSample: Sample | null = null;
 
+  // A kind the OTHER pads do not hold; the pad being rerolled does not count against its candidates.
+  const prefer = preferNewKinds(() => nextKit.filter((_, i) => i !== targetIndex));
+
   for (const cat of preferences) {
-    chosenSample = await drawRole(pools, cat, used, identity);
+    chosenSample = await drawRole(pools, cat, used, identity, prefer);
     if (chosenSample) break;
   }
 
-  if (!chosenSample) chosenSample = await drawDeepest(pools, used, identity);
+  if (!chosenSample) chosenSample = await drawDeepest(pools, used, identity, prefer);
   onProgress?.(1, 1);
 
   // Nothing else in the whole library: keep what is there rather than emptying the pad.

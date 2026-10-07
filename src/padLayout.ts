@@ -1,4 +1,5 @@
 import { Category, Sample } from './types';
+import { defaultKind, KIND_LABELS, SampleKind } from './utils/kinds';
 
 export const PAD_COUNT = 16;
 
@@ -124,6 +125,20 @@ export const NO_SAMPLES_GRID_ID = 'none';
 function pooledCategory(category: Category): Category {
   if (category === 'Hat') return 'CHH';
   if (category === 'Crash') return 'Perc';
+  return category;
+}
+
+/**
+ * The pad header's label: the sample's kind when it is more specific than its category (a
+ * shaker on a Perc pad reads Shaker, a ride on the percussion pool reads Ride), otherwise the
+ * category as before. A sample on a pad whose role it does not satisfy (a substitute), and an
+ * empty pad, keep the category / role label.
+ */
+export function padLabel(category: Category | null, kind: SampleKind | null, role: string): string {
+  if (!category) return role;
+  if (kind && kind !== defaultKind(category) && satisfiesRole(category, role as Category)) {
+    return KIND_LABELS[kind];
+  }
   return category;
 }
 

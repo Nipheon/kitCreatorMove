@@ -263,8 +263,27 @@ rule exists because a simpler version broke on real packs.
   String Drop` are not loops, and `Kick LP`/`808 Son LP` stay kicks ("LP" being low-pass or a record). Pinned by tests.
 - **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
   token only.
+- **Kinds in the UI and the draw (step 2).**
+  - **Pad label (`padLabel` in `padLayout.ts`, pure):** the header line shows the kind label when the kind is not the category's default
+    (`defaultKind`) and the sample satisfies the pad's role (`satisfiesRole`): a shaker on a Perc pad reads SHAKER, a ride RIDE, a
+    rimshot RIMSHOT, 808 on a Kick pad 808, a snap SNAP. Default kinds, substitutes (a Perc sample on a Kick pad) and empty pads show the
+    category / role as before. Same element, same category colour (`--category-accent`), same container-query sizes and hidden at <=88px;
+    `truncate` keeps it on one line so it can never wrap or push the name. The tooltip and the play aria-label carry the kind.
+  - **`disabledKinds` (`KitOptions`) filters in `isUsableSample`** next to `disabledTypes`, so every flow (generate, reroll, usable
+    counts, breakdown stats, removeFolders/toggleFolders regeneration, `buildBatch`, substitutes) honours it through `kitOptions`. Kind
+    names are unique across categories, so the set needs no category. Nothing persists. `toggleKind` regenerates unlocked pads at once
+    and passes the new set explicitly, like `toggleType`.
+  - **Breakdown kind sub-lists:** `kindCountsByRow` (pure, `kitGenerator.ts`) counts usable/total per kind under each pool row; Kick,
+    Snare, Clap and `PERC + CRASH` (crash kinds are under Perc) get an expandable list when the library holds >= 2 kinds in the row. Perc
+    starts open, the others closed (`aria-expanded`, chevron button), each kind has the type rows' eye toggle.
+  - **Variety (`preferNewKinds`, `KIND_CAP` = 2):** while a pool is popped, a candidate is welcome when fewer than two pads of its variety
+    group (`VARIETY_GROUPS`: Perc + Crash) hold its kind; the pick is uniform among welcome candidates (last welcome one of the shuffled
+    pool). If none is welcome the normal pop happens, so it never empties a pad. It lives inside `claimFrom`, so fill order, top-row-first
+    substitution, the lazy `identityOf` check, locks (counted from the first draw), hat partners and held layouts are untouched. Reroll
+    counts the OTHER pads only. Limits: it only reorders inside a pool, so a Perc-only library with more than 2 pads per kind overflows;
+    `Other` is not capped; the hat-partner swap and the pool put-back do not re-apply the cap.
 - **Kinds sit next to the category (`utils/kinds.ts`, `Sample.kind`); the category alone still decides everything.** Kits, pools,
-  choke, hat partners, filters and the grid never read `kind`; no UI shows it yet (the pad and sidebar step comes next). The type
+  choke, hat partners and the grid never read `kind`; the pad label, the kind filter and the variety cap do (entries below). The type
   `SampleKind` and `KINDS_BY_CATEGORY` are pure data (the first kind listed is the category's default, `defaultKind`): Kick `kick 808`,
   Snare `snare rimshot sidestick`, Clap `clap snap`, CHH `closed`, OHH `open`, Hat `hat`, Crash `cymbal crash ride`, Perc
   `percussion shaker tambourine cowbell conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
@@ -345,7 +364,7 @@ rule exists because a simpler version broke on real packs.
 ### Loop and non-drum filtering
 
 - **Loops are filtered before `chooseLayout` runs**, otherwise a folder of hat loops makes a generic-hat library look like it has
-  split hats. `isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), switched-off types (`disabledTypes`) and
+  split hats. `isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), switched-off types (`disabledTypes`), switched-off kinds (`disabledKinds`) and
   excluded (`sample.isExcluded`) or duplicate (`sample.isDuplicate`) samples; both toggles default on. It also keeps the "Usable Samples" count in step with UI
   exclusions.
 - **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** Never add `breaks`/`breakbeat`: the list is matched against folders too, and `70s

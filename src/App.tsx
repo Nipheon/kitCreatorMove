@@ -1,4 +1,4 @@
-import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { PickSources } from './components/PickSources';
@@ -17,7 +17,8 @@ import {
 import { mergeScannedFolders } from './utils/folderMerge';
 import { planRemove, planToggle } from './utils/folderGroups';
 import { expandCollections } from './utils/packSplit';
-import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
+import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitResult, rerollSinglePad } from './utils/kitGenerator';
+import { SampleKind } from './utils/kinds';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
 import { revokeSampleUrl } from './utils/sampleUrl';
@@ -27,6 +28,29 @@ import {
 } from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
+/** One kind in a breakdown sub-list: the same eye toggle as a type row, and the usable / total count. */
+const KindRow: React.FC<{ entry: KindCount; isOff: boolean; busy: boolean; onToggle: () => void }> = ({ entry, isOff, busy, onToggle }) => (
+  <li className={`flex justify-between items-center gap-2 text-xs uppercase font-medium ${isOff ? 'opacity-50' : ''}`}>
+    <div className='flex items-center gap-2 min-w-0'>
+      <button
+        type='button'
+        onClick={onToggle}
+        disabled={busy}
+        aria-pressed={isOff}
+        className='text-text-subtle hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
+        title={isOff ? `Use ${entry.label} samples again` : `Leave ${entry.label} samples out of every kit`}
+        aria-label={isOff ? `Enable ${entry.label}` : `Disable ${entry.label}`}
+      >
+        {isOff ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+      <span className='truncate category-ink'>{entry.label}</span>
+    </div>
+    <span className={`shrink-0 ${entry.usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}`}>
+      {entry.usable.toLocaleString()} / {entry.total.toLocaleString()}
+    </span>
+  </li>
+);
+
 const SIZE_WARN_BYTES = 200 * 1024 * 1024;
 
 /**
@@ -81,6 +105,9 @@ export default function App() {
    * flags so the count of them is never a thing that can disagree with the rows.
    */
   const [disabledTypes, setDisabledTypes] = useState<ReadonlySet<Category>>(new Set());
+  const [disabledKinds, setDisabledKinds] = useState<ReadonlySet<SampleKind>>(new Set());
+  /** Breakdown rows whose kind sub-list the user opened or closed; a row not in here follows its default. */
+  const [kindListOpen, setKindListOpen] = useState<Partial<Record<Category, boolean>>>({});
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const helpButtonRef = useRef<HTMLButtonElement>(null);
@@ -441,7 +468,7 @@ export default function App() {
     };
   }, []);
 
-  const kitOptions = { skipLoops, skipNonDrums, disabledTypes };
+  const kitOptions = { skipLoops, skipNonDrums, disabledTypes, disabledKinds };
 
   const exportName = kitNameFor(kitPrefix, kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
@@ -452,7 +479,7 @@ export default function App() {
   );
   const usableCount = useMemo(
     () => samples.filter(s => isUsableSample(s, kitOptions)).length,
-    [samples, skipLoops, skipNonDrums, disabledTypes, kitResult]
+    [samples, skipLoops, skipNonDrums, disabledTypes, disabledKinds, kitResult]
   );
   // The generator flags duplicates in place, so a new kit result is the signal to recount.
   const skippedDuplicates = useMemo(
@@ -482,8 +509,14 @@ export default function App() {
       }
     });
     return stats;
-  }, [samples, skipLoops, skipNonDrums, disabledTypes, kitResult]);
+  }, [samples, skipLoops, skipNonDrums, disabledTypes, disabledKinds, kitResult]);
 
+  const kindCounts = useMemo(
+    () => kindCountsByRow(samples, kitOptions),
+    [samples, skipLoops, skipNonDrums, disabledTypes, disabledKinds, kitResult]
+  );
+
+  const KIND_LIST_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'Perc'];
   const BREAKDOWN_ROWS: Category[] = ['Kick', 'Snare', 'Clap', 'CHH', 'OHH', 'Perc', 'Other'];
   const BREAKDOWN_LABELS: Partial<Record<Category, string>> = {
     CHH: 'CHH + HAT',
@@ -851,6 +884,24 @@ export default function App() {
     }
   };
 
+  /** Same semantics as `toggleType`, for one kind: regenerates the unlocked pads with the new set passed explicitly. */
+  const toggleKind = async (kind: SampleKind) => {
+    if (generating.current) return;
+    const next = new Set(disabledKinds);
+    if (next.has(kind)) {
+      next.delete(kind);
+    } else {
+      next.add(kind);
+    }
+    setDisabledKinds(next);
+    if (samples.length > 0) {
+      const result = await runGeneration(report => generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, disabledKinds: next }, undefined, { onProgress: report }));
+      if (result) {
+        setKitResult(result);
+      }
+    }
+  };
+
   const toggleLock = (index: number) => {
     if (generating.current) return;
     setLockedPads(prev => {
@@ -1096,9 +1147,12 @@ export default function App() {
                       const { usable, total } = categoryStats[cat];
                       const label = BREAKDOWN_LABELS[cat] ?? cat;
                       const isOff = disabledTypes.has(cat);
+                      const kinds = KIND_LIST_ROWS.includes(cat) ? kindCounts[cat] ?? [] : [];
+                      const hasKinds = kinds.length >= 2;
+                      const kindsOpen = kindListOpen[cat] ?? (cat === 'Perc');
                       return (
+                        <div key={cat} className='flex flex-col space-y-1'>
                         <div
-                          key={cat}
                           // The same custom property the pads set, so a row and the pads
                           // it feeds are the one colour rather than two lists to keep in
                           // step. CHH carries generic hats and Perc carries crashes here
@@ -1112,6 +1166,19 @@ export default function App() {
                               : undefined}
                         >
                           <div className='flex items-center gap-2 min-w-0'>
+                            {hasKinds && (
+                              <button
+                                type='button'
+                                onClick={() => setKindListOpen(prev => ({ ...prev, [cat]: !kindsOpen }))}
+                                aria-expanded={kindsOpen}
+                                aria-controls={`kinds-${cat}`}
+                                className='text-text-subtle hover:text-text-bright transition-colors shrink-0 cursor-pointer'
+                                title={kindsOpen ? `Hide the ${label} kinds` : `Show the ${label} kinds`}
+                                aria-label={`${label} kinds`}
+                              >
+                                {kindsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              </button>
+                            )}
                             <button
                               type='button'
                               onClick={() => toggleType(cat)}
@@ -1132,6 +1199,12 @@ export default function App() {
                           <span className={`shrink-0 ${usable > 0 ? 'text-text-bright' : 'text-text-muted-dark opacity-50'}`}>
                             {usable.toLocaleString()} / {total.toLocaleString()}
                           </span>
+                        </div>
+                        {hasKinds && kindsOpen && (
+                          <ul id={`kinds-${cat}`} style={{ '--category-accent': categoryAccent(cat) } as React.CSSProperties} className='pl-6 flex flex-col space-y-1' aria-label={`${label} kinds`}>
+                            {kinds.map(k => <KindRow key={k.kind} entry={k} isOff={disabledKinds.has(k.kind)} busy={isGenerating || isOff} onToggle={() => toggleKind(k.kind)} />)}
+                          </ul>
+                        )}
                         </div>
                       );
                     })}
@@ -1485,6 +1558,8 @@ export default function App() {
                   <li><strong className='text-text-bright'>When Filters Apply:</strong> Skip Loops and Skip Non-Drums change what the <em>next</em> kit is built from. The counts above them update straight away, but the kit on screen is left alone — nothing is taken off a pad you are listening to. Hit Generate to apply them.</li>
                   <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm. A file that says "break" or "breakbeat" in its own name also counts, but only if it could not be categorised — a snare called "Break Snare" is still a snare, and a pack named "Breaks Vol 2" keeps all of its one-shots.</li>
                   <li><strong className='text-text-bright'>Disable a Type:</strong> Each row of the Breakdown by Type card has an eye icon. Switching a type off leaves every sample of it out of generation, exactly like disabling a source folder, and the grid drops that column. Closed hats take generic hats with them, and percussion takes crashes.</li>
+                  <li><strong className='text-text-bright'>Disable a Kind:</strong> Kick, snare, clap and percussion rows open a list of the finer sound types the library holds (toms, shakers, rimshots, rides and so on), each with its own eye icon, so "no toms" is one click. Percussion starts open when the library holds two or more of its kinds. Switching a kind off regenerates the unlocked pads straight away; locked pads keep their sample.</li>
+                  <li><strong className='text-text-bright'>Variety:</strong> Percussion and crash pads hold at most two of the same kind (two shakers, not five) while other kinds are available. It is a preference only: a library with nothing else still fills every pad.</li>
                   <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
                   <li><strong className='text-text-bright'>When a Pool Runs Dry:</strong> A pad whose own category is exhausted takes the nearest sound rather than the next one down some list. Snares and claps cover for each other, the two hats cover for each other, percussion and other cover for each other, and a kick is the last resort for every role but its own. An open-hat pad reaches for closed hats first.</li>
                   <li><strong className='text-text-bright'>Percussion &amp; Other:</strong> These keep separate columns and separate rows, but a pad asking for either draws from both, weighted by how much of each is left — so a library heavy on unclassified samples still fills its percussion pads.</li>

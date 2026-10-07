@@ -25,7 +25,7 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
 
 import {
   CHOKE_HATS, chokeGroupsFor, chooseLayout, DISPLAY_INDICES, DRUM_CELL_COLOR,
-  NO_SAMPLES_GRID_ID, PAD_COUNT
+  NO_SAMPLES_GRID_ID, PAD_COUNT, padLabel
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
@@ -38,7 +38,7 @@ import {
   categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum
 } from '../src/utils/fileReader';
 import {
-  countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, rerollSinglePad
+  countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
 } from '../src/utils/kitGenerator';
 import {
   buildBatch, DEFAULT_PREFIX, heldLayout, KIT_SUFFIXES, kitNameFor, MULTI_FOLDER_PREFIX,
@@ -2995,6 +2995,156 @@ await test('kinds: the category is unchanged by the kind on the existing test na
   for (const dir of ['', '/Pack/Open Hats', '/Pack/Closed Hats', '/Pack/Kicks', '/Pack/Toms', '/Loops']) {
     for (const name of names) assert.equal(classifySample(name, dir).category, categorizeSample(name, dir), `${name} @ ${dir}`);
   }
+});
+
+const kinded = (name: string, category: Category, kind: SampleKind, body = name): Sample => ({ ...makeSample(name, category, body), kind });
+const idByName = async (s: Sample) => s.name;
+
+/** A kick/snare/hat base so Perc is a column (or top-row extra) rather than the whole kit. */
+function kindPool(): Sample[] {
+  const out: Sample[] = [];
+  for (let i = 0; i < 6; i++) {
+    out.push(makeSample(`kick${i}.wav`, 'Kick'), makeSample(`snare${i}.wav`, 'Snare'),
+      makeSample(`chh${i}.wav`, 'CHH'), makeSample(`ohh${i}.wav`, 'OHH'));
+  }
+  const add = (kind: SampleKind, n: number) => {
+    for (let i = 0; i < n; i++) out.push(kinded(`${kind}${i}.wav`, 'Perc', kind));
+  };
+  add('shaker', 12); add('tom', 3); add('conga', 3); add('cowbell', 3); add('tambourine', 3);
+  return out;
+}
+
+await test('kind filter: isUsableSample leaves out a disabled kind, whatever the category', () => {
+  const tom = kinded('tom1.wav', 'Perc', 'tom');
+  const shaker = kinded('sh1.wav', 'Perc', 'shaker');
+  const ride = kinded('ride.wav', 'Crash', 'ride');
+  assert.equal(isUsableSample(tom), true);
+  assert.equal(isUsableSample(tom, { disabledKinds: new Set<SampleKind>(['tom']) }), false);
+  assert.equal(isUsableSample(shaker, { disabledKinds: new Set<SampleKind>(['tom']) }), true);
+  assert.equal(isUsableSample(ride, { disabledKinds: new Set<SampleKind>(['ride']) }), false);
+});
+
+await test('kind filter: a disabled kind never reaches a kit, a locked one stays, substitutes included', async () => {
+  const samples = kindPool();
+  const toms = samples.filter(s => s.kind === 'tom');
+  const opts = { disabledKinds: new Set<SampleKind>(['tom']) };
+  for (let i = 0; i < 200; i++) {
+    const { kit } = await generateRandomKit(samples, [], opts);
+    assert.equal(kit.filter(s => s?.kind === 'tom').length, 0);
+  }
+  const locked: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  locked[5] = toms[0];
+  for (let i = 0; i < 30; i++) {
+    const { kit } = await generateRandomKit(samples, locked, opts);
+    assert.equal(kit[5], toms[0], 'locked tom kept');
+    assert.equal(kit.filter(s => s?.kind === 'tom').length, 1, 'only the locked one');
+  }
+  const percOnly = samples.filter(s => s.category === 'Perc');
+  for (let i = 0; i < 50; i++) {
+    const { kit } = await generateRandomKit(percOnly, [], opts);
+    assert.equal(kit.filter(s => s?.kind === 'tom').length, 0);
+    const re = await rerollSinglePad(percOnly, kit, 3, opts);
+    assert.notEqual(re.kit[3]?.kind, 'tom');
+  }
+});
+
+await test('kind counts per breakdown row: usable and total per kind, rows follow the pools', () => {
+  const samples = [
+    kinded('t1', 'Perc', 'tom'), kinded('t2', 'Perc', 'tom'), kinded('s1', 'Perc', 'shaker'),
+    kinded('r1', 'Crash', 'ride'), kinded('k1', 'Kick', 'kick'), kinded('k2', 'Kick', '808')
+  ];
+  samples[1].isExcluded = true;
+  const counts = kindCountsByRow(samples, { disabledKinds: new Set<SampleKind>(['shaker']) });
+  assert.deepEqual(counts.Perc!.map(c => [c.kind, c.usable, c.total]), [['shaker', 0, 1], ['tom', 1, 2], ['ride', 1, 1]]);
+  assert.deepEqual(counts.Kick!.map(c => [c.kind, c.usable, c.total]), [['kick', 1, 1], ['808', 1, 1]]);
+  assert.equal(counts.Snare, undefined);
+  assert.equal(counts.Crash, undefined, 'crashes count under the Perc row');
+});
+
+await test('pad label: the kind when more specific than the category, else what is shown today', () => {
+  assert.equal(padLabel('Perc', 'shaker', 'Perc'), 'Shaker');
+  assert.equal(padLabel('Perc', 'percussion', 'Perc'), 'Perc');
+  assert.equal(padLabel('Crash', 'ride', 'Perc'), 'Ride');
+  assert.equal(padLabel('Crash', 'cymbal', 'Perc'), 'Crash');
+  assert.equal(padLabel('Snare', 'rimshot', 'Snare'), 'Rimshot');
+  assert.equal(padLabel('Kick', '808', 'Kick'), '808');
+  assert.equal(padLabel('Clap', 'snap', 'Clap'), 'Snap');
+  assert.equal(padLabel('Kick', 'kick', 'Kick'), 'Kick');
+  assert.equal(padLabel('CHH', 'closed', 'CHH'), 'CHH');
+  assert.equal(padLabel('Other', 'other', 'Other'), 'Other');
+  assert.equal(padLabel('Perc', 'tom', 'Kick'), 'Perc', 'a substitute keeps its category label');
+  assert.equal(padLabel(null, null, 'Snare'), 'Snare', 'an empty pad shows its role');
+  for (const category of Object.keys(KINDS_BY_CATEGORY) as Category[]) {
+    for (const kind of kindsOf(category)) assert.ok(padLabel(category, kind, category).length <= 9);
+  }
+});
+
+const countKind = (kit: (Sample | null)[], kind: SampleKind) => kit.filter(s => s?.kind === kind).length;
+
+await test('variety: a pool of 12 shakers and four other kinds puts no more than two shakers on a kit', async () => {
+  const samples = kindPool();
+  let capped = 0;
+  const draws = 300;
+  for (let i = 0; i < draws; i++) {
+    const { kit } = await generateRandomKit(samples, [], {}, undefined, { identityOf: idByName });
+    if (countKind(kit, 'shaker') <= 2) capped++;
+  }
+  assert.ok(capped / draws >= 0.95, `at most two shakers in ${capped}/${draws}`);
+});
+
+await test('variety: a reroll avoids a kind that two other pads already hold', async () => {
+  const samples = kindPool();
+  let tries = 0;
+  for (let i = 0; i < 100; i++) {
+    const { kit, layout } = await generateRandomKit(samples, [], {}, undefined, { identityOf: idByName });
+    const pad = kit.findIndex((s, idx) => s?.category === 'Perc' && layout.preferences[idx][0] === 'Perc');
+    if (pad < 0) continue;
+    const others = kit.filter((s, idx) => idx !== pad && s?.category === 'Perc');
+    const full = new Set(others.map(s => s!.kind).filter(k => others.filter(o => o!.kind === k).length >= 2));
+    if (full.size === 0 || full.size >= 5) continue;
+    const re = await rerollSinglePad(samples, kit, pad, {}, layout, { identityOf: idByName });
+    tries++;
+    assert.ok(!full.has(re.kit[pad]!.kind), `rerolled into the capped kind ${re.kit[pad]!.kind}`);
+  }
+  assert.ok(tries > 5, `${tries} rerolls with a capped kind`);
+});
+
+await test('variety: a pool of only shakers still fills every pad, no empties introduced', async () => {
+  const shakers = Array.from({ length: 30 }, (_, i) => kinded(`sh${i}.wav`, 'Perc', 'shaker'));
+  for (let i = 0; i < 100; i++) {
+    const { kit, empty } = await generateRandomKit(shakers, [], {}, undefined, { identityOf: idByName });
+    assert.equal(empty.length, 0);
+    assert.equal(kit.filter(Boolean).length, PAD_COUNT);
+  }
+  const { kit } = await generateRandomKit(shakers.slice(0, 5), [], {}, undefined, { identityOf: idByName });
+  assert.equal(kit.filter(Boolean).length, 5);
+});
+
+await test('variety: empties never exceed what the samples allow (12 samples for 16 pads, 100 draws)', async () => {
+  const lib = [...Array.from({ length: 9 }, (_, i) => kinded(`sh${i}.wav`, 'Perc', 'shaker')),
+    kinded('tomA.wav', 'Perc', 'tom'), kinded('congaA.wav', 'Perc', 'conga'), kinded('kickA.wav', 'Kick', 'kick')];
+  for (let i = 0; i < 100; i++) {
+    const { kit } = await generateRandomKit(lib, [], {}, undefined, { identityOf: idByName });
+    const filled = kit.filter(Boolean);
+    assert.equal(filled.length, lib.length, 'every sample is placed, so empties equal the no-variety count');
+    assert.equal(new Set(filled.map(s => s!.id)).size, filled.length, 'no sample on two pads');
+  }
+});
+
+await test('variety: locked pads count towards the cap and are never overwritten', async () => {
+  const samples = kindPool();
+  const shakers = samples.filter(s => s.kind === 'shaker');
+  const locked: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  locked[15] = shakers[0];
+  locked[14] = shakers[1];
+  let capped = 0;
+  for (let i = 0; i < 100; i++) {
+    const { kit } = await generateRandomKit(samples, locked, {}, undefined, { identityOf: idByName });
+    assert.equal(kit[15], shakers[0]);
+    assert.equal(kit[14], shakers[1]);
+    if (countKind(kit, 'shaker') === 2) capped++;
+  }
+  assert.ok(capped >= 95, `the two locked shakers are the only ones in ${capped}/100`);
 });
 
 if (failures > 0) {

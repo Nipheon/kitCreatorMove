@@ -1,7 +1,8 @@
 import { Ban, Lock, RefreshCw, Unlock, Loader2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
-import { categoryAccent } from '../padLayout';
+import { categoryAccent, padLabel } from '../padLayout';
 import { Sample } from '../types';
+import { defaultKind, KIND_LABELS } from '../utils/kinds';
 import { sampleUrl } from '../utils/sampleUrl';
 
 interface ChokeDetail {
@@ -208,6 +209,7 @@ export const Pad: React.FC<PadProps> = ({
   }, [index, handlePlay]);
 
   const hotkey = PAD_HOTKEYS[index];
+  const label = padLabel(sample?.category ?? null, sample?.kind ?? null, expectedCategory);
 
   /**
    * The pad's colour, one hue per drum category. Set as a custom property on the root so
@@ -240,7 +242,7 @@ export const Pad: React.FC<PadProps> = ({
         type='button'
         disabled={!sample}
         onClick={handlePlay}
-        aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
+        aria-label={sample ? `Play ${sample.name}${label.toLowerCase() !== sample.category.toLowerCase() ? `, ${label.toLowerCase()}` : ''}` : `Pad ${index + 1}, empty`}
         className={`absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:-outline-offset-2 ${
           sample ? 'cursor-pointer' : 'cursor-not-allowed'
         }`}
@@ -268,8 +270,11 @@ export const Pad: React.FC<PadProps> = ({
       </div>
 
       <div className='pad-body pointer-events-none relative w-full mt-auto mb-8 sm:mb-9'>
-        <div className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5'>
-          {sample ? sample.category : expectedCategory}
+        <div
+          className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5 truncate'
+          title={sample ? `${sample.category}${sample.kind !== defaultKind(sample.category) ? `, ${KIND_LABELS[sample.kind].toLowerCase()}` : ''}` : undefined}
+        >
+          {label}
         </div>
         <div className='w-full flex items-center justify-between gap-1'>
           <div className='pad-name text-sm truncate font-medium text-text-bright pr-1 flex items-center gap-1.5'>
