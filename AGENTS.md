@@ -121,7 +121,7 @@ path with more than three segments means you are in the wrong place.
   sub-format pass through as the very same `File`, byte for byte; never re-encode them. MS ADPCM (2) is decoded by `adpcm.ts` to a
   16-bit PCM WAV (same rate and channels, no resampling, exact samples) because browsers cannot play it and the Move does not
   either. Any other tag (IMA ADPCM, mu-law, A-law, MP3, GSM, unknown) or undecodable ADPCM is skipped and listed in the `DropReport`
-  (`converted`/`rejected`), which `App.processFiles` appends to the notice; one bad file never discards the rest of the drop. A WAV
+  (`converted`/`rejected`); `describeDropReport` announces only `rejected` in the notice (a converted ADPCM file is deliberately silent, the owner does not want a notice for it); one bad file never discards the rest of the drop. A WAV
   with no readable `fmt ` chunk is left alone. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
   for extensible, `subFormat`.
 - **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by

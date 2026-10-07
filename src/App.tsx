@@ -1372,14 +1372,39 @@ export default function App() {
             </div>
           </div>
 
+          {/* Messages stack up (notices are appended), so each box wraps long text, caps its height and can be dismissed. */}
           {error && (
-            <div className='mt-6 text-sm text-danger-text border border-danger-border bg-danger-bg rounded px-3 py-2'>
-              {error}
+            <div
+              role='alert'
+              className='mt-6 flex items-start gap-2 text-sm text-danger-text border border-danger-border bg-danger-bg rounded px-3 py-2'
+            >
+              <div className='flex-1 min-w-0 max-h-40 overflow-y-auto break-words'>{error}</div>
+              <button
+                type='button'
+                onClick={() => setError(null)}
+                aria-label='Dismiss error message'
+                title='Dismiss'
+                className='shrink-0 -mr-1 p-0.5 rounded opacity-80 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 cursor-pointer'
+              >
+                <X size={14} />
+              </button>
             </div>
           )}
           {notice && (
-            <div className='mt-6 text-sm text-warning-amber border border-warning-border bg-warning-bg rounded px-3 py-2'>
-              {notice}
+            <div
+              role='status'
+              className='mt-6 flex items-start gap-2 text-sm text-warning-amber border border-warning-border bg-warning-bg rounded px-3 py-2'
+            >
+              <div className='flex-1 min-w-0 max-h-40 overflow-y-auto break-words'>{notice}</div>
+              <button
+                type='button'
+                onClick={() => setNotice(null)}
+                aria-label='Dismiss notice'
+                title='Dismiss'
+                className='shrink-0 -mr-1 p-0.5 rounded opacity-80 hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 cursor-pointer'
+              >
+                <X size={14} />
+              </button>
             </div>
           )}
 

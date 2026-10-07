@@ -505,9 +505,10 @@ await test('collectAudioFiles converts ADPCM, rejects other formats, passes PCM 
   assert.equal(byName['click.wav'].type, 'audio/wav');
   assert.deepEqual(await readWavFormat(byName['click.wav']), { numChannels: 2, sampleRate: 44100, bitsPerSample: 16, audioFormat: 1 });
   const notes = describeDropReport(report);
-  assert.equal(notes.length, 2);
-  assert.match(notes[0], /Converted 1 sample from ADPCM to 16-bit WAV.*click\.wav/);
-  assert.match(notes[1], /Skipped 2 samples the app cannot read: .*ima\.wav \(IMA ADPCM\)/);
+  // Only the skipped files are announced; the converted one is silent.
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /Skipped 2 samples the app cannot read: .*ima\.wav \(IMA ADPCM\)/);
+  assert.ok(!notes.join(' ').includes('click.wav'));
 });
 
 await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is rejected otherwise', async () => {

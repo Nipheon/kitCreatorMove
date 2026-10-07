@@ -27,10 +27,7 @@ export const newDropReport = (): DropReport => ({ converted: [], rejected: [] })
 export function describeDropReport(report: DropReport): string[] {
   const out: string[] = [];
   const list = (names: string[]) => names.slice(0, 5).join(', ') + (names.length > 5 ? `, +${names.length - 5} more` : '');
-  if (report.converted.length > 0) {
-    const n = report.converted.length;
-    out.push(`Converted ${n} sample${n === 1 ? '' : 's'} from ADPCM to 16-bit WAV (browsers and the Move cannot play ADPCM): ${list(report.converted)}.`);
-  }
+  // A converted ADPCM file is not announced: it is just a sample that works (it stays in report.converted).
   if (report.rejected.length > 0) {
     const n = report.rejected.length;
     out.push(`Skipped ${n} sample${n === 1 ? '' : 's'} the app cannot read: ${list(report.rejected.map(r => `${r.name} (${r.reason})`))}.`);
