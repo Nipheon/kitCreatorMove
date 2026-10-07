@@ -25,7 +25,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) (v18 or higher)
-- `npm` or `bun`
+- `npm` (ships with Node.js)
 
 ### Installation & Running Locally
 

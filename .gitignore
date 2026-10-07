@@ -5,7 +5,6 @@ coverage/
 .DS_Store
 *.log
 .env*
-!.env.example
 
 # Local-only agent instructions. Names the work account and its address, so it must
 # never be committed here again.
