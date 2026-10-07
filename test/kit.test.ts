@@ -40,8 +40,9 @@ import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, rerollSinglePad
 } from '../src/utils/kitGenerator';
 import {
-  DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
-  prefixFromFolderName, safeFileName, uniqueKitName
+  buildBatch, DEFAULT_PREFIX, heldLayout, KIT_SUFFIXES, kitNameFor, MULTI_FOLDER_PREFIX,
+  PREFIX_LENGTH, prefixForFolders, prefixFromFolderName, safeFileName, SUFFIX_ATTEMPTS,
+  uniqueKitName
 } from '../src/utils/kitNaming';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
@@ -1929,6 +1930,82 @@ await test('separate batch downloads: order, names, gap, partial failure; zip pa
   }
   assert.deepEqual(clicked.map(a => a.download), ['Pre_Batch.zip']);
   assert.deepEqual(timers, [REVOKE_DELAY_MS]);
+});
+
+await test('kitNameFor includes the grid id, and drops it when empty or no samples', () => {
+  assert.equal(kitNameFor('MOV', 'Flip', 'ksho'), 'MOV-ksho-Flip');
+  assert.equal(kitNameFor('MOV', 'Flip', NO_SAMPLES_GRID_ID), 'MOV-Flip');
+  assert.equal(kitNameFor('MOV', 'Flip', ''), 'MOV-Flip');
+});
+
+const batchLibrary = [
+  ...Array.from({ length: 6 }, (_, i) => makeSample(`bk${i}.wav`, 'Kick')),
+  ...Array.from({ length: 6 }, (_, i) => makeSample(`bs${i}.wav`, 'Snare')),
+  ...Array.from({ length: 6 }, (_, i) => makeSample(`bh${i}.wav`, 'CHH')),
+  ...Array.from({ length: 6 }, (_, i) => makeSample(`bo${i}.wav`, 'OHH'))
+];
+const batchBase = (extra: Partial<Parameters<typeof buildBatch>[0]> = {}) => {
+  const first = generateRandomKit(batchLibrary, [], {});
+  return {
+    kit: first.kit,
+    layout: first.layout,
+    exportName: kitNameFor('MOV', 'Flip', first.layout.columnsId),
+    exportedNames: new Set<string>(),
+    samples: batchLibrary,
+    kitOptions: {},
+    batchSize: 4,
+    prefix: 'MOV',
+    lockedPads: new Array(PAD_COUNT).fill(false),
+    ...extra
+  };
+};
+
+await test('heldLayout holds only for a kit with samples', () => {
+  const r = generateRandomKit(batchLibrary, [], {});
+  assert.equal(heldLayout(new Array(PAD_COUNT).fill(null), r.layout), undefined);
+  assert.equal(heldLayout(r.kit, r.layout), r.layout);
+});
+
+await test('buildBatch: batch of 1 is exactly the on-screen kit', () => {
+  const input = batchBase({ batchSize: 1 });
+  const out = buildBatch(input);
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0].kit, input.kit);
+  assert.equal(out[0].name, input.exportName);
+});
+
+await test('buildBatch: names are unique and avoid exported names', () => {
+  const input = batchBase({ batchSize: 6 });
+  input.exportedNames.add(input.exportName);
+  const out = buildBatch(input);
+  const names = out.map(k => k.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.equal(names[0], `${input.exportName}-2`);
+  for (const n of names) assert.ok(n === names[0] || !input.exportedNames.has(n));
+});
+
+await test('buildBatch: kits 2..n carry the held layout and keep locked pads', () => {
+  const locked = new Array(PAD_COUNT).fill(false);
+  locked[0] = true;
+  locked[5] = true;
+  const input = batchBase({ batchSize: 5, lockedPads: locked });
+  const out = buildBatch(input);
+  assert.equal(out.length, 5);
+  for (const { kit, name } of out.slice(1)) {
+    assert.ok(name.startsWith(`MOV-${input.layout.columnsId}-`));
+    assert.equal(kit[0], input.kit[0]);
+    assert.equal(kit[5], input.kit[5]);
+  }
+});
+
+await test('buildBatch: a suffix generator that always collides ends in a numbered name', () => {
+  let calls = 0;
+  const input = batchBase({ batchSize: 3, suffix: () => { calls++; return 'Same'; } });
+  const out = buildBatch(input);
+  const base = kitNameFor('MOV', 'Same', input.layout.columnsId);
+  assert.equal(out[1].name, base);
+  assert.equal(out[2].name, `${base}-2`);
+  assert.equal(calls, 1 + SUFFIX_ATTEMPTS + 1);
 });
 
 if (failures > 0) {

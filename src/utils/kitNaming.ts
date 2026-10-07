@@ -1,4 +1,6 @@
-import { SourceFolder } from '../types';
+import { NO_SAMPLES_GRID_ID, PadLayout } from '../padLayout';
+import { Sample, SourceFolder } from '../types';
+import { generateRandomKit, KitOptions } from './kitGenerator';
 
 /** Short, slightly cryptic words. Three or four letters so names stay compact. */
 export const KIT_SUFFIXES = [
@@ -86,4 +88,88 @@ export function uniqueKitName(base: string, taken: Set<string>): string {
   let n = 2;
   while (taken.has(`${base}-${n}`)) n++;
   return `${base}-${n}`;
+}
+
+/**
+ * The grid id travels in the exported kit name so a rack can be identified on the
+ * device. `columnsId` rather than `id`: Move shows roughly 9-11 characters, and
+ * `PRE-ksho-Suffix` keeps both identifying parts ahead of the cut while the full id
+ * would not fit. The id is dropped entirely while no samples are loaded.
+ */
+export function kitNameFor(prefix: string, suffix: string, gridId: string): string {
+  return gridId && gridId !== NO_SAMPLES_GRID_ID
+    ? `${prefix}-${gridId}-${suffix}`
+    : `${prefix}-${suffix}`;
+}
+
+/**
+ * Pads that stay put keep their roles: without this, dropping the only source of a role
+ * re-derives the grid under pads that did not move. An empty kit holds nothing, and the
+ * empty-library layout must not be held.
+ */
+export function heldLayout(kit: (Sample | null)[], layout: PadLayout): PadLayout | undefined {
+  return kit.some(s => s !== null) ? layout : undefined;
+}
+
+/** Keeps the sample on each locked pad and clears the rest. */
+export function lockedFrom(lockedPads: boolean[], current: (Sample | null)[]): (Sample | null)[] {
+  return lockedPads.map((locked, idx) => (locked ? current[idx] : null));
+}
+
+/**
+ * How many fresh suffixes to try before numbering. The pool is ~39 words, so a clash
+ * is unlucky rather than likely; rolling again reads better than `-2` and costs
+ * nothing, but the loop has to terminate once the pool is genuinely exhausted.
+ */
+export const SUFFIX_ATTEMPTS = 8;
+
+export interface BatchInput {
+  kit: (Sample | null)[];
+  /** The on-screen layout (kitResult.layout). */
+  layout: PadLayout;
+  exportName: string;
+  exportedNames: Set<string>;
+  samples: Sample[];
+  kitOptions: KitOptions;
+  batchSize: number;
+  prefix: string;
+  lockedPads: boolean[];
+  generate?: typeof generateRandomKit;
+  suffix?: () => string;
+}
+
+export function buildBatch({
+  kit, layout, exportName, exportedNames, samples, kitOptions, batchSize, prefix, lockedPads,
+  generate = generateRandomKit,
+  suffix = () => generateKitName('').suffix,
+}: BatchInput): { kit: (Sample | null)[]; name: string }[] {
+  // Seeded from what has actually been exported, so a kit generated and discarded
+  // never pushes a number onto a later name.
+  const taken = new Set(exportedNames);
+  const kits: { kit: (Sample | null)[]; name: string }[] = [];
+
+  // Held so a filter changed since the last generate cannot give kits 2..n another grid
+  // than kit 1, which is named with the on-screen layout.
+  const held = heldLayout(kit, layout);
+
+  const first = uniqueKitName(exportName, taken);
+  taken.add(first);
+  kits.push({ kit: [...kit], name: first });
+
+  for (let i = 1; i < batchSize; i++) {
+    const next = generate(samples, lockedFrom(lockedPads, kit), kitOptions, held);
+    // Every kit in a batch is built from the same library, so they all share a grid
+    // and the id is the same for each — which is the point: a batch is swappable.
+    let name = '';
+    for (let attempt = 0; attempt < SUFFIX_ATTEMPTS && !name; attempt++) {
+      const candidate = kitNameFor(prefix, suffix(), next.layout.columnsId);
+      if (!taken.has(candidate)) name = candidate;
+    }
+    if (!name) {
+      name = uniqueKitName(kitNameFor(prefix, suffix(), next.layout.columnsId), taken);
+    }
+    taken.add(name);
+    kits.push({ kit: next.kit, name });
+  }
+  return kits;
 }

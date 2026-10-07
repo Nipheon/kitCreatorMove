@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { Toast } from './components/Toast';
 import {
-  categoryAccent, chokeGroupFor, chooseLayout, DISPLAY_INDICES, NO_SAMPLES_GRID_ID,
+  categoryAccent, chokeGroupFor, chooseLayout, DISPLAY_INDICES,
   PAD_COUNT, poolCategoryFor
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
@@ -15,7 +15,8 @@ import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { fileSignature } from './utils/sampleSignature';
 import {
-  DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders, uniqueKitName
+  buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
+  lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
 } from './utils/kitNaming';
 
 /** Move copies every sample into the bundle, so a huge drop means a huge download. */
@@ -381,18 +382,7 @@ export default function App() {
 
   const kitOptions = { skipLoops, skipNonDrums, disabledTypes };
 
-  /**
-   * The grid id travels in the exported kit name so a rack can be identified on the
-   * device. `columnsId` rather than `id`: Move shows roughly 9-11 characters, and
-   * `PRE-ksho-Suffix` keeps both identifying parts ahead of the cut while the full id
-   * would not fit. The id is dropped entirely while no samples are loaded.
-   */
-  const kitNameFor = (suffix: string, gridId: string) =>
-    gridId && gridId !== NO_SAMPLES_GRID_ID
-      ? `${kitPrefix}-${gridId}-${suffix}`
-      : `${kitPrefix}-${suffix}`;
-
-  const exportName = kitNameFor(kitSuffix, kitResult.layout.columnsId);
+  const exportName = kitNameFor(kitPrefix, kitSuffix, kitResult.layout.columnsId);
   const loopCount = useMemo(() => samples.filter(s => s.isLoop).length, [samples]);
   const nonDrumCount = useMemo(() => samples.filter(s => s.isNonDrum && !s.isLoop).length, [samples]);
   const activeFoldersCount = useMemo(
@@ -444,7 +434,7 @@ export default function App() {
   };
 
   const lockedFrom = (current: (Sample | null)[]) =>
-    lockedPads.map((locked, idx) => (locked ? current[idx] : null));
+    lockedFromPads(lockedPads, current);
 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
@@ -560,7 +550,7 @@ export default function App() {
   // Pads that stay put keep their roles: without this, dropping the only source of a role
   // re-derives the grid under pads that did not move. An empty kit holds nothing, and the
   // empty-library layout must not be held.
-  const heldLayoutFor = () => (kit.some(s => s !== null) ? kitResult.layout : undefined);
+  const heldLayoutFor = () => heldLayout(kit, kitResult.layout);
 
   const removeFolder = (id: string) => {
     const removed = sourceFolders.find(f => f.id === id);
@@ -728,44 +718,11 @@ export default function App() {
     });
   };
 
-  /**
-   * How many fresh suffixes to try before numbering. The pool is ~39 words, so a clash
-   * is unlucky rather than likely; rolling again reads better than `-2` and costs
-   * nothing, but the loop has to terminate once the pool is genuinely exhausted.
-   */
-  const SUFFIX_ATTEMPTS = 8;
-
-  const buildBatch = () => {
-    // Seeded from what has actually been exported, so a kit generated and discarded
-    // never pushes a number onto a later name.
-    const taken = new Set(exportedNames.current);
-    const kits: { kit: (Sample | null)[]; name: string }[] = [];
-
-    // Held so a filter changed since the last generate cannot give kits 2..n another grid
-    // than kit 1, which is named with the on-screen layout.
-    const heldLayout = heldLayoutFor();
-
-    const first = uniqueKitName(exportName, taken);
-    taken.add(first);
-    kits.push({ kit: [...kit], name: first });
-
-    for (let i = 1; i < batchSize; i++) {
-      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions, heldLayout);
-      // Every kit in a batch is built from the same library, so they all share a grid
-      // and the id is the same for each — which is the point: a batch is swappable.
-      let name = '';
-      for (let attempt = 0; attempt < SUFFIX_ATTEMPTS && !name; attempt++) {
-        const candidate = kitNameFor(generateKitName('').suffix, next.layout.columnsId);
-        if (!taken.has(candidate)) name = candidate;
-      }
-      if (!name) {
-        name = uniqueKitName(kitNameFor(generateKitName('').suffix, next.layout.columnsId), taken);
-      }
-      taken.add(name);
-      kits.push({ kit: next.kit, name });
-    }
-    return kits;
-  };
+  const buildBatch = () =>
+    buildBatchFor({
+      kit, layout: kitResult.layout, exportName, exportedNames: exportedNames.current,
+      samples, kitOptions, batchSize, prefix: kitPrefix, lockedPads
+    });
 
   const exportKit = async () => {
     if (kit.every(s => s === null)) return;
