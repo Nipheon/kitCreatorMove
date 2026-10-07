@@ -29,7 +29,10 @@ import {
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
-import { createPresetBundle, ExportError, exportBatchKits, isOutOfMemory } from '../src/utils/exporter';
+import {
+  createPresetBundle, DOWNLOAD_GAP_MS, ExportError, exportBatchKits, exportBatchSeparately, isOutOfMemory,
+  REVOKE_DELAY_MS
+} from '../src/utils/exporter';
 import {
   categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
 } from '../src/utils/fileReader';
@@ -1862,6 +1865,70 @@ await test('export failures name the stage, sample and kit; memory errors are re
   assert.ok(archive instanceof ExportError, String(archive));
   assert.equal(archive.stage, 'read');
   assert.match(archive.userMessage, /Bad\.wav/);
+});
+
+await test('separate batch downloads: order, names, gap, partial failure; zip path still works', async () => {
+  const mk = (n: string) => {
+    const k = new Array(PAD_COUNT).fill(null);
+    k[0] = makeSample(`${n}.wav`, 'Kick');
+    return k;
+  };
+  const kits = ['A/1', 'B', 'C', 'D', 'E'].map(n => ({ kit: mk(n[0]), name: n }));
+
+  const events: string[] = [];
+  const files: string[] = [];
+  const result = await exportBatchSeparately(
+    kits, NO_TRIM,
+    (blob, filename) => { assert.ok(blob.size > 0); files.push(filename); events.push(`dl:${filename}`); },
+    async ms => { assert.equal(ms, DOWNLOAD_GAP_MS); events.push('gap'); }
+  );
+  assert.deepEqual(files, kits.map(k => `${safeFileName(k.name)}.ablpresetbundle`));
+  assert.equal(new Set(files).size, 5);
+  assert.deepEqual(events.filter(e => e === 'gap').length, 4, 'gap between downloads, none after the last');
+  assert.equal(events[1], 'gap');
+  assert.equal(events[events.length - 1].startsWith('dl:'), true);
+  assert.deepEqual(result.downloaded, kits.map(k => k.name));
+
+  // Kit 3 throws while building: 2 of 5 downloaded, the error says so.
+  const bad = new File(['x'], 'Bad.wav');
+  (bad as any).arrayBuffer = () => Promise.reject(new Error('read boom'));
+  const broken = mk('C');
+  broken[0] = { ...makeSample('Bad.wav', 'Kick'), file: bad };
+  const mixed = [kits[0], kits[1], { kit: broken, name: 'C' }, kits[3], kits[4]];
+  const got: string[] = [];
+  const err = await exportBatchSeparately(mixed, NO_TRIM, (_b, f) => { got.push(f); }, async () => {}).catch(e => e);
+  assert.ok(err instanceof ExportError, String(err));
+  assert.equal(got.length, 2, 'nothing after the failure is downloaded');
+  assert.deepEqual(err.downloaded, [kits[0].name, kits[1].name]);
+  assert.deepEqual(err.progress, { downloaded: 2, total: 5 });
+  assert.match(err.userMessage, /2 of 5 files were downloaded before it failed/);
+  assert.doesNotMatch(err.userMessage, /Nothing was downloaded/);
+
+  // Failure on the first kit keeps the original wording.
+  const first = await exportBatchSeparately([mixed[2]], NO_TRIM, () => {}, async () => {}).catch(e => e);
+  assert.match(first.userMessage, /Nothing was downloaded/);
+
+  // A throwing download is reported at the download stage with the same counts.
+  let calls = 0;
+  const dlErr = await exportBatchSeparately(kits, NO_TRIM, () => { if (++calls === 2) throw new Error('blocked'); }, async () => {}).catch(e => e);
+  assert.equal(dlErr.stage, 'download');
+  assert.deepEqual(dlErr.progress, { downloaded: 1, total: 5 });
+
+  // The zip path still produces one archive of bundles, and the object URL outlives the click.
+  const g = globalThis as any;
+  const realDoc = g.document, realSetTimeout = g.setTimeout;
+  const clicked: { download: string }[] = [];
+  const timers: number[] = [];
+  g.document = { createElement: () => { const a = { download: '', href: '', click() { clicked.push(a); } }; return a; } };
+  g.setTimeout = (_fn: unknown, ms: number) => { timers.push(ms); return 0; };
+  try {
+    await exportBatchKits(kits.slice(0, 2), 'Pre', NO_TRIM);
+  } finally {
+    g.document = realDoc;
+    g.setTimeout = realSetTimeout;
+  }
+  assert.deepEqual(clicked.map(a => a.download), ['Pre_Batch.zip']);
+  assert.deepEqual(timers, [REVOKE_DELAY_MS]);
 });
 
 if (failures > 0) {

@@ -7,7 +7,7 @@ import {
   PAD_COUNT, poolCategoryFor
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
-import { ExportError, exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
+import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
   categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
 } from './utils/fileReader';
@@ -59,6 +59,7 @@ export default function App() {
   const [prefixEdited, setPrefixEdited] = useState(false);
   const [kitSuffix, setKitSuffix] = useState('KIT');
   const [batchSize, setBatchSize] = useState(1);
+  const [batchAsZip, setBatchAsZip] = useState(false);
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
   const [skipNonDrums, setSkipNonDrums] = useState(true);
@@ -772,9 +773,12 @@ export default function App() {
     // Built before the confirm so the guard sums the real kits 2..n, not the on-screen kit
     // times the batch size. Trimming only shrinks, hence "at most".
     const batch = batchSize > 1 ? buildBatch() : null;
-    const bytes = batch
-      ? batch.reduce((total, entry) => total + kitSizeBytes(entry.kit), 0)
-      : kitSizeBytes(kit);
+    // Separate downloads hold one bundle at a time, so the largest kit is what matters;
+    // the zip holds every bundle at once, so it stays the sum.
+    const kitBytes = batch ? batch.map(entry => kitSizeBytes(entry.kit)) : [kitSizeBytes(kit)];
+    const bytes = batch && !batchAsZip
+      ? Math.max(...kitBytes)
+      : kitBytes.reduce((total, size) => total + size, 0);
     if (bytes > SIZE_WARN_BYTES) {
       const proceed = window.confirm(
         `This export is at most ${formatMb(bytes)} of audio. Bundles are built in memory and may fail at this size. Continue?`
@@ -786,15 +790,22 @@ export default function App() {
     setError(null);
     setNotice(null);
     const onProgress = (done: number, total: number) => setExportProgress({ done, total });
+    const names: string[] = [];
 
     try {
-      const names: string[] = [];
       let report;
       let emptyNote: string | null = null;
       if (batch) {
         emptyNote = emptyPadsNotice(batch);
-        names.push(...batch.map(entry => entry.name));
-        report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
+        if (batchAsZip) {
+          names.push(...batch.map(entry => entry.name));
+          report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
+        } else {
+          const result = await exportBatchSeparately(batch, { trimSilence, onProgress });
+          names.push(...result.downloaded);
+          report = result.report;
+          setNotice(prev => [prev, `Downloaded ${result.downloaded.length} files. If your browser asked to allow multiple downloads, choose Allow; if files are missing, use "Download as one zip".`].filter(Boolean).join(' '));
+        }
       } else {
         const single = uniqueKitName(exportName, exportedNames.current);
         names.push(single);
@@ -821,6 +832,9 @@ export default function App() {
       }
     } catch (err) {
       console.error('Export failed:', err);
+      // Files already downloaded by a failed separate export are real, so their names are taken.
+      if (err instanceof ExportError) names.push(...err.downloaded);
+      names.forEach(name => exportedNames.current.add(name));
       setError(
         err instanceof ExportError
           ? err.userMessage
@@ -1169,9 +1183,26 @@ export default function App() {
                 className='w-full accent-accent-yellow'
               />
               <p className='text-sm leading-snug text-text-subtle'>
-                Export multiple random kits in one zip. Locked pads remain the same across all.
+                Export multiple random kits at once. Locked pads remain the same across all.
               </p>
             </div>
+
+            {batchSize > 1 && (
+              <div>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={batchAsZip}
+                    onChange={(e) => setBatchAsZip(e.target.checked)}
+                    className='accent-accent-yellow w-4 h-4'
+                  />
+                  Download as one zip
+                </label>
+                <p className='text-sm leading-snug text-text-subtle'>
+                  Off: each kit downloads as its own file. The browser may ask once to allow multiple downloads.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
@@ -1311,7 +1342,7 @@ export default function App() {
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names are a folder prefix, the Grid ID, and a random suffix — <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKT-ksho-Vibe</code>. Custom typed prefixes and suffixes are preserved.</li>
                   <li><strong className='text-text-bright'>Grid ID:</strong> A short fingerprint of the pad layout, one letter per column: <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>k</code> kick, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>s</code> snare, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>c</code> clap, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>h</code> closed hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>o</code> open hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>p</code> percussion, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>x</code> other. Two kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device without relearning where anything sits. The panel shows the full ID, including the shared top row after an underscore; the exported name carries the column half, which is what fits on the Move's display.</li>
-                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 distinct randomized kits at once in a single zip archive.</li>
+                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 distinct randomized kits at once. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Tick Download as one zip to get a single zip archive instead.</li>
                   <li><strong className='text-text-bright'>Device Transfer:</strong> Copy exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> folders into your Ableton Move hardware preset library.</li>
                 </ul>
               </section>

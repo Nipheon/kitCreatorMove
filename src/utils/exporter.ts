@@ -29,7 +29,7 @@ export function kitSizeBytes(kit: (Sample | null)[]): number {
 
 type Trimmer = ReturnType<typeof createTrimmer>;
 
-export type ExportStage = 'read' | 'trim' | 'build' | 'archive';
+export type ExportStage = 'read' | 'trim' | 'build' | 'archive' | 'download';
 
 /** Out-of-memory in a browser surfaces as RangeError, a quota error or an allocation message. */
 export function isOutOfMemory(err: unknown): boolean {
@@ -42,8 +42,12 @@ export function isOutOfMemory(err: unknown): boolean {
 /** A failed export that says where it failed. The original error is kept as `cause`. */
 export class ExportError extends Error {
   readonly outOfMemory: boolean;
-  /** Safe to show to the user as-is. */
-  readonly userMessage: string;
+  /** Set by exportBatchSeparately: how many files were already downloaded when this failed. */
+  progress?: { downloaded: number; total: number };
+  /** Kit names already downloaded when this failed (separate downloads only). */
+  downloaded: string[] = [];
+  private readonly what: string;
+  private readonly where: string;
 
   constructor(
     readonly stage: ExportStage,
@@ -55,14 +59,24 @@ export class ExportError extends Error {
       stage === 'read' ? `reading sample "${detail.sampleName}"` :
       stage === 'trim' ? `reading or trimming sample "${detail.sampleName}"` :
       stage === 'build' ? 'building the preset bundle' :
+      stage === 'download' ? 'starting the download' :
       detail.entry ? `generating the archive (while adding "${detail.entry}")` : 'generating the archive';
     const where = detail.kitName ? ` in kit "${detail.kitName}"` : '';
     super(`Export failed while ${what}${where}: ${original}`);
     this.name = 'ExportError';
     this.outOfMemory = isOutOfMemory(cause);
-    this.userMessage = this.outOfMemory
-      ? `The browser ran out of memory while ${what}${where}. Nothing was downloaded. Try a smaller batch or fewer samples.`
-      : `Export failed while ${what}${where}. Nothing was downloaded. Details are in the browser console.`;
+    this.what = what;
+    this.where = where;
+  }
+
+  /** Safe to show to the user as-is. */
+  get userMessage(): string {
+    const downloaded = this.progress && this.progress.downloaded > 0
+      ? `${this.progress.downloaded} of ${this.progress.total} files were downloaded before it failed.`
+      : 'Nothing was downloaded.';
+    return this.outOfMemory
+      ? `The browser ran out of memory while ${this.what}${this.where}. ${downloaded} Try a smaller batch or fewer samples.`
+      : `Export failed while ${this.what}${this.where}. ${downloaded} Details are in the browser console.`;
   }
 }
 
@@ -147,15 +161,20 @@ export async function createPresetBundle(
   return generateArchive(zip, kitName);
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+/** Revoking early can cancel a large or queued download in Firefox and Safari. */
+export const REVOKE_DELAY_MS = 60_000;
+/** Browsers drop or prompt about downloads fired back to back; space them out. */
+export const DOWNLOAD_GAP_MS = 300;
+
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
-  // The click hands the URL to the browser's download stack; revoking in the same
-  // tick can cancel it, so release on the next macrotask instead.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  // The click hands the URL to the browser's download stack, which reads the blob
+  // lazily; revoking soon (even next tick) can cancel big downloads, so wait long.
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
 }
 
 export async function exportKitZip(
@@ -197,4 +216,53 @@ export async function exportBatchKits(
   const blob = await generateArchive(masterZip);
   downloadBlob(blob, `${safeFileName(batchName)}_Batch.zip`);
   return report;
+}
+
+export interface SeparateExportResult {
+  report: ExportReport;
+  /** Kit names that were downloaded, in order. */
+  downloaded: string[];
+}
+
+/**
+ * One `.ablpresetbundle` download per kit, one at a time: peak memory is one bundle.
+ * `download` and `delay` are injectable so this runs in Node. On failure the thrown
+ * ExportError carries `progress` and the kit names already downloaded in `downloaded`.
+ */
+export async function exportBatchSeparately(
+  kits: { kit: (Sample | null)[]; name: string }[],
+  options: ExportOptions,
+  download: (blob: Blob, filename: string) => void = downloadBlob,
+  delay: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))
+): Promise<SeparateExportResult> {
+  const report: ExportReport = { trimFailures: 0, trimSkipped: 0 };
+  const trimmer = createTrimmer();
+  const downloaded: string[] = [];
+
+  for (const [index, entry] of kits.entries()) {
+    options.onProgress?.(index, kits.length);
+    try {
+      let bundle: Blob | null;
+      try {
+        bundle = await createPresetBundle(entry.kit, entry.name, options, trimmer, report);
+      } catch (err) {
+        throw err instanceof ExportError ? err : new ExportError('build', { kitName: entry.name }, err);
+      }
+      try {
+        download(bundle, `${safeFileName(entry.name)}.ablpresetbundle`);
+      } catch (err) {
+        throw new ExportError('download', { kitName: entry.name }, err);
+      }
+      bundle = null;
+    } catch (err) {
+      const failure = err as ExportError;
+      failure.progress = { downloaded: downloaded.length, total: kits.length };
+      failure.downloaded = [...downloaded];
+      throw failure;
+    }
+    downloaded.push(entry.name);
+    if (index < kits.length - 1) await delay(DOWNLOAD_GAP_MS);
+  }
+  options.onProgress?.(kits.length, kits.length);
+  return { report, downloaded };
 }
