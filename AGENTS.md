@@ -78,7 +78,7 @@ path with more than three segments means you are in the wrong place.
   await.
 - **Duplicate folders are skipped by lowercased key** through `mergeScannedFolders` (`utils/folderMerge.ts`, pure, takes the
   *current* list). The key (`folderKey`) is the name, or `parent name + '/' + name` for a sub-pack (see Collections); a key repeated
-  within one drop counts once, and a drop where everything was skipped reports "already loaded" (counted per dropped entry, so a
+  within one drop counts once, and a drop where everything was skipped shows nothing in the UI (console.info only; counted per dropped entry, so a
   collection dropped twice is one folder, not seven).
 - **Skip Loops / Skip Non-Drums do not re-roll the kit.** They change the pool the next kit draws from; the usable count and
   per-type figures beside them update at once. A kit generated earlier may hold a sample the filter would now exclude, by design:
@@ -103,6 +103,9 @@ path with more than three segments means you are in the wrong place.
   read eagerly with `arrayBuffer()` inside `createPresetBundle`, not lazily by JSZip, so a read failure names the sample.
 - **The size guard follows what is held in memory:** the largest kit for separate downloads, the sum of all kits for the zip. It is
   computed from the real kits 2..n (`buildBatch` runs before the confirm), not the on-screen kit times the batch size.
+- **The error and notice boxes stay short.** Never shown: "already loaded" folders (console.info), files the app cannot read (one
+  console.warn per drop), locked pads holding the same audio. A drop adding nothing shows only "No .wav or .aiff files found...", and
+  nothing at all when everything was already loaded. Still shown: the split notice, export notices/errors, "Error processing files".
 - **Export notices are appended, never replaced:** after a batch `emptyPadsNotice` (`countKitsWithEmptyPads`: "N of M kits have empty
   pads") and the trim notices (`trimFailures`, and `trimSkipped` for formats that cannot be trimmed) stack after any rename notice.
 - **`safeFileName()` (`kitNaming.ts`) sanitises the typed prefix/suffix for the download and zip entry names** (`/ \ : * ? " < > |` and
@@ -121,7 +124,7 @@ path with more than three segments means you are in the wrong place.
   sub-format pass through as the very same `File`, byte for byte; never re-encode them. MS ADPCM (2) is decoded by `adpcm.ts` to a
   16-bit PCM WAV (same rate and channels, no resampling, exact samples) because browsers cannot play it and the Move does not
   either. Any other tag (IMA ADPCM, mu-law, A-law, MP3, GSM, unknown) or undecodable ADPCM is skipped and listed in the `DropReport`
-  (`converted`/`rejected`); `describeDropReport` announces only `rejected` in the notice (a converted ADPCM file is deliberately silent, the owner does not want a notice for it); one bad file never discards the rest of the drop. A WAV
+  (`converted`/`rejected`); `processFiles` does not show `rejected` in the UI, it logs it with one `console.warn` per drop (a converted ADPCM file is silent too; the owner wants no notice for either); one bad file never discards the rest of the drop. A WAV
   with no readable `fmt ` chunk is left alone. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
   for extensible, `subFormat`.
 - **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
@@ -181,7 +184,7 @@ rule exists because a simpler version broke on real packs.
   rejection reports and the `._`/`__MACOSX` filters cannot drift between routes; one unreadable file is skipped, not fatal.
   **Both scans visit up to `SCAN_CONCURRENCY` (16) entries at once** (`collectAudioFiles` takes the next 16 of its breadth-first queue
   and `Promise.all`s them; the picker uses `visitInOrder`) and apply the results strictly in input order, so file order, the
-  `onFound`/progress counts and the order of names in the ADPCM/rejected notice are what a sequential loop gave (each visit fills its
+  `onFound`/progress counts and the order of names in the rejected console warning are what a sequential loop gave (each visit fills its
   own `DropReport`, merged in order; tests make later files finish first). **A dropped file entry is judged by `entry.name` before
   `entry.file()` is called**: libraries carry three or four non-audio files per sample (`.asd .json .mid .csv`), and each `file()` is an
   IPC for nothing. The queue is read by index, not `shift()`. The
@@ -276,7 +279,7 @@ rule exists because a simpler version broke on real packs.
   holds that audio the candidate is flagged `isDuplicate`, discarded, and the next one comes from the SAME pool, so the two-pass
   fill order and every pad's role are untouched. A pool that runs dry falls back or leaves the pad empty exactly as before. Locked
   pads' identities are seeded first and a lock is never replaced; two locked pads with the same audio stay and come back in
-  `KitResult.lockedDuplicates` (`App` shows a notice). The identity function and an `onProgress(checked, total)` callback are an
+  `KitResult.lockedDuplicates` (`App` deliberately shows nothing for it). The identity function and an `onProgress(checked, total)` callback are an
   optional last argument (`DrawHooks`) so tests inject a deterministic one and count calls.
   **`Sample.isDuplicate` is separate from `isExcluded`** (the user's choice). `isUsableSample` treats both as unusable, so a flagged
   sample stays out of every later draw and of the usable counts; the Breakdown card shows "Skipped duplicates: N" when N > 0 and

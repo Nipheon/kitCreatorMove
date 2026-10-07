@@ -23,18 +23,6 @@ export interface DropReport {
 
 export const newDropReport = (): DropReport => ({ converted: [], rejected: [] });
 
-/** Human-readable messages for a report, empty when nothing was converted or skipped. */
-export function describeDropReport(report: DropReport): string[] {
-  const out: string[] = [];
-  const list = (names: string[]) => names.slice(0, 5).join(', ') + (names.length > 5 ? `, +${names.length - 5} more` : '');
-  // A converted ADPCM file is not announced: it is just a sample that works (it stays in report.converted).
-  if (report.rejected.length > 0) {
-    const n = report.rejected.length;
-    out.push(`Skipped ${n} sample${n === 1 ? '' : 's'} the app cannot read: ${list(report.rejected.map(r => `${r.name} (${r.reason})`))}.`);
-  }
-  return out;
-}
-
 const FORMAT_NAMES: Record<number, string> = {
   0x0002: 'MS ADPCM', 0x0006: 'A-law', 0x0007: 'mu-law', 0x0011: 'IMA ADPCM',
   0x0031: 'GSM 6.10', 0x0050: 'MPEG audio', 0x0055: 'MP3', 0x0161: 'WMA', 0x00ff: 'AAC'

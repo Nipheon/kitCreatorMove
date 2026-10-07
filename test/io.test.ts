@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
-import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, HEAD_STEPS, LOOSE_FILES_FOLDER, SCAN_CONCURRENCY } from '../src/utils/fileReader';
+import { collectAudioFiles, getFilesFromDataTransfer, getFilesFromFileList, HEAD_STEPS, LOOSE_FILES_FOLDER, SCAN_CONCURRENCY } from '../src/utils/fileReader';
 import { revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
 import type { Sample } from '../src/types';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
@@ -504,11 +504,6 @@ await test('collectAudioFiles converts ADPCM, rejects other formats, passes PCM 
   assert.deepEqual(new Uint8Array(await byName['float.wav'].arrayBuffer()), float);
   assert.equal(byName['click.wav'].type, 'audio/wav');
   assert.deepEqual(await readWavFormat(byName['click.wav']), { numChannels: 2, sampleRate: 44100, bitsPerSample: 16, audioFormat: 1 });
-  const notes = describeDropReport(report);
-  // Only the skipped files are announced; the converted one is silent.
-  assert.equal(notes.length, 1);
-  assert.match(notes[0], /Skipped 2 samples the app cannot read: .*ima\.wav \(IMA ADPCM\)/);
-  assert.ok(!notes.join(' ').includes('click.wav'));
 });
 
 await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is rejected otherwise', async () => {

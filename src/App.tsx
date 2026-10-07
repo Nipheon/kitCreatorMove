@@ -11,7 +11,7 @@ import {
 import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
-  categorizeSample, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
+  categorizeSample, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
@@ -552,12 +552,6 @@ export default function App() {
     }
   };
 
-  const lockedDuplicatesNotice = (result: KitResult) => {
-    if (!result.lockedDuplicates?.length) return;
-    const pads = result.lockedDuplicates.map(i => i + 1).join(', ');
-    setNotice(prev => [prev, `Locked pad${result.lockedDuplicates!.length > 1 ? 's' : ''} ${pads} hold${result.lockedDuplicates!.length > 1 ? '' : 's'} the same audio as another locked pad; locks are left as they are.`].filter(Boolean).join(' '));
-  };
-
   const processFiles = async (items: DataTransferItemList | File[]) => {
     setIsLoading(true);
     setError(null);
@@ -575,8 +569,10 @@ export default function App() {
       const scanned = Array.isArray(items)
         ? await getFilesFromFileList(items, { report, onProgress })
         : await getFilesFromDataTransfer(items, report, onProgress);
-      const reportNotes = describeDropReport(report);
-      if (reportNotes.length > 0) setNotice(prev => [prev, ...reportNotes].filter(Boolean).join(' '));
+      // Unreadable files are not shown in the UI; they can be found in the dev tools console.
+      if (report.rejected.length > 0) {
+        console.warn(`Skipped ${report.rejected.length} sample(s) the app cannot read:`, report.rejected.map(r => `${r.name} (${r.reason})`));
+      }
       // Read after the await: the scan may have outlived edits made through the keyboard.
       const current = latest.current;
       const topLevel = scanned
@@ -623,16 +619,9 @@ export default function App() {
       }
 
       if (newFolders.length === 0) {
-        // A drop that changes nothing has to say why, or it reads as the app ignoring you.
-        setError(
-          skippedDuplicates > 0
-            ? skippedDuplicates === 1
-              ? 'That folder is already loaded.'
-              : `Those ${skippedDuplicates} folders are already loaded.`
-            : report.rejected.length > 0
-              ? 'None of the dropped samples could be read; see the note above.'
-              : 'No .wav or .aiff files found in what you dropped. Move plays those two formats only.'
-        );
+        // Everything already loaded: nothing visible happens. Otherwise say why nothing was added.
+        if (skippedDuplicates > 0) console.info(`Nothing added: ${skippedDuplicates} dropped folder(s) already loaded.`);
+        else setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
         return;
       }
 
@@ -663,7 +652,6 @@ export default function App() {
         : null;
       if (next) {
         setKitResult(next);
-        lockedDuplicatesNotice(next);
       }
       // Re-read: the prefix may have been typed while the draw ran.
       if (!latest.current.prefixEdited) setKitPrefix(prefixForFolders(updated));
@@ -786,7 +774,6 @@ export default function App() {
       const next = await runGeneration(report => generateRandomKit(samples, lockedFrom(kit), kitOptions, undefined, { onProgress: report }));
       if (!next) return;
       setKitResult(next);
-      lockedDuplicatesNotice(next);
 
       if (latest.current.autoPreview) {
         startPreview(next.kit);
@@ -859,7 +846,6 @@ export default function App() {
       const result = await runGeneration(report => generateRandomKit(samples, lockedFrom(kit), { ...kitOptions, disabledTypes: next }, undefined, { onProgress: report }));
       if (result) {
         setKitResult(result);
-        lockedDuplicatesNotice(result);
       }
     }
   };
