@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,hatPartner,kitGenerator,kitNaming,progressVisibility,sampleSignature,scanProgress,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,hatPartner,kitGenerator,kitNaming,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -63,6 +63,11 @@ path with more than three segments means you are in the wrong place.
 - **`URL.revokeObjectURL` stays in handlers, never in a `useEffect` cleanup.** StrictMode's double mount runs the cleanup at once
   and kills every preview. In `removeFolder`, compute the next kit first and revoke only what it no longer references (a locked pad
   keeps its sample when its folder goes).
+- **Preview URLs are made on first play, not at import** (`utils/sampleUrl.ts`). `processFiles` no longer calls
+  `URL.createObjectURL` per file (about 50 microseconds each: 400 ms of one stall at 8,000 files, for sixteen that are ever played);
+  `Pad` asks `sampleUrl(sample)`, which caches in a `WeakMap` keyed on the `File` (copies from `handleExcludeSample` share one URL,
+  StrictMode's double effect cannot make two). `Sample.url` is optional and only set when a sample brings its own (dev seed, tests).
+  `revokeSampleUrl(sample)` replaces the direct revoke in `removeFolder`; it is a no-op for a sample never played. Pinned by a test.
 - **`newId()` keeps its non-secure-context fallback.** `crypto.randomUUID` is secure-context only and the dev server binds
   `0.0.0.0`, so the app is routinely opened over plain http. For the same reason `crypto.subtle` is unavailable (relevant to dedupe,
   below).
@@ -106,6 +111,10 @@ path with more than three segments means you are in the wrong place.
   the encoding alone.
 - **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were once accepted, passed through trimming untouched and failed
   on the device. Refuse at the door.
+- **The WAV head is read in steps (`HEAD_STEPS`, 4 KB then 64 KB, then the whole file)**, stopping at the first step where the `fmt `
+  chunk is found *and ends inside the buffer* (`parseFormatFromHead`): a `fmt ` clipped by the boundary would lose an extensible
+  sub-format and reject a good file (tested at the 4 KB edge). Files with a big `JUNK`/`bext` before `fmt ` take the second step.
+  The 4 KB step was a small gain on a warm cache (about 70 ms per 4,000 files of 300 KB), more on a cold disk.
 - **WAV format is checked at import (`prepareWav` in `fileReader.ts`).** PCM (1), IEEE float (3) and extensible with a PCM/float
   sub-format pass through as the very same `File`, byte for byte; never re-encode them. MS ADPCM (2) is decoded by `adpcm.ts` to a
   16-bit PCM WAV (same rate and channels, no resampling, exact samples) because browsers cannot play it and the Move does not
@@ -166,7 +175,13 @@ rule exists because a simpler version broke on real packs.
   `webkitRelativePath` (the folder name a drop would report) and sets `path` to `'/' + the directory part`, the same string
   `collectAudioFiles` builds from `entry.fullPath` (a test compares both routes on one tree); files without a relative path go to
   `Dropped Files` with path `''`. Per-file work (`isAudioFile`, `prepareWav`) is the shared `prepareAudioFile`, so ADPCM conversion,
-  rejection reports and the `._`/`__MACOSX` filters cannot drift between routes; one unreadable file is skipped, not fatal. The
+  rejection reports and the `._`/`__MACOSX` filters cannot drift between routes; one unreadable file is skipped, not fatal.
+  **Both scans visit up to `SCAN_CONCURRENCY` (16) entries at once** (`collectAudioFiles` takes the next 16 of its breadth-first queue
+  and `Promise.all`s them; the picker uses `visitInOrder`) and apply the results strictly in input order, so file order, the
+  `onFound`/progress counts and the order of names in the ADPCM/rejected notice are what a sequential loop gave (each visit fills its
+  own `DropReport`, merged in order; tests make later files finish first). **A dropped file entry is judged by `entry.name` before
+  `entry.file()` is called**: libraries carry three or four non-audio files per sample (`.asd .json .mid .csv`), and each `file()` is an
+  IPC for nothing. The queue is read by index, not `shift()`. The
   scan takes an options object (`{ report }`) so an `onProgress` can be added later. Both buttons call `App.processFiles` (it takes
   `DataTransferItemList | File[]`), i.e. the same merge, kit draw and notices as a drop. Snapshot `Array.from(input.files)` BEFORE
   any await and then set `input.value = ''`: the FileList is live, and without the reset picking the same folder again fires no
@@ -559,6 +574,15 @@ the directory walk (`getFilesFromDataTransfer`); the Pick buttons on a real phon
 input was checked, iOS Safari and Android folder pickers were not); audio preview and audition scoping (Shuffle plays that pad, a later full generate
 stays silent); the real browser decode half of trimming (Node only has a fake `OfflineAudioContext`); whether a bundle
 still imports on the device; the palette and per-category tint in Chrome (grid id renders as `ksho_ccpp`).
+
+**Large drops, measured (headless Chromium, synthetic 16-bit WAVs of a few KB, one folder of 85 subfolders plus three non-audio files per sample;
+Pick folders via `setInputFiles`, drop via fake entries whose `file()` fetches from localhost, so its per-file latency is a guess about a
+real disk):** 8,000 samples + 24,000 other files, drop: 17.6 s to the folder row before, 3.0 s after; longest main-thread gap 423 ms
+before, 41 ms after. Pick folders: 4.4 s to 2.9 s; its remaining ~940 ms single gap is Chrome building a 32,000-entry `FileList`
+(not our code: the profile shows `prepareWav` spread over many short turns, `slice` at ~75 us per file). Generate stays ~100-130 ms
+and the first batch download ~200 ms at every size, so the O(n) memos (`usableCount`, `categoryStats`, `skippedDuplicates`) are not a cost
+(do not memoise them further). Not done, with numbers: hashing/scanning in a Worker and a virtualised sidebar (the sidebar is one
+row per folder, not per file, so even 85 folders is cheap).
 
 **Filled grid without a real folder:** `/?seed` in dev, or `npx vite preview` plus headless Chrome with `--remote-debugging-port`,
 driven over CDP: `Runtime.evaluate` dispatches a synthetic `drop` with stubbed `webkitGetAsEntry` entries over generated WAV blobs

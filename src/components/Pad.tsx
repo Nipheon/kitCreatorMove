@@ -2,6 +2,7 @@ import { Ban, Lock, RefreshCw, Unlock, Loader2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { categoryAccent } from '../padLayout';
 import { Sample } from '../types';
+import { sampleUrl } from '../utils/sampleUrl';
 
 interface ChokeDetail {
   group: number;
@@ -85,7 +86,7 @@ export const Pad: React.FC<PadProps> = ({
       return;
     }
 
-    const audio = new Audio(sample.url);
+    const audio = new Audio(sampleUrl(sample));
     audio.preload = 'auto';
 
     const handleEnded = () => setIsPlaying(false);

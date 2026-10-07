@@ -17,6 +17,7 @@ import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
+import { revokeSampleUrl } from './utils/sampleUrl';
 import {
   buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
   lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
@@ -581,8 +582,6 @@ export default function App() {
       for (const folder of accepted) {
         const samples: Sample[] = [];
         for (const { file, path } of folder.files) {
-          const url = URL.createObjectURL(file);
-
           const category = categorizeSample(file.name, path);
 
           samples.push({
@@ -593,8 +592,7 @@ export default function App() {
             // The category is passed so the break rule can stay off anything the
             // categoriser placed — a snare named "Break Snare" is still a snare.
             isLoop: looksLikeLoop(file.name, path, category),
-            isNonDrum: looksNonDrum(category, file.name, path),
-            url
+            isNonDrum: looksNonDrum(category, file.name, path)
           });
         }
 
@@ -708,7 +706,7 @@ export default function App() {
     // no longer references — otherwise that pad's preview goes silently dead.
     const stillUsed = new Set(next.kit.filter((s): s is Sample => s !== null).map(s => s.id));
     removed?.samples.forEach(s => {
-      if (!stillUsed.has(s.id)) URL.revokeObjectURL(s.url);
+      if (!stillUsed.has(s.id)) revokeSampleUrl(s);
     });
   };
 

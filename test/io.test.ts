@@ -8,7 +8,9 @@
 import assert from 'node:assert/strict';
 import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
-import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER } from '../src/utils/fileReader';
+import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, HEAD_STEPS, LOOSE_FILES_FOLDER, SCAN_CONCURRENCY } from '../src/utils/fileReader';
+import { revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
+import type { Sample } from '../src/types';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { readWavFormat } from '../src/utils/wavStripper';
 import { describeScanProgress, throttle } from '../src/utils/scanProgress';
@@ -663,6 +665,168 @@ await test('getFilesFromFileList reports progress like a drop: 0 per folder firs
   assert.deepEqual(counts('Empty'), []);
   assert.deepEqual(counts(LOOSE_FILES_FOLDER), [1, 2]);
   assert.deepEqual(got.map(f => f.name), ['One', LOOSE_FILES_FOLDER]);
+});
+
+// ── Large drops: bounded concurrency, order, and what is never read ───────────
+
+const later = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+/** A file entry whose file() resolves after `delayMs`, tracking how many are in flight at once. */
+const slowEntry = (dir: string, name: string, bytes: Uint8Array, delayMs: number, probe: { now: number; max: number; calls: string[] }): Fake => ({
+  isFile: true, isDirectory: false, name, fullPath: `${dir}/${name}`,
+  file: (ok: (f: File) => void) => {
+    probe.calls.push(name);
+    probe.now++; probe.max = Math.max(probe.max, probe.now);
+    later(delayMs).then(() => { probe.now--; ok(new File([bytes as BlobPart], name)); });
+  }
+} as unknown as Fake);
+
+await test('collectAudioFiles never calls file() on a non-audio entry', async () => {
+  const probe = { now: 0, max: 0, calls: [] as string[] };
+  const root = dirEntry('', 'Pack', p => [
+    slowEntry(p, 'a.asd', new Uint8Array([1]), 0, probe), slowEntry(p, 'a.json', new Uint8Array([1]), 0, probe),
+    slowEntry(p, '._a.wav', new Uint8Array([1]), 0, probe), slowEntry(p, 'a.wav', new Uint8Array([1]), 0, probe)
+  ]);
+  assert.deepEqual(names(await collectAudioFiles(root)), ['a.wav']);
+  assert.deepEqual(probe.calls, ['a.wav']);
+});
+
+await test('collectAudioFiles reads several files at once, never more than SCAN_CONCURRENCY', async () => {
+  const probe = { now: 0, max: 0, calls: [] as string[] };
+  const root = dirEntry('', 'Pack', p =>
+    Array.from({ length: 100 }, (_, i) => slowEntry(p, `s${i}.wav`, new Uint8Array([1]), 2, probe)));
+  assert.equal((await collectAudioFiles(root)).length, 100);
+  assert.ok(probe.max > 1, `expected overlap, saw ${probe.max}`);
+  assert.ok(probe.max <= SCAN_CONCURRENCY, `saw ${probe.max} in flight`);
+});
+
+await test('collectAudioFiles keeps scan order, counts and report order when later files finish first', async () => {
+  const adpcm = encodeAdpcm(interleave(wave(200, 3000), wave(250, 3000)), 2, 44100, 2048);
+  const probe = { now: 0, max: 0, calls: [] as string[] };
+  // Earlier entries are slower, so completion order is the reverse of scan order.
+  const list = (p: string) => Array.from({ length: 40 }, (_, i) =>
+    slowEntry(p, `s${String(i).padStart(2, '0')}.wav`, i % 4 === 0 ? adpcm : new Uint8Array(wavHeader()), 20 - Math.min(i, 19), probe));
+  const root = dirEntry('', 'Pack', p => [dirEntry(p, 'Sub', q => list(q)), ...list(p).slice(0, 5)]);
+  const counts: number[] = [];
+  const report = emptyReport();
+  const got = await collectAudioFiles(root, report, n => counts.push(n));
+  // Breadth first: the 5 files in Pack come before the 40 in Pack/Sub, each group in name order.
+  const expected = [...list('/Pack').slice(0, 5), ...list('/Pack/Sub')].map(e => e.name);
+  assert.deepEqual(got.map(g => g.file.name), expected);
+  assert.deepEqual(counts, expected.map((_, i) => i + 1));
+  const converted = expected.filter(n => Number(n.slice(1, 3)) % 4 === 0);
+  assert.deepEqual(report.converted, converted);
+});
+
+await test('getFilesFromFileList keeps pick order and report order with concurrent reads', async () => {
+  const adpcm = encodeAdpcm(interleave(wave(200, 3000), wave(250, 3000)), 2, 44100, 2048);
+  const pcm = new Uint8Array(wavHeader());
+  const rel = Array.from({ length: 60 }, (_, i) => `P/d${i % 3}/s${String(i).padStart(2, '0')}.wav`);
+  const files = rel.map((r, i) => picked(r, i % 5 === 0 ? adpcm : pcm));
+  const report = emptyReport();
+  const events: number[] = [];
+  const got = await getFilesFromFileList(files, { report, onProgress: e => { if (e.files > 0) events.push(e.files); } });
+  assert.deepEqual(got[0].files.map(f => f.file.name), rel.map(r => r.split('/').pop()));
+  assert.deepEqual(events, rel.map((_, i) => i + 1));
+  assert.deepEqual(report.converted, rel.filter((_, i) => i % 5 === 0).map(r => r.split('/').pop()));
+});
+
+// ── WAV head: read as little as is safe ───────────────────────────────────────
+
+/** A PCM16 mono WAV header with an empty data chunk. */
+function wavHeader(): number[] {
+  const body = [...ascii('WAVE'), ...chunk('fmt ', [...le16(1), ...le16(1), ...le32(44100), ...le32(88200), ...le16(2), ...le16(16)]), ...chunk('data', [0, 0])];
+  return [...ascii('RIFF'), ...le32(body.length), ...body];
+}
+
+/** WAVE_FORMAT_EXTENSIBLE after `junk` bytes of JUNK chunk; `sub` is the sub-format tag. */
+function extensibleAfterJunk(junk: number, sub: number): Uint8Array {
+  const fmt = [...le16(0xfffe), ...le16(1), ...le32(44100), ...le32(88200), ...le16(2), ...le16(16),
+    ...le16(22), ...le16(16), ...le32(4), ...le16(sub), ...Array(14).fill(0)];
+  const body = [...ascii('WAVE'), ...chunk('JUNK', Array(junk).fill(0)), ...chunk('fmt ', fmt), ...chunk('data', [0, 0])];
+  return new Uint8Array([...ascii('RIFF'), ...le32(body.length), ...body]);
+}
+
+/** A File that records the byte ranges asked of slice() and arrayBuffer(). */
+function spied(bytes: Uint8Array, name: string) {
+  const reads: number[] = [];
+  const file = new File([bytes as BlobPart], name);
+  const slice = file.slice.bind(file);
+  Object.defineProperty(file, 'slice', { value: (a?: number, b?: number) => { reads.push((b ?? file.size) - (a ?? 0)); return slice(a, b); } });
+  const whole = file.arrayBuffer.bind(file);
+  Object.defineProperty(file, 'arrayBuffer', { value: () => { reads.push(file.size); return whole(); } });
+  return { file, reads };
+}
+
+await test('prepareWav reads only the first 4 KB of a WAV whose fmt chunk comes first', async () => {
+  const big = new Uint8Array(200_000); big.set(wavHeader());
+  const { file, reads } = spied(big, 'big.wav');
+  const root = dirEntry('', 'P', p => [{ isFile: true, isDirectory: false, name: 'big.wav', fullPath: `${p}/big.wav`, file: (ok: (f: File) => void) => ok(file) } as unknown as Fake]);
+  assert.deepEqual(names(await collectAudioFiles(root)), ['big.wav']);
+  assert.deepEqual(reads, [HEAD_STEPS[0]]);
+});
+
+await test('prepareWav still finds fmt behind a large JUNK chunk and still rejects by its format', async () => {
+  const report = emptyReport();
+  const root = dirEntry('', 'P', p => [
+    entryFor(p, 'ok.wav', extensibleAfterJunk(6000, 1)),
+    entryFor(p, 'bad.wav', extensibleAfterJunk(6000, 0x11)),
+    entryFor(p, 'far.wav', extensibleAfterJunk(70_000, 0x11)),
+    entryFor(p, 'farok.wav', extensibleAfterJunk(70_000, 3))
+  ]);
+  const got = await collectAudioFiles(root, report);
+  assert.deepEqual(names(got), ['farok.wav', 'ok.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name).sort(), ['bad.wav', 'far.wav']);
+  assert.match(report.rejected[0].reason, /IMA ADPCM/);
+});
+
+await test('an extensible fmt chunk cut by the 4 KB boundary is not misread as an unknown format', async () => {
+  // fmt data starts 20 bytes before the boundary: 20 of its 40 bytes are visible, enough to
+  // look like a valid chunk but not to show the sub-format.
+  const report = emptyReport();
+  const root = dirEntry('', 'P', p => [entryFor(p, 'edge.wav', extensibleAfterJunk(4096 - 28 - 20, 1))]);
+  assert.deepEqual(names(await collectAudioFiles(root, report)), ['edge.wav']);
+  assert.deepEqual(report.rejected, []);
+});
+
+await test('a WAV with no fmt chunk anywhere is read up to the whole file, then left alone', async () => {
+  const noFmt = new Uint8Array(100_000); noFmt.set(ascii('RIFF')); noFmt.set(ascii('WAVE'), 8);
+  noFmt.set(ascii('JUNK'), 12); new DataView(noFmt.buffer).setUint32(16, 99_000, true);
+  const { file, reads } = spied(noFmt, 'x.wav');
+  const root = dirEntry('', 'P', p => [{ isFile: true, isDirectory: false, name: 'x.wav', fullPath: `${p}/x.wav`, file: (ok: (f: File) => void) => ok(file) } as unknown as Fake]);
+  assert.deepEqual(names(await collectAudioFiles(root)), ['x.wav']);
+  assert.deepEqual(reads, [...HEAD_STEPS, noFmt.length]);
+});
+
+// ── Preview URLs are made on first use ────────────────────────────────────────
+
+await test('sampleUrl creates one URL per file on first use, shares it with copies, and revokeSampleUrl releases it', () => {
+  const made: string[] = [];
+  const revoked: string[] = [];
+  const realCreate = URL.createObjectURL, realRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = () => { const u = `blob:test/${made.length}`; made.push(u); return u; };
+  URL.revokeObjectURL = (u: string) => { revoked.push(u); };
+  try {
+    const file = new File(['x'], 'a.wav');
+    const sample = { id: 's1', file, name: 'a.wav', category: 'Kick' } as Sample;
+    assert.equal(made.length, 0);
+    revokeSampleUrl(sample); // never played: nothing to revoke
+    assert.deepEqual(revoked, []);
+    const first = sampleUrl(sample);
+    assert.equal(sampleUrl(sample), first);
+    assert.equal(sampleUrl({ ...sample, isExcluded: true }), first, 'a copy shares the URL');
+    assert.equal(made.length, 1);
+    revokeSampleUrl(sample);
+    assert.deepEqual(revoked, [first]);
+    revokeSampleUrl(sample);
+    assert.deepEqual(revoked, [first], 'revoked once');
+    assert.notEqual(sampleUrl(sample), first, 'a later play makes a fresh URL');
+    const seeded = { ...sample, file: new File(['y'], 'b.wav'), url: 'data:audio/wav;base64,AA==' } as Sample;
+    assert.equal(sampleUrl(seeded), 'data:audio/wav;base64,AA==');
+    assert.equal(made.length, 2);
+  } finally {
+    URL.createObjectURL = realCreate; URL.revokeObjectURL = realRevoke;
+  }
 });
 
 if (failures > 0) {

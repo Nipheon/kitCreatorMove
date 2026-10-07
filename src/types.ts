@@ -6,7 +6,8 @@ export interface Sample {
   file: File;
   name: string;
   category: Category;
-  url: string; // Object URL for preview
+  /** Preview URL when the sample brings its own (dev seed, tests). Otherwise made on first play by `sampleUrl`. */
+  url?: string;
   isExcluded?: boolean;
   /**
    * Set by the generator when this sample's audio matched a pad already in a kit. Separate from
