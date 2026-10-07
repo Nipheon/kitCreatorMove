@@ -404,11 +404,16 @@ function tokenize(name: string, isFile = false): string[] {
  * fell through to `Other` — 162 files across a 70k-file survey.
  */
 const KICK = [
-  'kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum', 'bassdrums'
+  'kick', 'kicks', 'kik', 'kiks', 'bd', 'bds', 'kd', 'kds', 'bassdrum', 'bassdrums',
+  // Consonant skeleton ("KCK07", 10 packs) and "BDRUM1" (3 libraries).
+  'kck', 'bdrum', 'bdrums'
 ];
 const SNARE = [
   'snare', 'snares', 'snr', 'snrs', 'sn', 'sns', 'sd', 'sds',
-  'rim', 'rims', 'rimshot', 'rs', 'sidestick'
+  'rim', 'rims', 'rimshot', 'rs', 'sidestick',
+  // Truncated "snar_07i" (9 packs). Whole token only (WHOLE_TOKEN_ONLY): glued it would read
+  // "snarl", "snary" and "snaroll" as snares.
+  'snar'
 ];
 const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
 /**
@@ -418,7 +423,9 @@ const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
  */
 const CRASH = [
   'crash', 'crashes', 'crsh', 'splash', 'china', 'cc', 'csh',
-  'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cymb', 'cy'
+  'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cymb', 'cy',
+  // "Bld_Crs", "jkbcym_crs_15" (8 packs).
+  'crs'
 ];
 
 const PERC = [
@@ -433,7 +440,9 @@ const PERC = [
   'ht', 'mt', 'lt', 'cb', 'cl', 'clv', 'cr',
   // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
   // leading hh in the filename is what tells them apart — see isHat below.
-  'hc', 'mc', 'lc'
+  'hc', 'mc', 'lc',
+  // "Lst_Prc9", "PRC-F1_S" (14 packs) and "Hi_Shk3", "Vb_Shk8" (6 packs).
+  'prc', 'shk'
 ];
 
 const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
@@ -445,7 +454,12 @@ const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
  * four characters, so the glue rule would also catch "chatter", "chatty" and
  * "ohateful" and file them as hats.
  */
-const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH' };
+const GLUED_HAT_QUALIFIERS: Record<string, Category> = {
+  chat: 'CHH', ohat: 'OHH',
+  // Lower-case "openhat (6ix)" (40 packs; `hat` is three characters, so the glue rule never
+  // sees it), "ophh" and "clhh" (drum-machine sets: CR-78, RM50, 606).
+  openhat: 'OHH', ophh: 'OHH', clhh: 'CHH'
+};
 
 /**
  * Ordinary words that contain a listed word glued and would match it: "whats" ends in
@@ -456,6 +470,21 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = { chat: 'CHH', ohat: 'OHH
 const GLUE_FALSE_FRIENDS = [
   'whats', 'thats', 'chats',
   'rider', 'riders', 'bride', 'pride', 'strider', 'cymbalium'
+];
+
+/** Four-character words that must not glue to a neighbouring word, only match as a token. */
+const WHOLE_TOKEN_ONLY = ['snar'];
+
+/**
+ * A drum code plus one variant letter: Battery's multi-mic kit ("BDaEXT", "SDbOH"), the
+ * Uberschall house set ("bdeHOE30011house1", "sdeHOE40013snare3"), "28-bde03", "Arc_SDe07_S_V1".
+ * Tried only after the kick, snare, clap and hat words, and a crash or percussion word still
+ * wins: `clap [sdyn]` and `SDF_HAT` keep the word that names them. Letters a-e only: that is the
+ * range seen in more than one library. `bdy` (udu "body") and `sdp` (a producer tag) stay outside.
+ */
+const VARIANT_CODES: [RegExp, Category][] = [
+  [/^bd[a-e]$/, 'Kick'],
+  [/^sd[a-e]$/, 'Snare']
 ];
 
 /** Multi-word names that only make sense as a phrase. */
@@ -481,7 +510,7 @@ function classify(text: string, isFile = false): Category | null {
   const GLUE_MIN = 4;
   const has = (list: string[]) =>
     tokens.some(t =>
-      list.some(k => t === k || (k.length >= GLUE_MIN && !GLUE_FALSE_FRIENDS.includes(t) && (t.startsWith(k) || t.endsWith(k))))
+      list.some(k => t === k || (k.length >= GLUE_MIN && !WHOLE_TOKEN_ONLY.includes(k) && !GLUE_FALSE_FRIENDS.includes(t) && (t.startsWith(k) || t.endsWith(k))))
     );
 
   const joined = tokens.join(' ');
@@ -508,6 +537,11 @@ function classify(text: string, isFile = false): Category | null {
     if (has(OPEN)) return 'OHH';
     return 'Hat';
   }
+  // Placed before the bare ch/oh rule below (in "SDbOH" the oh is the overhead mic), but a
+  // crash or percussion word in the name still wins.
+  const variantCode = tokens.map(t => VARIANT_CODES.find(([pattern]) => pattern.test(t))?.[1]).find(Boolean);
+  if (variantCode && !has(CRASH) && !has(PERC)) return variantCode;
+
   // Bare "CH01" / "OH03" with no hat word — in drum packs these are always hats.
   if (tokens.includes('chh') || tokens.includes('chhs') || tokens.includes('ch')) return 'CHH';
   if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return 'OHH';

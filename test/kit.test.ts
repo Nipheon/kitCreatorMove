@@ -810,6 +810,80 @@ await test('glued hat qualifiers do not swallow ordinary words', async () => {
   }
 });
 
+// Vocabulary found in two owner dumps (120k files in 220 packs; 108k files in a hand-sorted
+// library). Each rule below was seen in at least three packs or libraries, named exactly as
+// they appear there. The name is checked on its own (no folder) and, where the real folder
+// does not name the category itself, with it.
+await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as a last resort', async () => {
+  const cases: [string, string, string][] = [
+    ['bdeHOE36024hard1.wav', '/uberschall house essentials/hard', 'Kick'],
+    ['BDaEXT.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Kick'],
+    ['28-bde03.wav', '/basehouse', 'Kick'],
+    ['Cea_BDc02_S_V1.wav', '/Ceave Samples', 'Kick'],
+    ['bda-disco27.wav', '/basehouse', 'Kick'],
+    ['SDbPZM.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
+    ['Arc_SDe07_S_V1.wav', '/Arcocen samples', 'Snare'],
+    ['sda-disco25.wav', '/house', 'Snare'],
+    // The "oh" is the overhead mic of the snare, not an open hat.
+    ['SDbOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
+    ['BDaOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Kick']
+  ];
+  for (const [name, dir, expected] of cases) {
+    assert.equal(categorizeSample(name), expected, name);
+    assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
+  }
+  // A last resort: the word that names the sound still wins, and so does the folder's 808.
+  assert.equal(categorizeSample('Crisp Bdk Snare.wav', '/Lex Luger (Shows the Screen) Drumkit/Snares'), 'Snare');
+  assert.equal(categorizeSample('clap [sdyn].wav', '/Artist Drumkits/Claps-A'), 'Clap');
+  assert.equal(categorizeSample('SDF_HAT.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'CHH');
+  assert.equal(categorizeSample('808 (sdp interlude).wav', '/The Lunch77 Travis Scott Drumkit/808s'), 'Kick');
+  // Outside a-e: "BDY" is the udu body, not a kick (the UDU folder still makes it a Perc).
+  assert.equal(categorizeSample('BDY_THM2.wav'), 'Other');
+  assert.equal(categorizeSample('BDY_THM2.wav', '/UDU'), 'Perc');
+});
+
+await test('kck, bdrum, snar, crs, prc and shk are read as whole tokens', async () => {
+  const cases: [string, string, string][] = [
+    ['Grt_Kck.wav', '/9th Wonder Kit/Misc', 'Kick'],
+    ['SW KCK5.wav', '/The Lunch77 Wheezy Drumkit', 'Kick'],
+    ['BDRUM4.wav', '/KLAUS_DIETER_POLACK', 'Kick'],
+    ['MRIsyn_OffBdrum_ST_v02.wav', '/Synthetik samples', 'Kick'],
+    ['snar_07i.wav', '/hiphop', 'Snare'],
+    ['snar_22j.wav', '/', 'Snare'],
+    ['Bld_Crs.wav', '/deadly drums/misc', 'Crash'],
+    ['jkbcym_crs_15.wav', '/Acoustic Kits/Jazz Kit', 'Crash'],
+    ['ed1crs01.wav', '/martian/Vintage', 'Crash'],
+    ['Lst_Prc9.wav', '/deadly drums/misc', 'Perc'],
+    ['PRC-CASW.wav', '/megadrums 6/misc', 'Perc'],
+    ['Hi_Shk3.wav', '/9th Wonder Kit/misc', 'Perc'],
+    ['Ral_Shk2.wav', '/deadly drums/misc', 'Perc'],
+    // "HHD1KCK05" (hip-hop drums, kick) used to read as a hat because it starts with hh.
+    ['hhd1kck05.wav', '/martian/HiphopLoops', 'Kick']
+  ];
+  for (const [name, dir, expected] of cases) assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
+  // "snar" never glues: these are not snares.
+  for (const name of ['Boi1da Snarlp.wav', 'Forgive Me Snaroll.wav', 'snarl.wav']) {
+    assert.equal(categorizeSample(name, '/Official_Boi-1Da'), 'Other', name);
+  }
+});
+
+await test('openhat, ophh and clhh are whole-token hat qualifiers', async () => {
+  const cases: [string, string, string][] = [
+    ['openhat (6ix).wav', '/misc', 'OHH'],
+    ['jaz - bobby openhat.wav', '/ATLJacob (Shows the Screen) Drumkit', 'OHH'],
+    ['openhat-tight.wav', '/99 drumsounds', 'OHH'],
+    ['ophh1.wav', '/drummachines/cr78', 'OHH'],
+    ['SP OPHH1.wav', '/Emu SP12 Kit 02', 'OHH'],
+    ['clhh1.wav', '/drummachines/roland 606', 'CHH'],
+    ['110 CLHH.wav', '/Boss DR-110', 'CHH']
+  ];
+  for (const [name, dir, expected] of cases) assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
+  // The file name wins over a folder that disagrees (existing rule), also for the new tokens.
+  assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
+  // Whole tokens only, like chat and ohat.
+  for (const name of ['openhatch.wav', 'ophhx.wav', 'clhhh.wav']) assert.equal(categorizeSample(name), 'Other', name);
+});
+
 await test('the preset prefix follows the folder that is actually loaded', async () => {
   const folder = (name: string, isEnabled = true): SourceFolder =>
     ({ id: name, name, samples: [], isEnabled });

@@ -195,6 +195,36 @@ rule exists because a simpler version broke on real packs.
 - **Words of four or more characters also match glued** as prefix or suffix (`popkick`, `linnhats`, `realclaps`, `RIDED0`); shorter
   ones must be whole tokens.
 - **`chat` and `ohat` match as whole tokens only** (`GLUED_HAT_QUALIFIERS`); glued they filed `chatter` and `ohateful` as hi-hats.
+  The same table holds `openhat` (lower-case `openhat (6ix)`; `hat` is three characters so the glue rule never sees it, 111 files, 53
+  distinct names, 40 packs), `ophh` and `clhh` (drum-machine sets). The filename still beats the folder: `OPENHAT_CHARLES.wav` in
+  `Closed Hats/` is an OHH.
+- **Vocabulary round 2 (two owner dumps, 120k files in 220 packs and a 108k-file hand-sorted library).** Added to the word lists:
+  `kck bdrum bdrums` (Kick), `snar` (Snare, **whole token only** via `WHOLE_TOKEN_ONLY`: glued it reads `snarl`/`snary`/`snaroll`
+  as snares), `crs` (Crash), `prc shk` (Perc). `hhd1kck05` is now a Kick (it was a hat because it starts with `hh`).
+  **`VARIANT_CODES`: `bd` or `sd` plus one letter a-e** (`bdeHOE36024hard1`, `BDaEXT`, `28-bde03`, `SDbOH`, `Arc_SDe07_S_V1`) is a
+  Kick/Snare. It sits after the kick, snare, clap and hat words and before the bare `ch`/`oh` rule, and a crash or percussion word
+  still wins, so `clap [sdyn]`, `SDF_HAT`, `Crisp Bdk Snare` and `808 (sdp interlude)` keep what they were. Putting it before the
+  hat check moves Battery's overhead-mic files (`SDbOH`, `BDaOH`, 10 files, were OHH). Letters beyond e were seen in one library
+  only; `bdy` is the udu "body" (8 files the owner filed as Perc) and `sdp` is a producer tag.
+- **Evidence bar for a new abbreviation: at least three independent libraries, not three folders.** The Lunch77 and "Shows the
+  Screen" kits copy the same files between packs (`SNC (9).wav` is in 21 of them) and the owner's library copies folders too
+  (`hi_c_03e.wav` is in `hat closed` and `unsorted`), so count distinct file names (digits stripped) as well as packs. Rejected on
+  that bar, do not re-add without new evidence: `klp`/`klapz` (320 files, all in `claps/Klub Klapz 2`), `hi_c_*`/`hi_o_*`/`wi_c_*`
+  (one library, two copies), `cymcra` (21 files, one folder), `bdrm`/`bdeq` (one Alesis set), `cowbl`, `cnga*`/`cng`, `drmsn`/`drmsnd`,
+  `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tmb` (the owner filed 10 as hats and 2 as Perc);
+  `tam` (the Tama brand in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
+  `closed` as hat qualifiers without a hat word (163 name-only files, 122 already rescued by a hat folder, the rest `DOOR OPEN`,
+  `Open Up`, `Open Hi` percussion), and `op` as an open qualifier next to a hat word (20 generic hats would become open, but the
+  owner's `hat closed/NN OP HAT.wav` has 69 files that the owner calls closed). `close` (singular) is not in the closed list on
+  purpose: it would only relabel generic `Hat` as `CHH`, the same pool.
+- **Unqualified `Hat` in a generic hat folder is counted closed, and nothing in the name can change that.** `overkill/hats` (4,023
+  files, duplicated under `kits/drums overkill`) is `HIHAT_NNNN.wav` throughout: no open/closed token anywhere, so all are `Hat`. Across
+  both dumps 22,573 files read as generic `Hat` by name, 7,692 of them are sharpened by an open or closed folder, and 14,881 stay
+  generic. Of those only `op` (20 files) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
+  are all recognised (0 left over).
+- **Name-only accuracy ceiling.** Of the owner's 6,276 hand-sorted files 1,904 are still missed by name alone after round 2: 975 are
+  numbered or code-only (`Audio_086`, `track21_003`, `19_02_08`, `x1`), 473 carry words but no drum vocabulary, 450 are the rejected
+  single-library codes above. No rule can reach those; the folder rescues most of them (name+folder accuracy is 97.9%).
 - **A token starting `hh` is a hat**: the only thing separating `HHCD0` (closed hat) from `HC00` (high conga).
 - **Plurals of 2-3 letter abbreviations are listed explicitly** (`bds kds sds sns snrs rims kiks hhs chhs ohhs`); the glue rule
   starts at four characters. `chhs`/`ohhs` also need listing in the bare-token fallback at the end of `classify`. `timp` covers
