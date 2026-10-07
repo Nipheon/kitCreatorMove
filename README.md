@@ -16,8 +16,8 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🔒 **Pad Locking & Single Reroll**: Lock pads to hold sounds while randomising the rest, or reroll individual pads on demand.
 - 🎹 **Keyboard Hotkeys**: Audition pads using grid row keys (`1 2 3 4`, `Q W E R`, `A S D F`, `Z X C V`).
 - 🔊 **Kit Preview & Auto-Preview**: Step through the whole kit in pad order, with playback timed from when each pad is actually audible rather than when playback was requested.
-- ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. Turn it off to copy every sample byte-for-byte.
-- 📦 **Batch Exporting**: Package 1 to 10 randomised kits at once into `.ablpresetbundle` archives ready to transfer to the device.
+- ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. With trimming off, every file is copied byte-for-byte, WAV metadata included. With trimming on, a 16- or 24-bit WAV that has silence to cut is re-encoded (same sample rate and bit depth, metadata chunks not carried over); every other file, including AIFF, is copied unchanged.
+- 📦 **Batch Exporting**: Package 1 to 10 randomised kits at once. A batch downloads a single `<prefix>_Batch.zip` that wraps one `.ablpresetbundle` file per kit; unzip it before uploading the bundles to your Move.
 - 🔔 **Toast Warnings**: A top-centre notification for substituted categories, empty pads, or roles the library cannot fill.
 
 ## Quick Start
@@ -57,30 +57,44 @@ npm run build        # Production build
 ## Project Layout
 
 ```
-index.html
+index.html              # Entry page: SEO tags, JSON-LD, static fallback content, analytics
 package.json
+package-lock.json
+bun.lock
 README.md
 LICENSE
 AGENTS.md               # Conventions and hard-won rules — read before editing
+metadata.json           # AI Studio applet metadata
+.env.example            # AI Studio environment template
 tsconfig.json
 vite.config.ts
+public/                 # Copied to the site root by Vite
+  icon.png              # Header icon (third-party, see Credits)
+  icon-32.png           # Favicon
+  icon-180.png          # iOS home-screen icon
+  og-image.png          # Social preview image (1200x630)
+  robots.txt
+  sitemap.xml
+assets/.aistudio/       # AI Studio leftover (a .gitignore only)
 src/
   App.tsx               # Main application component & layout
   main.tsx              # React entry point
   types.ts              # Core TypeScript interfaces & types
   padLayout.ts          # Grid derivation, grid IDs, pooling & choking
-  index.css             # Theme tokens and font sizes
+  devSeed.ts            # Dev-only sample set, loaded with /?seed
+  index.css             # Theme tokens, font sizes and pad styles
+  vite-env.d.ts         # Vite client type reference
   components/
     Pad.tsx             # Single pad: audio element, audition, lock/shuffle
     Toast.tsx           # Warning notification
   utils/
     ablPresetTemplate.ts # Ableton Move preset JSON generator
     audioTrimmer.ts      # OfflineAudioContext silence trimming
-    exporter.ts          # JSZip bundle packaging
+    exporter.ts          # JSZip bundle and batch packaging
     fileReader.ts        # Sample classification & folder parsing
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit prefix & suffix generation
-    wavStripper.ts       # WAV header parsing (stripWavMetadata is no longer used by export)
+    wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
 test/
   kit.test.ts           # Test suite
 ```
@@ -91,7 +105,7 @@ test/
 2. **Library Analysis**: Every file is classified from its name, falling back to the folder it sits in. Loops and non-drum material are filtered out, and the sidebar breaks the library down by category.
 3. **Grid Derivation**: The categories present decide the grid — four columns, four rows, with a shared top row when more than four categories are available. The result carries a Grid ID such as `ksho` or `ksho_ccpp`.
 4. **Generate & Audition**: Hit **Generate Random Kit**, or play pads with the mouse and hotkeys. Lock what you like, reroll what you don't, exclude samples you never want to see again.
-5. **Export to Hardware**: **Export To Move** downloads `.ablpresetbundle` files named `PREFIX-gridid-Suffix` (e.g. `MKT-ksho-Nova`). Copy them into your Ableton Move presets folder.
+5. **Export to Hardware**: **Export To Move** downloads a single `.ablpresetbundle` file named `PREFIX-gridid-Suffix` (e.g. `MKT-ksho-Nova`), or one `<prefix>_Batch.zip` of them for a batch. Each bundle is one file, not a folder: upload it to your Move.
 
 ## Contributing
 

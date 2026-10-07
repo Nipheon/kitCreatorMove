@@ -1,330 +1,178 @@
 # AGENTS.md
 
-Notes for any AI agent working on this project. Read this before editing.
+Conventions for any AI agent working on this project. Read this before editing.
 
-Most of what follows looks like style noise and is not. Each entry is something that
-was tried the other way, broke, and was fixed — with a test pinning it. If a change
-here seems like an obvious cleanup, it is almost certainly one of these.
+Most of this looks like style noise and is not. Each rule is something that was tried the other way, broke on a real sample pack or
+on hardware, and was fixed, usually with a test pinning it. If a change here looks like an obvious cleanup, it is almost certainly
+one of these.
 
----
-
-## Project layout
+## Layout
 
 Everything lives at the repository root, next to `package.json`:
 
 ```
-index.html
-package.json
-README.md
-LICENSE
-tsconfig.json
-vite.config.ts
-src/
-  App.tsx
-  main.tsx
-  types.ts
-  padLayout.ts
-  components/{Pad,Toast}.tsx
-  utils/{ablPresetTemplate,audioTrimmer,exporter,fileReader,
-         kitGenerator,kitNaming,wavStripper}.ts
+index.html  package.json  package-lock.json  bun.lock  tsconfig.json  vite.config.ts  README.md  LICENSE  AGENTS.md
+metadata.json  .env.example  assets/.aistudio/     AI Studio leftovers
+public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
+src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
+src/components/{Pad,Toast}.tsx
+src/utils/{ablPresetTemplate,audioTrimmer,exporter,fileReader,kitGenerator,kitNaming,wavStripper}.ts
 test/kit.test.ts
 ```
 
-**There is no `app/` or `applet/` directory and there must never be one.** A previous
-change wrote a correct fix into `app/applet/src/utils/fileReader.ts`, which nothing
-imports and Vite does not build, so the bug stayed live while appearing fixed. If you
-are writing a path with more than three segments, you are in the wrong place.
+**There is no `app/` or `applet/` directory and there must never be one.** A fix once went into
+`app/applet/src/utils/fileReader.ts`, which nothing imports and Vite does not build, so the bug stayed live while appearing fixed. A
+path with more than three segments means you are in the wrong place.
 
-## Maintaining this file
+## Working rules
 
-**A change is not finished until this file still describes the code.** Update it in the
-same change, not "later" — it has gone stale three times, each within a few commits of a
-feature landing, and a confident file that is out of date is worse than no file.
+- **A change is not finished until this file still describes the code.** Update it in the same change. It has gone stale three times
+  within a few commits of a feature. Update it when you: add, remove or rename anything under `src/` (the layout block lists every
+  module); add or change user-visible behaviour; pick a non-obvious constant, threshold or ordering (record the reason, not just the
+  value); reverse a decision written here (edit the entry, never leave both versions standing); verify something on hardware or in a
+  browser (move it to **Verified** or **Confirmed by hand**); or add a test that pins behaviour previously only described here.
+- **Never delete a section because it looks stale, and check every claim you write against the source.** The Preset naming
+  section was once dropped while `kitNaming.ts` and every rule in it were untouched.
+- **Before reporting success** run `npx tsc --noEmit` (clean under strict), `npm test` and `npm run build`. State which file paths
+  you wrote and what the tests returned. Say what you changed here, or that you checked and no update was needed.
+- **`test/kit.test.ts` is the contract.** If a test fails, fix the code. Edit the test only when the behaviour change is the point
+  of the task.
+- **Dev seed:** `npm run dev` then `http://localhost:3000/?seed` (`?seed=20` fakes twenty folders) fills the grid from
+  `src/devSeed.ts`: 47 real filenames from a real pack, categorised through the same pipeline as a drop, with a few ms of silence as
+  audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
+  `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
+  renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
+- **Analytics:** Cloudflare Web Analytics in `index.html` is the only telemetry. Do not add a second provider.
 
-Update it when you:
+## React and lifecycle (`App.tsx`)
 
-- add, remove or rename anything under `src/` — the layout block lists every module
-- add or change user-visible behaviour: a new control, a new option, a new failure
-  message, a changed default
-- pick a constant, threshold or ordering for a reason that is not obvious from reading
-  it — record the reason, not just the value. `0.001` looks timid until you know it
-  protects percussion decays; effect declaration order looks arbitrary until you know
-  reordering breaks the audition
-- reverse a decision written here — edit the entry, do not leave both versions standing
-- verify something on hardware or in a browser — move it into **Verified** or
-  **Confirmed by hand, not by the suite**, and say which
-- add a test that pins behaviour previously only described here — say so, so the next
-  reader knows which guarantees are enforced and which rely on someone clicking
+- **`handleDrop`, `handleDragOver`, `handleDragEnter`, `handleDragLeave` are not memoised.** `useCallback(..., [])` captures the
+  first `sourceFolders` and `lockedPads`, so later drops build from that folder alone, ignore locked pads and overwrite a typed
+  preset name. It self-repairs on the next randomise, which makes it look intermittent.
+- **Never call `setKit`/`setKitResult` inside a `setSourceFolders` updater.** Updaters must be pure and `main.tsx` renders in
+  `<StrictMode>`, which double-invokes them, so the kit generates twice. Compute the new array as a `const`, then call the setters.
+- **`URL.revokeObjectURL` stays in handlers, never in a `useEffect` cleanup.** StrictMode's double mount runs the cleanup at once
+  and kills every preview. In `removeFolder`, compute the next kit first and revoke only what it no longer references (a locked pad
+  keeps its sample when its folder goes).
+- **`newId()` keeps its non-secure-context fallback.** `crypto.randomUUID` is secure-context only and the dev server binds
+  `0.0.0.0`, so the app is routinely opened over plain http. For the same reason `crypto.subtle` is unavailable (relevant to dedupe,
+  below).
+- **Duplicate folders are skipped by lowercased name**; a drop where everything was skipped reports "already loaded".
+- **Skip Loops / Skip Non-Drums do not re-roll the kit.** They change the pool the next kit draws from; the usable count and
+  per-type figures beside them update at once. A kit generated earlier may hold a sample the filter would now exclude, by design:
+  nothing is taken away mid-listen. Type toggles (`disabledTypes`) do regenerate, passing the new set explicitly because state still
+  holds the old one in that tick.
+- **Trim Silence applies on export only.** `trimSilence` is passed only to `exportKitZip`/`exportBatchKits`; `Pad.tsx` never trims
+  and always plays the original. The one-line hint under the toggle ("Applied on export only...") answers *when* it takes effect,
+  which the checkbox position implies wrongly.
 
-**Never delete a section because it looks stale.** Check whether the code still does
-what it describes. The Preset naming section was dropped in `9828101` while
-`kitNaming.ts` and every rule in it were untouched.
+## Audio and export (`exporter.ts`, `audioTrimmer.ts`, `wavStripper.ts`)
 
-**Check claims against the source before writing them.** Every entry here was verified
-against the code at the time. An entry that is merely plausible is the failure mode this
-file exists to prevent.
-
-## Looking at the app with content in it
-
-`npm run dev` then **`http://localhost:3000/?seed`** fills the grid from `src/devSeed.ts`:
-47 real filenames from a real pack, categorised through the same pipeline as a genuine
-drop, with a few milliseconds of silence as the audio so the pads have something loadable.
-
-Both guards are load-bearing. `import.meta.env.DEV` is what lets the bundler drop the seed
-from a production build — verified by grepping `dist/` for the folder name — and the query
-param is what keeps an ordinary dev session starting empty, like the real thing.
-
-**Judge layout changes with the seed on.** An empty grid hides whole classes of problem:
-the choke badge only renders on hat pads, so a header row that overflowed at 125px looked
-perfectly fine until a kit with hats was in it.
-
-## Before you report success
-
-```
-npx tsc --noEmit     # clean, under strict
-npm test             # all checks pass
-npm run build        # succeeds
-```
-
-Then state which file paths you wrote. Do not report success on the strength of having
-made an edit — say what you changed and what the tests returned.
-
-Say either what you changed in this file, or that you checked it and no update was
-needed. Silently skipping it is how it went stale three times.
-
-`test/kit.test.ts` is the contract. If a test fails, fix the code. Do not edit the test
-to match new behaviour unless the behaviour change is the point of the task.
-
----
-
-## React and lifecycle
-
-- **`handleDrop`, `handleDragOver`, `handleDragEnter`, `handleDragLeave` are not
-  memoised on purpose.** `useCallback(..., [])` there captures the first
-  `sourceFolders` and `lockedPads`, so every drop after the first builds its kit from
-  that folder alone, ignores locked pads, and overwrites a preset name the user typed.
-  It self-repairs on the next randomise, which makes it look intermittent.
-- **Never call `setKit`/`setKitResult` inside a `setSourceFolders` updater.** Updaters
-  must be pure; `main.tsx` renders in `<StrictMode>`, which double-invokes them, so the
-  kit generates twice and the second result wins. Compute the new array as a `const`
-  first, then call the setters separately.
-- **`URL.revokeObjectURL` stays in the handlers, never in a `useEffect` cleanup.**
-  StrictMode's double-mount runs the cleanup immediately after first mount and kills
-  every audio preview. In `removeFolder`, compute the next kit first and revoke only
-  what it no longer references — a locked pad keeps its sample even when its folder is
-  removed.
-- **`newId()` keeps its non-secure-context fallback.** `crypto.randomUUID` is
-  secure-context only and `npm run dev` binds `0.0.0.0`, so the app is routinely opened
-  over plain http where it is `undefined`.
-
-## Audio and export
-
-- **`compression: 'STORE'`.** Audio barely compresses; DEFLATE spends CPU for nothing.
-- **Zip entries are prefixed with the pad index.** Sample packs are full of `Kick.wav`;
-  without the prefix two different samples collapse into one entry and a pad silently
-  loses its audio.
-- **Do not touch `encodeURIComponent` in `exporter.ts`.** The encoding is unverified
-  against what Ableton actually parses and is deliberately left alone.
-- **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were accepted once:
-  they pass through `trimSilence` untouched, so the export
-  succeeds and then fails on the device. Refusing at the door is the honest failure.
-- **AIFF is accepted but never processed.** `readWavFormat` returns `null` for
-  `FORM`/`AIFF`, so trimming is skipped and the file is copied byte-for-byte. Correct —
-  do not force AIFF through the WAV parser.
-- **Trimming uses `OfflineAudioContext`, one per distinct source rate, created inside
-  `createTrimmer`.** Do not swap it for `AudioContext` (16 hardware contexts per export,
-  never closed) and do not hoist it to module scope (a closed context cannot be reused).
-- **Silence is trimmed from both ends, at a threshold of `0.001` (-60 dBFS).** The
-  threshold is deliberately low: percussion with a long tail must not be cut short, and
-  -60 dBFS is below audibility for a decay. Do not raise it back toward `0.005` on the
-  theory that it trims more effectively — it would eat decays.
-- **Trimming preserves the source rate and bit depth**, read from the `fmt ` chunk
-  before decoding. `decodeAudioData` resamples to the context rate, so reading the rate
-  after decoding is circular and changes nothing.
-- **There is no file-size limit, deliberately.** Bytes do not imply duration: 2 MiB is
-  11.9 s of 16-bit 44.1 kHz stereo, 23.8 s in mono, 5.5 s at 32-bit float 48 kHz. One
-  threshold cannot mean one duration. Do not add one.
+- **Format of a bundle:** `Samples/`, `Preset.ablpreset`, `BundleInfo.json`, one file per kit named `<kit>.ablpresetbundle`. A batch
+  is one `<prefix>_Batch.zip` wrapping those bundles. `compression: 'STORE'` everywhere: audio barely compresses and DEFLATE burns
+  CPU.
+- **Zip entries are prefixed with the pad index** (`zipEntryName`). Packs are full of `Kick.wav`; without the prefix two samples
+  collapse into one entry and a pad loses audio.
+- **Do not touch `encodeURIComponent` in `exporter.ts`.** Percent-encoded `sampleUri`s were verified to resolve on hardware; leave
+  the encoding alone.
+- **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were once accepted, passed through trimming untouched and failed
+  on the device. Refuse at the door.
+- **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
+  export (it remains in `wavStripper.ts` and is tested); do not re-introduce stripping on the untrimmed path.
+- **Trimming only re-encodes a 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
+  nothing to trim, decode failure) is passed through as the original file; AIFF is never forced through the WAV parser
+  (`readWavFormat` returns `null` for `FORM`/`AIFF`). Failures and skips are counted in the export report and surfaced as notices.
+  Re-encoded files carry no metadata chunks.
+- **Trimming preserves source rate and bit depth**, read from the `fmt ` chunk before decoding. `decodeAudioData` resamples to the
+  context rate, so reading it afterwards is circular.
+- **Trimmer contexts are `OfflineAudioContext`, one per distinct source rate, created inside `createTrimmer`.** Not `AudioContext`
+  (16 hardware contexts per export, never closed); not module scope (a closed context cannot be reused). Samples are processed
+  sequentially: 16 at once holds 16 float32 copies.
+- **Silence threshold is `0.001` (-60 dBFS), both ends.** Deliberately low so long percussion tails are not cut. Never raise it
+  toward `0.005`.
+- **There is no file-size limit.** Bytes do not imply duration (2 MiB is 11.9 s of 16-bit 44.1 kHz stereo, 23.8 s mono, 5.5 s at
+  32-bit float 48 kHz). The only guard is a confirm prompt on large exports (bundles are built in memory).
+- **Only the decode half of trimming is untested in Node** (`OfflineAudioContext`); `encodeWav` is unit-tested.
 
 ## Preset generation (`ablPresetTemplate.ts`)
 
-- **`Effect_PunchAmount`, `Effect_NoiseAmount` and `Effect_SubOscAmount` stay `0.0`.**
-  The effect *type* is selected per category so the user can dial it in on the device.
-  Zero is the intended default, not an oversight.
+- **`Effect_PunchAmount`, `Effect_NoiseAmount` and `Effect_SubOscAmount` stay `0.0`.** The effect type is chosen per category so the
+  user can dial it in on the device.
 - **`Voice_Envelope_Decay` and `Voice_Envelope_Hold` are correct as they are.**
-- **Do not round the float-heavy parameter values** — `14079.9990234375`,
-  `59.9999885559082`, `-11.999999046325684`, `0.12015999853610992`. They are float32
-  round-trips from a real `.ablpreset` export, not typos.
-- Device names are `Reverb` and `Saturator`. They ship into the user's Ableton UI.
-- **Every drum cell ships `color: 5` (`DRUM_CELL_COLOR`), and pads cannot be coloured
-  through that field.** Tried, tested on hardware twice, abandoned:
-
-  - Indices spread across Ableton's 14x5 palette — 17, 12, 29, 21, 24, 18, 51, read
-    row-major and picked as the nearest palette entry to each category's UI hue — made the
-    bundle **fail to import**. So the field is validated, and `0..69` is not the accepted
-    range whatever the palette holds.
-  - Indices 1-8 **imported cleanly and did nothing**: every pad rendered the same colour on
-    the device.
-
-  Together those bracket the behaviour — accepted but ignored for pad display — so there is
-  no value that colours a pad. **Do not reopen this by picking different numbers.** The
-  category hues live in the browser only, where they work.
-
-  The reasoning that failed is worth more than the result: the first attempt assumed a
-  70-entry palette meant a 70-value contract, and the code comment said the worst case was
-  "pads in the wrong colours". A Node test cannot catch a value the device rejects — this
-  field's contract lives on the hardware, not in the schema. A test now pins `5` on all 16
-  chains so a re-attempt fails in the suite instead of on a Move.
+- **Do not round float-heavy values** (`14079.9990234375`, `59.9999885559082`, `-11.999999046325684`, `0.12015999853610992`): they
+  are float32 round-trips from a real `.ablpreset` export.
+- Device names `Reverb` and `Saturator` ship into the user's Ableton UI.
+- **A kit with a bare `808` sample keeps its Sub Osc effect**, decided from the sample name, not from `category === 'Other'` (808s
+  now classify as Kick). Do not put the category check back.
+- **Every drum cell ships `color: 5` (`DRUM_CELL_COLOR`), and pads cannot be coloured through that field.** Palette indices
+  17/12/29/21/24/18/51 made the bundle fail to import (so `0..69` is not the accepted range); indices 1-8 imported and every pad
+  rendered the same colour. Accepted but ignored for display. **Do not reopen this by trying other numbers.** Category hues live in
+  the browser only. A Node test cannot catch a value the device rejects, so a test pins `5` on all 16 chains.
 
 ## Sample detection (`fileReader.ts`)
 
-Tuned against ~2000 real files from tidalcycles/Dirt-Samples, the Sonic Pi library and
-Ableton's factory content. Every rule below exists because a simpler version broke on
-real packs.
+Tuned against ~2000 files (Dirt-Samples, Sonic Pi, Ableton factory content), later surveys of 58 packs, 70k and 120k files. Every
+rule exists because a simpler version broke on real packs.
 
-- **Whole-token matching, not substrings.** `/tom/` matched "custom", `/sd/` matched
-  "bassdrop", `/rim/` matched "primary".
-- **Tokens split at the letter/digit boundary**, so `BD01`, `SN_02`, `HH02`, `CH01`
-  and `OH03` resolve.
-- **Words of four characters or more also match glued** as a prefix or suffix —
-  `popkick`, `linnhats`, `realclaps`, `RIDED0`. Shorter ones must be whole tokens.
-- **`chat` and `ohat` are matched as whole tokens only**, via `GLUED_HAT_QUALIFIERS`.
-  They are four characters, so the glue rule filed `chatter`, `chatty` and `ohateful`
-  as hi-hats.
-- **A token starting `hh` is a hat.** It is the only thing separating `HHCD0` (closed
-  hat) from `HC00` (high conga).
-- **`folderCandidates()` reads folders deepest-first and skips the outermost**, unless
-  it is the only one. The outermost folder is the pack's marketing name: reading it
-  made every file in `70s Breakbeats` a discarded loop, and a perc hit in
-  `Kick Ass Drums` a kick. Note that deepest-first ordering alone is not enough —
-  `/Kick Ass Drums/misc/` still needs the skip.
-- The filename always wins over any folder.
+- **Whole-token matching, not substrings** (`/tom/` hit "custom", `/sd/` hit "bassdrop").
+- **Tokens split at letter/digit boundaries and camelCase** (`BD01`, `SN_02`, `BohmSlappAltOpenHat`). Missing the camelCase split
+  made an entire collection `Other`, and hid until the same files also appeared under `DrumKits`.
+- **Words of four or more characters also match glued** as prefix or suffix (`popkick`, `linnhats`, `realclaps`, `RIDED0`); shorter
+  ones must be whole tokens.
+- **`chat` and `ohat` match as whole tokens only** (`GLUED_HAT_QUALIFIERS`); glued they filed `chatter` and `ohateful` as hi-hats.
+- **A token starting `hh` is a hat**: the only thing separating `HHCD0` (closed hat) from `HC00` (high conga).
+- **Plurals of 2-3 letter abbreviations are listed explicitly** (`bds kds sds sns snrs rims kiks hhs chhs ohhs`); the glue rule
+  starts at four characters. `chhs`/`ohhs` also need listing in the bare-token fallback at the end of `classify`. `timp` covers
+  timpani via glue.
+- **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
+  token only.
+- **The filename always wins over any folder**, with one narrow exception: an explicit open or closed hat folder sharpens a name
+  that resolves to a bare `Hat` (`hihat_01.wav` in `Open Hats/` is an OHH). `closed hat.wav` in `Open Hats/` stays CHH; a kick in a
+  hat folder stays a kick.
+- **`folderCandidates()` reads folders deepest-first and skips the outermost** unless it is the only one. The outermost is the
+  pack's marketing name (`70s Breakbeats`, `Kick Ass Drums`). Deepest-first alone is not enough: `/Kick Ass Drums/misc/` still needs
+  the skip.
+- **A folder that names a drum category outranks marker words in it.** `Bass Drums` is `/\bbass drums?\b/`, `bassdrums` is in
+  `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
+- **Dedupe key is `name + byte size`** (`kitGenerator.ts`), a deliberate heuristic; nothing reads the audio. Same-named same-length
+  twins collide, and because the set is rebuilt in folder order the same twin wins every time. It keeps the first occurrence, not
+  the best categorised, which is only safe while both copies categorise identically. Accepted cost is silent variety loss, never a
+  wrong export. Do **not** add `file.lastModified` (copies that lose their mtime would stop merging and put one hit on two pads). A
+  correct fix is byte comparison of colliding signatures only.
 
-## Loop filtering
+### Loop and non-drum filtering
 
-- **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** `breaks` and `breakbeat` are not in it
-  and must not be put back: this list is matched against the *folders* too, and packs
-  called `70s Breakbeats` or `Breaks Vol 2` are full of one-shots, so every sample in one
-  was discarded.
-- **`BREAK_WORDS` is that word readmitted under two guards — filename only, and only for
-  a sample the categoriser could not place.** A file that says `BREAKS` in its own name
-  and could not be classified is a break; `03 BBL BREAKS.wav` in `BONUS - Breaks/` used to
-  land on a pad as `Other`, competing for a column with the actual drums.
+- **Loops are filtered before `chooseLayout` runs**, otherwise a folder of hat loops makes a generic-hat library look like it has
+  split hats. `isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), switched-off types (`disabledTypes`) and
+  excluded samples (`sample.isExcluded`); both toggles default on. It also keeps the "Usable Samples" count in step with UI
+  exclusions.
+- **`LOOP_WORDS` is `['loop', 'loops', 'bpm']`.** Never add `breaks`/`breakbeat`: the list is matched against folders too, and `70s
+  Breakbeats` / `Breaks Vol 2` are full of one-shots.
+- **`BREAK_WORDS` readmits that word under two guards**, both load-bearing: filename only (the folder is never read, so `Breaks Vol
+  2/one shots/snare 3.wav` is a snare), and only for a sample the categoriser could not place (`Break Snare.wav` stays a snare).
+  Whole-token, so `Breakfast.wav` and `breakdance vox.wav` are untouched. `breaks125.wav` and `breakbeat 01.wav` read as loops on
+  purpose; a test pins it.
+- **`loop` never matches as a prefix** ("Loopmasters" is a vendor name in ordinary one-shots), and **a glued `loop` needs three or
+  more characters before it** (`bloop` stays a one-shot).
+- **A tempo must say `bpm`**; a bare bracketed number (`[120]`) is as likely an index.
+- **A tempo is loop evidence in a filename, never in a folder name** (same for the `bpm` token). Folders like `Construction Kit (135
+  bpm)/Dry/` hold one-shots; three packs in a 214-pack survey produced an empty grid, silently. Folders that mean loops say so in
+  words.
+- **`looksNonDrum` is only consulted for samples that came back as `Other`.** `bass`, `sub`, `vocal` appear in good drum names
+  ("Bass Kick.wav"); if the categoriser placed it, it stays. It matters because `Other` competes for a column, so without it a trap
+  pack puts vocal chants and risers on pads.
+- **`NON_DRUM_FOLDERS` is matched against folders only, never the filename**: `Extras`, `Imported`, `Misc`, `Patches`, `Waveforms`,
+  `Soundbanks`, `Tags`, `AKWF`. Files there are named anonymously, so the folder is the only evidence; classified drums under those
+  folders are kept by the `Other`-only guard.
+- **`disabledTypes` holds *pool* categories.** Breakdown rows are pools, so switching off `CHH` takes generic `Hat` with it and
+  `Perc` takes `Crash`; `isUsableSample` compares against `poolCategoryFor`. Because filtering happens before `chooseLayout`, a
+  disabled type loses its column. Switching off every type is supported: the grid falls back to `NO_SAMPLES_GRID_ID` and the kit is
+  empty. Tests cover each of these.
 
-  Both guards are load-bearing and each answers a specific way this failed before. The
-  folder is never read, which is the entire objection recorded above — `Breaks Vol 2/one
-  shots/snare 3.wav` is still a snare. The `Other`-only guard is the same shape as
-  `looksNonDrum`'s and is there for the same reason: if the categoriser placed it, it
-  stays, so `Break Snare.wav` is a snare too. Matching is whole-token, so `Breakfast.wav`
-  and `breakdance vox.wav` are untouched.
+## Pads, layout and choking (`padLayout.ts`, `kitGenerator.ts`)
 
-  **Two cases in `one-shots are not mistaken for loops` were inverted to land this** —
-  `breaks125.wav` and `breakbeat 01.wav` now read as loops on purpose. A test pins the new
-  behaviour together with all three guards.
-- **`loop` never matches as a prefix.** "Loopmasters" is a sample-pack vendor whose
-  name appears in ordinary one-shots.
-- **A glued `loop` needs at least three characters in front of it**, so `bloop` stays a
-  one-shot.
-- **A tempo must say `bpm`.** A bare bracketed number is not evidence — `[120]` is as
-  likely an index or a catalogue number, and `beat [128].wav` is not a loop.
-- **A tempo counts as loop evidence in a filename, never in a folder name.** Three packs
-  in a 214-pack survey produced zero usable samples — an empty grid, silently — because
-  their one-shots live under `Construction Kit (135 bpm)/Dry/`. A folder names the tempo
-  the kit was written at; that says nothing about the files inside it. The `bpm` token
-  follows the same rule, since it is the same evidence. Folders that mean loops say so in
-  words, and those still count.
-- **`tokenize` splits camelCase.** `BohmSlappAltOpenHat.wav` was one token, and `hat` is
-  three characters so it only ever matches a token outright — an entire collection read as
-  `Other`. It hid for a long time because such packs usually also have a folder called
-  `OpenHats`, which covered for the filename; the failure only surfaced when the same
-  files also appeared under `DrumKits`, the name+size dedupe kept *that* copy, and all 87
-  open hats disappeared from the pool. Found by running 58 real packs through the
-  pipeline, not by reading the code.
-
-  The dedupe keeping the first occurrence rather than the best-categorised one is the
-  second half of that bug and is still there. It is defensible now that both copies
-  categorise identically, but a file that only one folder can explain is still at the
-  mercy of list order.
-- **Plurals of the two- and three-letter abbreviations are listed explicitly** (`bds`,
-  `kds`, `sds`, `sns`, `snrs`, `rims`, `kiks`, `hhs`, `chhs`, `ohhs`). The glue rule only
-  applies from four characters up, so these matched nothing and fell through to `Other` —
-  162 files in a 70k-file survey, `rims` alone accounting for 126. `chhs`/`ohhs` also
-  need listing in the bare-token fallback at the end of `classify`, which is reached
-  before the hat family test for names like `CHHS 1.wav`.
-- **`timp` covers timpani.** Four characters, so the glue rule reaches `timpani` and
-  `timpanies` without listing them.
-- **A bare `808` token classifies as Kick**, checked last so anything that says what it
-  is — `808 clap`, `808 snare`, `808 open hat` — keeps its own category. Whole token
-  only, so a catalogue number glued into a word cannot fire it.
-
-  **This is load-bearing for the preset's Sub Osc effect.** That rule used to require
-  `category === 'Other'`, which worked only because the categoriser deliberately left
-  808s unclassified. It now reads the sample name instead (`ablPresetTemplate.ts`), so
-  808s keep their sub oscillator while living on kick pads. Do not put the category check
-  back.
-- **`looksNonDrum` is only ever consulted for samples that came back as `Other`.** That
-  guard is the whole design: `bass`, `sub`, `vocal` and friends appear in perfectly good
-  drum names, and filtering on the words alone would throw away a kick called
-  "Bass Kick.wav". If the categoriser placed it, it stays. In a 70k-file survey this
-  flagged 4,601 files — effects, vocal chants, scratches, risers, guitar and melodic
-  material, roughly half of everything that could not be placed.
-
-  It matters more than it used to: `Other` competes for a column of its own, so without
-  the filter a trap pack puts its vocal chants and riser effects on pads.
-
-  **`NON_DRUM_FOLDERS` is matched against folders only, never the filename** — `Extras`,
-  `Imported`, `Misc`, `Patches`, `Waveforms`, `Soundbanks`, `Tags`, `AKWF`. Files in
-  those folders are named anonymously (`Fill 1.wav`, `AKWF_0001.wav`, `G Suspended
-  2.wav`), so the folder is the only evidence there is. In a 120k-file survey this caught
-  11,597 of the 16,504 files that survived every other rule, while 2,385 classified drums
-  under those same folders were kept by the `Other`-only guard.
-- **A folder that names a drum category outranks any marker word in it.** `Bass Drums`
-  used to match no phrase — the phrase was singular — fall through to `Other`, and then
-  be discarded for containing "bass". The phrase is now `/\bbass drums?\b/`, `bassdrums`
-  is in `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
-- **An explicitly open or closed hat folder sharpens an unqualified hat name.** The one
-  case where a folder may overrule the filename, and only to add the qualifier the name
-  left out: `hihat_01.wav` inside `Open Hats/` is an OHH. Without it, such a folder leaves
-  the open column starving while every file in it pools as a closed hat. Deliberately
-  narrow — it fires only when the name resolves to a bare `Hat` and the folder resolves
-  to `CHH` or `OHH`, so `closed hat.wav` in `Open Hats/` is still CHH and a kick in a hat
-  folder is still a kick.
-- **Loops are filtered before `chooseLayout` runs.** Otherwise a folder of hat loops
-  makes a generic-hat library look like it has real split hats.
-- **`isUsableSample` filters loops (`skipLoops`), non-drums (`skipNonDrums`), types the
-  user switched off (`disabledTypes`) and excluded samples (`sample.isExcluded`).** Both
-  toggles default to on. This is also what keeps the "Usable Samples" card count in step
-  when a sample is excluded from the UI.
-- **`disabledTypes` holds *pool* categories, not raw ones.** The breakdown rows are pools,
-  so switching off `CHH` has to take generic `Hat` samples with it and `Perc` has to take
-  crashes — matching on the raw category would leave a row reading as off while its
-  samples carried on filling pads. `isUsableSample` compares against `poolCategoryFor`,
-  which is one line and the whole of the rule.
-
-  Because the filtering happens in `isUsableSample`, a disabled type is gone **before
-  `chooseLayout` runs**, so it loses its column rather than keeping one nothing can fill —
-  the same ordering loops already depend on. Switching off every type is a supported
-  state: the grid falls back to `NO_SAMPLES_GRID_ID` and the kit is empty. A test covers
-  each of those three.
-
-- **Export names are deduplicated against what was actually exported, never against
-  what was generated** (`exportedNames` in `App.tsx`, `uniqueKitName` in `kitNaming.ts`).
-  Rolling through twenty kits and exporting one must not leave the survivor numbered.
-
-  The counter also counts collisions rather than batch position. It used to be
-  `-${i + 1}`, so two kits in one zip landing on the same random suffix produced
-  `IHF-ksch-Flip-4` — a number that matched neither the number of Flips nor anything the
-  user had on disk. Within a batch the code first re-rolls the suffix up to
-  `SUFFIX_ATTEMPTS` times, since the pool is ~39 words and a fresh word reads better
-  than a number; numbering is the fallback once the pool is genuinely crowded.
-
-  **Names are recorded after the export resolves, not before.** A failed export wrote no
-  file, so its names must stay free. A single export that does collide renames and says
-  so in a notice rather than silently writing something other than the preview.
-
-## Pads, layout and choking
-
-- **Four canonical grids, chosen by which kinds of sound the library holds — never by
-  how many of each.** Columns run the bottom three rows; the top row is its own thing.
+- **Four canonical grids, chosen by which kinds of sound the library holds, never how many.** Columns run the bottom three rows; the
+  top row is its own thing.
 
   ```
   open hats + claps   no open hats,      no open hats,      only kicks,
@@ -335,528 +183,215 @@ real packs.
   k s h o             k s c h            k s s h            k s s h
   ```
 
-  Open hats keep column 4 whenever they exist, even from a single sample — the pads above
-  it fall back to closed hats. With claps but no perc, crash or other, the top row is all
-  claps; with neither, it continues the columns, which is the fourth grid.
+  Open hats keep column 4 whenever they exist, even from one sample (pads above fall back to closed hats). Claps but no
+  perc/crash/other: top row is all claps; with neither it continues the columns (the fourth grid). This replaced a
+  pool-depth-derived grid that fitted each pack and moved the layout whenever the pack changed; pad 3 is a hat in every kit, and two
+  kits are swappable because laid out identically. Repeating a sample or standing in a closed hat for an open one is the accepted
+  price. **Do not reintroduce depth-aware columns, guests, doubling or a shared leftover row** (all four are in `git log`).
+- **The top row takes no kick, snare or hat while any extra remains** (`topRowChain`); core sounds sit at the end of the chain for
+  libraries with no extras at all.
+- **Grid id is a fingerprint:** one letter per category (`k`ick, `s`nare, `c`lap, closed `h`at, `o`pen, `p`erc, `x` other), four
+  column letters, then `_` and four top-row letters if a shared row exists: `ksho`, `kssh`, `ksho_ccpp`. Equal ids mean identical
+  roles, the condition for swapping drum racks. `h` is closed hat and `c` is clap (the first version had `l` for clap and had to be
+  decoded). Seven letters must stay distinct: a test asserts injectivity across all 127 non-empty category subsets, another asserts
+  `/^[a-z]{4}(_[a-z]{4})?$/`. The rename made `ksco`/`kssc`/`ksco_llpp` into `ksho`/`kssh`/`ksho_ccpp`; older exports carry the old
+  id, accepted as a one-off (the id is a label Move does not read). **Lowercase on purpose**: Move renders lowercase in fewer
+  pixels, so it survives further into a ~9-11 character display. The prefix stays uppercase.
+- **The exported name carries `columnsId`, not `id`**, so a kit exports as `PRE-ksho-Suffix` (13 chars; truncation hits the
+  decorative suffix). `columnsId` is a deliberately weaker fingerprint: `ksho_cccc` and `ksho_ccpp` both name `ksho`. Any check that
+  two grids are identical must use `id`, which the settings panel shows.
+- **`NO_SAMPLES_GRID_ID` (`none`) is the grid before any folder is dropped.** Pads show a Kick/Snare/CHH/OHH placeholder; the id is
+  dropped from the kit name rather than exported.
+- **Prefix is three characters** (`PREFIX_LENGTH`, cut from four to fit the grid id). Separator is `_` and alphabet A-Z on purpose:
+  it becomes a bundle directory name, and `+`-like characters get URL-encoded or rejected. **Name length and character set are
+  unverified on Move hardware.**
+- **Layout is held, not re-derived, wherever pads do not all change:**
+  - Removing, disabling or excluding a source (`removeFolder`, `toggleFolder`, `handleExcludeSample`) passes the current
+    `kitResult.layout` as `generateRandomKit`'s fourth argument; otherwise losing the only open hats re-derives the grid under pads
+    that did not move. Availability is still read from the current library. An empty kit passes nothing (`heldLayoutFor()`). Full
+    regenerations (drop, randomize, type/filter toggles) derive fresh on purpose.
+  - A single-pad reroll (`rerollSinglePad`) takes `kitResult.layout`; the skip toggles do not regenerate, so recomputing could swap
+    the grid under the other 15 pads.
+  - A batch passes `kitResult.layout` (via `heldLayoutFor()`) to kits 2..n, so a filter changed since the last generate cannot give
+    them a different grid than kit 1 (named with the on-screen `columnsId`). Holding never adds empty pads: filling falls back to
+    the deepest pool (pinned in tests). After a batch `emptyPadsNotice` appends a notice when any kit has empty pads, after the trim
+    notices, never replacing them.
+- **An unqualified `Hat` is a closed hat; a `Crash` is percussion.** `poolCategoryFor` files them into the `CHH` and `Perc` pools,
+  so neither is a role of its own. Ranking `Hat` below `CHH` in the preference chain does nothing: `take` drains a pool completely
+  before reading the next entry. Labelled and generic hats are equal citizens in one pool; to change that, bias the draw, never put
+  `Hat` back in the chain. Choking is unaffected: `chokeGroupFor` reads the real category.
+- **Filling runs in two passes:** every pad takes its own sound before any pad takes a substitute, and the top row is served first
+  when substituting. One pass let bottom rows drain pools the top row was waiting for (top row ended with three snares). A role the
+  library has nothing for leaves its pads *empty*, so `summarisePads` reports `unavailableRoles` for empty pads too.
+- **The fallback chain is `ROLE_FALLBACKS`, nearest sound first, not `RANK`.** `RANK` decides which category claims a column when
+  the grid cannot hold them all (layout priority); using it as a fallback gave a clap pad a kick. Snare/clap cover each other, the
+  two hats each other, percussion and `Other` each other, and **a kick is last for every role but its own**. An open-hat pad reaches
+  `CHH` first (labelled and generic share the pool); an open pad is still not filled from the hat pool *by default*. A closed hat on
+  an open pad is reported as a substitution and deliberately not in `satisfiesRole`: it is a real mismatch. A test asserts every
+  chain is a permutation of the roles, and `preferenceChain` appends anything the table misses.
+- **`Perc` and `Other` are drawn from as one pool without being merged** (`DRAW_GROUPS`). Separate columns, grid letters and
+  breakdown rows, but a pad asking for either draws from both, weighted by remaining size (`pickGroupPool`; pools are pre-shuffled).
+  It cannot be done in the preference chain (same drain trap as `Hat`). Applied at both draw sites (full generate and single-pad
+  reroll). `Crash` pools into `Perc`, so a crash can land on an `Other` pad and still chokes as a crash. `satisfiesRole` accepts
+  `Other` on a percussion pad, or the warning toast would fire on nearly every kit.
+- **`substituted` means the pad's category existed and the pad did not get it.** `satisfiesRole` excludes generic-hat-on-closed-pad
+  and crash-on-percussion-pad. `unavailableRoles` reports a role the library cannot fill at all, once rather than per pad; it is
+  empty in practice with derived grids but is the honest answer if a locked pad outlives its folder.
+- **`substituted`/`empty` come from one shared `summarisePads`**, used by full generate and single-pad shuffle (they once counted
+  differently).
+- **Shuffle never returns the pad's own sample**: it excludes the current sample and walks the preference chain. Only if the library
+  holds nothing else does the pad keep it; shuffling must never empty a pad.
+- **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay percussion and unchoked.
+- **Empty pads are deliberately not lockable**, asserted explicitly on the lock button.
+- **The pad body is a `<div role="button">`, not a `<button>`**, because lock, shuffle and exclude are real buttons and cannot nest
+  inside one.
 
-  **This replaced a grid derived from pool depth**, which sized every column to the
-  library in front of it. It fitted each pack beautifully and moved the layout whenever
-  the pack changed — the opposite of what the tool is for. Pad 3 is a hat in every kit
-  from every source, and two kits are swappable because they are laid out identically
-  rather than because an id says they happen to match. Repeating a sample or standing in
-  a closed hat for an open one is the accepted price. Do not reintroduce depth-aware
-  columns, guests, doubling or a shared leftover row: `git log` has all four, and each was
-  removed for this reason.
-- **The top row will not take a kick, snare or hat while any extra remains**
-  (`topRowChain`). With one clap in the library the second clap pad used to take a snare —
-  the nearest sound, and correct for a column pad, but the top row exists to hold what the
-  beat is not. Core sounds stay at the end of the chain for a library with no extras at
-  all, which is the only way they legitimately appear up there.
-- **The grid id is a fingerprint of the arrangement.** One letter per category —
-  `k`ick, `s`nare, `c`lap, closed `h`at, `o`pen, `p`erc, `x` for other — as four column
-  letters, then `_` and four top-row letters if there is a shared row: `ksho`, `kssh`,
-  `ksho_ccpp`. Equal ids mean every pad advertises the same role, which is the condition
-  for swapping one drum rack for another on the device.
+## Preview and audition (`App.tsx`, `Pad.tsx`)
 
-  **`h` is the closed hat and `c` is the clap.** The first version had those the other way
-  about, with the clap on `l` — the one letter its name does not contain — so `ksco` had
-  to be decoded rather than read. The only hard constraint is that the seven letters stay
-  distinct; a test asserts the id is injective across all 127 non-empty category subsets,
-  which is what would catch a collision if someone adds a category later.
-
-  **This renamed every existing grid.** `ksco` is now `ksho`, `kssc` is `kssh`,
-  `ksco_llpp` is `ksho_ccpp`. Kits exported before the change carry the old id in their
-  preset name, so a `ksco` rack and a `ksho` rack already on a device are the same layout
-  under two names and will not look swappable. Nothing on the device breaks — the id is
-  a label, not something Move reads — and re-exporting a kit from the same library
-  produces the new id. Accepted deliberately as a one-off cost for a readable id.
-
-  **Lowercase deliberately:** Move renders lowercase glyphs in fewer pixels than
-  capitals, so a lowercase id survives further into a preset-name display that shows
-  roughly 9-11 characters. Do not "tidy" it to uppercase. The prefix stays uppercase —
-  it is the part that can afford to be cut.
-- **The exported name carries `columnsId`, not `id`.** Move shows roughly 9-11
-  characters of a preset name, so the shared top row is left out and a kit exports as
-  `PRE-ksho-Suffix` (13 characters, which truncates into the decorative suffix rather
-  than into either identifying part). **`columnsId` is therefore a deliberately weaker
-  fingerprint than `id`:** `ksho_cccc` and `ksho_ccpp` both name as `ksho`, so two kits
-  sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
-  worth the characters. Any check that two grids are genuinely identical must use `id`,
-  which is what the settings panel shows.
-- **Removing, disabling or excluding a source keeps the kit's layout.** `removeFolder`,
-  `toggleFolder` and `handleExcludeSample` leave surviving pads in place, so they pass
-  the current `kitResult.layout` as `generateRandomKit`'s fourth argument — otherwise
-  losing the only open hats re-derives the grid under pads that did not move, and roles,
-  warnings and the exported `columnsId` describe a different grid. Availability is still
-  read from the current library, so a role it can no longer fill reports as unavailable.
-  An empty kit passes nothing (the empty-library layout must not be held). Full
-  regenerations (drop, randomize, type/filter toggles) derive a fresh layout on purpose.
-- **A batch holds the on-screen kit's layout.** `buildBatch` passes `kitResult.layout`
-  (through `heldLayoutFor()`, so an empty kit passes nothing) to kits 2..n, so a filter
-  changed since the last generate cannot give them another grid than kit 1, which is named
-  with the on-screen `columnsId`. Holding never adds empty pads: pad filling falls back to
-  the deepest pool, so empties depend only on how many usable samples there are (pinned in
-  `test/kit.test.ts`). After a batch, `emptyPadsNotice` appends a notice when any kit has
-  empty pads; it is appended to the trim notices, never replacing them.
-- **The preset prefix is three characters** (`PREFIX_LENGTH` in `kitNaming.ts`), cut down
-  from four to make room for the grid id inside the same visible budget.
-
-  The separator is `_` and the alphabet is A-Z on purpose: this string becomes part of a
-  `.ablpresetbundle` directory name, and `+` is the kind of character that gets
-  URL-encoded or rejected by a device parser — next door to the `encodeURIComponent`
-  landmine in `exporter.ts`. **Name length and character set are unverified on Move
-  hardware.** Two tests pin the id: one asserts it is injective across all 127 non-empty
-  category subsets, one asserts it matches `/^[a-z]{4}(_[a-z]{4})?$/`.
-- **`NO_SAMPLES_GRID_ID` (`none`) is the grid before any folder is dropped.** The pads
-  show a Kick/Snare/CHH/OHH placeholder so the empty app does not read as broken, and
-  the id is dropped from the kit name rather than exported as a lie.
-- **An unqualified `Hat` is a closed hat, and a `Crash` is percussion.**
-  `poolCategoryFor` files them into the `CHH` and `Perc` pools, so neither is ever a role
-  in its own right and both are reachable. Ranking `Hat` below `CHH` in the preference
-  chain was the earlier attempt and did nothing: `take` drains the `CHH` pool completely
-  before it reads the next entry, so a library with three or more labelled closed hats
-  could never reach its generic ones.
-
-  **An open pad is still not filled from the hat pool by default** — an unqualified hat is
-  assumed closed, so it is the wrong sound for an open pad, and `OHH` is a role of its
-  own. But an open pad that has run out of open hats now *falls back* to the closed pool
-  first, labelled and generic alike: a closed hat is still a hat, and beats the snare or
-  kick the pad would otherwise land on. Filling by default and falling back when empty are
-  different questions, and the earlier rule answered both with one no.
-
-  **Choking is unaffected.** `chokeGroupFor` reads the sample's real category, so a
-  crash sitting on a percussion pad still chokes in group 2, not with the percussion.
-
-  **Consequence, accepted deliberately:** labelled and generic hats are equal citizens
-  in one pool. A library with 3 CHH and 25 generic hats will usually show generic hats
-  on every closed pad. If that ever needs to change, bias the draw — do not put `Hat`
-  back in the preference chain, it does not work.
-- **Filling runs in two passes: every pad takes its own sound before any pad takes a
-  substitute, and the top row is served first when substituting.** One pass in pad order
-  let the bottom rows drain the pools the top row was waiting for: a real pack with two
-  closed hats and one open hat filled those columns, ran them dry, took the percussion as
-  the nearest sound, and left the top row holding three snares. Serving the top row first
-  in the second pass matters too — otherwise a dry hat column takes the last spare
-  percussion and the same complaint returns one pass later.
-
-  A consequence worth knowing: a role the library has nothing for now leaves its pads
-  *empty* rather than quietly holding something else, so `summarisePads` reports
-  `unavailableRoles` for empty pads as well as substituted ones.
-- **The fallback chain is `ROLE_FALLBACKS`, nearest sound first — not `RANK`.** A pad
-  whose own pool runs dry walks its chain, and that chain used to be `RANK` order, which
-  begins `Kick, Snare`. So a clap pad with the claps gone took a kick: the least clap-like
-  thing in the library. `RANK` answers which category claims a column when the grid cannot
-  hold them all, which is a question about layout priority, not about what sounds least
-  wrong in place of something missing. One ordering cannot answer both.
-
-  Snare and clap cover for each other, the two hats cover for each other, percussion and
-  `Other` cover for each other, and **a kick is last for every role but its own** — it is
-  the most distinctive sound in a kit and the one a listener notices immediately in the
-  wrong place.
-
-  **An open-hat pad reaches `CHH` first**, which covers labelled closed hats and generic
-  ones alike — they share a pool and nothing can ask it for one or the other. This was
-  briefly the other way round, keeping open pads out of the hat pool entirely on the
-  grounds that an unqualified hat is assumed closed. Overruled deliberately: that
-  assumption is about what fills an open pad *by default*, not about what an exhausted pad
-  should reach for next, and a closed hat beats the snare or kick it landed on instead.
-
-  **A closed hat on an open pad is reported as a substitution**, and is deliberately not
-  in `satisfiesRole`. Unlike a generic hat on a closed pad, which is an identity, this is
-  a real mismatch — the pad asked for an open hat and did not get one. It is the least bad
-  option available, not a free one, and the toast should say so.
-
-  A second test asserts every chain is a permutation of the roles — exhaustive and
-  duplicate-free — so `take` can never run off the end into its deepest-pool guess while a
-  sensible category is still available. `preferenceChain` appends anything the table
-  misses, so adding a category cannot silently produce a short chain.
-- **`Perc` and `Other` are drawn from as one pool without being merged** (`DRAW_GROUPS` in
-  `padLayout.ts`). Both keep their own column, their own letter in the grid id and their
-  own breakdown row — they are separate roles — but a pad asking for either draws from
-  both, weighted by what each pool still holds.
-
-  **This cannot be done with the preference chain, and trying is the trap.** `take` drains
-  a pool completely before reading the next entry, so listing `Other` after `Perc` gives
-  every percussion pad a perc until the percussion runs out and only then reaches the
-  other pool. It is the same mistake as ranking `Hat` below `CHH`, which did nothing for
-  the same reason. Equal treatment has to happen at the draw: `pickGroupPool` chooses a
-  pool in the group with probability proportional to its remaining size, and the pools are
-  pre-shuffled, so it is equivalent to drawing uniformly from the two concatenated.
-
-  It is applied at both draw sites — a full generate and a single-pad reroll. `Crash`
-  pools into `Perc` first, so a crash can now legitimately land on an `Other` pad; it
-  still chokes as a crash, because `chokeGroupFor` reads the real category.
-
-- **A single-pad reroll holds the kit's layout.** `rerollSinglePad` takes the layout the
-  kit was built under (`kitResult.layout`) instead of recomputing it. The skip toggles do
-  not regenerate the kit, so recomputing could swap the grid under the other 15 pads and
-  make roles, warnings and the exported grid id describe a different grid. Candidate pools
-  still follow the current options; only the layout is fixed.
-
-  **`satisfiesRole` had to learn it too**, or the warning toast would fire on nearly every
-  kit holding both: an `Other` on a percussion pad is the design, not a lost draw.
-- **`substituted` means the pad's category existed and the pad still did not get it.**
-  `satisfiesRole` keeps the generic-hat-on-closed-pad and crash-on-percussion-pad
-  equivalences out of the count. `unavailableRoles` reports a role the library cannot
-  fill at all, once rather than per pad — with derived grids it is empty in practice,
-  since a grid only advertises what the library holds, but it is kept as the honest
-  answer if that ever stops being true (a locked pad surviving its folder's removal is
-  the case to watch).
-- **The sample pool dedupe key is `name + byte size` (`kitGenerator.ts`), deliberately a
-  heuristic.** Nothing reads the audio. Two same-named files of identical length from a
-  fixed-length pack collide, and because the set is rebuilt per generate in folder
-  order, the same twin wins every time — the other is permanently unreachable rather
-  than occasionally skipped. Accepted: the cost is silent variety loss, never a wrong
-  export. Do **not** "fix" it by adding `file.lastModified` — copies that lose their
-  mtime would stop merging and put the same hit on two pads, which is worse than one
-  sample quietly missing. A correct fix is byte comparison for colliding signatures
-  only; note `crypto.subtle` is unavailable, this app is served over plain http.
-- **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay
-  percussion and stay unchoked — a ride is meant to ring out.
-- **Empty pads are deliberately not lockable.** Asserted explicitly on the lock button,
-  not left to the disabled-ancestor side effect.
-- **The pad body is a `<div role="button">`, not a `<button>`.** The lock, shuffle, and exclude
-  controls are real buttons and cannot be nested inside one.
-- **Every pad is tinted by the category it holds** — one hue each for Kick, Snare, Clap,
-  CHH, OHH, Perc and Other, so a derived grid can be read without reading a word. The
-  hues live in `@theme` as `--color-cat-*`; `categoryAccent()` in `padLayout.ts` maps a
-  category to one, and `Pad` sets the result as `--category-accent` inline on the pad root.
-  The tint, border, glow, pad number, choke badge and both bottom-bar buttons all derive
-  from that one property.
-
-  **It must be a custom property, not a class.** Tailwind 4 scans source text for class
-  names, so a `bg-cat-${category}` assembled at runtime compiles to nothing at all — the
-  build succeeds and every pad comes out untinted.
-
-  **The hue is never printed as text at full strength** (`.category-ink` and friends mix it
-  48% toward `--color-text-light`). At 14px bold the contrast threshold is 4.5:1 — 14px
-  bold is not WCAG large text, that starts at 18.66px — and snare pink, open-hat violet
-  and the "other" periwinkle all sit near 3.3:1 against their own tinted pad. The mix
-  clears the threshold and still reads as that category. One mix serves every text use;
-  the per-element ladder it replaced was three numbers to get wrong for no visible gain.
-
-  **It was 65% until the surfaces were desaturated**, which lifted every pad background
-  and dropped snare pink to 3.98:1. Snare pink is the binding constraint at 4.54:1 —
-  checked against the tinted pad, the hover surface and the lock bar, since the ink
-  appears on all three. Recompute when a hue *or* a surface moves.
-
-  **`Hat` takes the CHH hue and `Crash` takes the Perc hue**, matching `poolCategoryFor`
-  and the sidebar breakdown rows. A generic hat sitting on a closed-hat pad is the same
-  thing to the grid as the labelled closed hat beside it; colouring it differently would
-  advertise a distinction the layout does not make. An empty pad is tinted by the role it
-  advertises, so the placeholder grid still reads as a layout.
-- **Kit Generation Visual Feedback:** When clicking "Generate Random Kit", all pads simultaneously start a brief spinner animation (`Loader2` + "Rolling") that stops at random durations up to 100ms per pad before revealing their newly picked sample names. When Auto Preview is enabled, this spinner animation is skipped so preview playback begins immediately.
-- **Preview Kit Button & Auto Preview:** Located directly to the right of the "Generate Random Kit" button. When clicked, it sequentially triggers each pad in index order with a 750ms delay between pads. An **Auto Preview** checkbox next to the button automatically triggers kit preview playback whenever a new kit is generated. Clicking anywhere on the interface, pressing any keyboard key, clicking the preview button again, or generating a new kit stops the active preview sequence cleanly.
-
-  *Technical root cause analysis & tried solutions for Auto Preview timing discrepancies:*
-  - **Manual vs. Auto Preview Difference:** Manual preview clicks occur seconds after kit generation when all 16 `HTMLAudioElement` instances have fully rendered and buffered their Blob URLs. In contrast, `autoPreview` triggers immediately upon kit generation when 16 brand-new Blob URLs (`blob:http://...`) are created simultaneously.
-  - **Browser HTMLAudioElement Cold-Start Latency:** When `audio.play()` is invoked on a freshly created `new Audio(blobUrl)` whose media buffer has not reached `HAVE_ENOUGH_DATA`, the browser defers outputting sound until decoding completes (~100–250ms latency). This causes Pad 0 (the first pad) to start late on a cold generate.
-  - **Static vs. Event-Driven Step Timing:** Hardcoded static timers (`t = step * 750`) resulted in Pad 1 firing at absolute `750ms` while Pad 0's sound was delayed to `150ms`, making Pad 1 sound only ~600ms after Pad 0 started. Step spacing is now event-driven via a `pad-started` custom event dispatched when `await audio.play()` resolves. **This alone did not fix the symptom**, and the entry that claimed it did was wrong: `pad-started` marks when playback is *initiated*, not when sound is audible, so a cold pad 0 still drifted late and pad 1 still landed early.
-  - **Do not "fix" this by dispatching `pad-started` from the `playing` event instead.** The spec queues one task that fires `playing` and resolves pending `play()` promises together — it is the same instant, and the bug reappears.
-  - **The actual cause was buffering asymmetry, not spacing.** Pad 0 was fired on a flat `setTimeout(playNextStep, 100)` while pads 1–15 each got 750ms+ of extra decode time, so only pad 0 was ever told to play while still cold.
-  - **Readiness gate (`pad-ready`).** Each `Pad` dispatches `pad-ready` with `{ index, sampleId }` on `canplaythrough` (and immediately if `readyState >= 3`, which a blob decoded for an earlier kit can already be). `App` keeps a lifetime-mounted listener filling a `readyPads` map of pad index -> buffered sample id, and `startPreview` waits until every non-empty pad in the kit reports its current sample buffered, with a 2s ceiling so a sample that never decodes cannot hang the preview. The map is keyed by index *and* id so a stale entry from a previous sample never counts as ready.
-  - **The gate alone did not fix the symptom, and decode latency is therefore ruled out.** It shipped in `#5` and pad 01 still sounded late: either the gate opened, meaning pad 01 played at `readyState 4`, or the 2s ceiling ran, which leaves it just as buffered. Whatever the remaining lag is, it is not the blob still decoding. Do not re-derive a buffering fix for this.
-  - **Lead-in (`PREVIEW_LEAD_IN_MS`, 150ms).** Held before pad 01 fires **whenever the readiness gate had to wait**, on top of the gate; skipped when every pad was already buffered at the moment preview was requested. It was briefly keyed on auto-vs-manual instead, which gave manual preview a 0ms start even when it had just waited on the gate — pressing Preview Kit straight after a generate reproduced the original late pad 01. Auto preview always arrives cold so it is unaffected in practice; a generate with every pad locked is now the one case where auto preview starts with no lead-in, correctly, because there is nothing to wait for. Buffered is not the same as able to sound immediately — the first play after the output stream has been idle carries device start-up latency that no `readyState` reports. This constant is tuned by ear, not measured; say so rather than inventing a number for it.
-  - **`pad-started` is dispatched at audible onset, not at `play()` resolution.** `Pad.firstAudibleProgress` polls animation frames until `audio.currentTime > 0` (400ms cap) before dispatching. This is what keeps pad 02 from arriving early: the 750ms step spacing is measured from that event, so if pad 01's sound lags its `play()` call for *any* reason, the gap to pad 02 shrinks by exactly that lag. `timeupdate` is not usable here — throttled ~250ms, the same order as the lag being corrected.
-  - **`startPreview` takes the kit as an argument.** A generate calls `setKitResult` and `startPreview` in the same tick, so reading `kit` state inside would gate on the *previous* kit.
-  - **Audio Pre-buffering:** Each pad executes `audio.preload = 'auto'` and `audio.load()` inside `useEffect([sample])` upon sample assignment to force the browser to decode and buffer PCM data in RAM immediately upon kit creation.
-- **Audio auditioning is scoped to a single pad's Shuffle or Exclude.** Clicking a pad's Shuffle or clicking the icon to remove a sample from the pool plays that pad's new sample. Generating a full kit or dropping folders MUST remain silent — never trigger all 16 pads at once.
-
-  This is driven by an **`auditionToken`**: `App` holds `{ index, token }` and bumps the token on Shuffle or Exclude; `Pad` plays when the token changes. It is deliberately *not* keyed on `sample`. The earlier `shouldPlayOnNextSample` ref was armed on click and disarmed inside `useEffect([sample])` — but a shuffle can land on the same sample, and an identical object reference means that effect never runs. The pad stayed armed, and the next full generate played every armed pad at once, breaking this very rule.
-
-  **The audition effect must stay declared below the effect that builds the audio element.** React runs effects in declaration order within a commit, which is what guarantees the new sample is loaded before it plays.
-- **Shuffle never returns the pad's own sample.** It excludes the current sample and walks the pad's preference chain, so it reaches a fallback category rather than repeating. Only if the library holds nothing else does the pad keep what it has — excluding the current sample must never empty a pad.
-- **`substituted`/`empty` come from one shared `summarisePads`.** A full generate and a single-pad shuffle used to count differently, so shuffling an unrelated pad moved the warning from "2 pads" to "3 pads" on its own.
-- **Duplicate folder skipping:** folders already present in `sourceFolders` are skipped by lowercased name. A drop where *everything* was skipped reports "already loaded" — a drop that changes nothing has to say why, or it reads as the app ignoring you.
+- **Audition is scoped to a single pad's Shuffle or Exclude.** Generating a full kit or dropping folders MUST stay silent; never
+  trigger 16 pads at once. It is driven by an **`auditionToken`** (`App` holds `{ index, token }`, bumped on Shuffle/Exclude; `Pad`
+  plays when it changes), deliberately **not keyed on `sample`**: the old `shouldPlayOnNextSample` ref never disarmed when a shuffle
+  landed on the same sample, and the next generate played every armed pad. **The audition effect must be declared below the effect
+  that builds the audio element** (effects run in declaration order).
+- **Each pad pre-buffers** (`audio.preload = 'auto'`, `audio.load()` in `useEffect([sample])`). Generate shows a brief "Rolling"
+  spinner (`Loader2`, up to 100ms per pad), skipped when Auto Preview is on.
+- **Preview Kit** plays pads in index order, 750ms apart, stopped by any click, key press, a second press of the button or a new
+  generate. **Auto Preview** (checkbox) starts it on each generate. Timing, in order of what failed:
+  - `pad-started` fires at **audible onset**: `Pad.firstAudibleProgress` polls animation frames until `audio.currentTime > 0` (400ms
+    cap). The 750ms spacing is measured from that event, so if pad 01 lags its `play()` call the gap to pad 02 does not shrink. Do
+    **not** dispatch it from the `playing` event or at `play()` resolution (same instant, bug returns); `timeupdate` is too coarse
+    (~250ms).
+  - **Readiness gate (`pad-ready`)**: each `Pad` dispatches `pad-ready { index, sampleId }` on `canplaythrough` (and at once if
+    `readyState >= 3`). `App` keeps a lifetime-mounted listener filling `readyPads` (index -> sample id) and `startPreview` waits
+    until every non-empty pad reports its current sample buffered, with a 2s ceiling. Keyed by index *and* id so a stale entry never
+    counts.
+  - **Decode latency is ruled out** as the cause of a late pad 01: the gate shipped and pad 01 still lagged. Do not re-derive a
+    buffering fix.
+  - **Lead-in (`PREVIEW_LEAD_IN_MS`, 150ms)** is held before pad 01 **whenever the gate had to wait**, skipped when everything was
+    already buffered. Keying it on auto-vs-manual was wrong (manual preview right after a generate was late). Tuned by ear, not
+    measured; say so rather than inventing a number. Buffered is not the same as instantly audible (idle output streams add device
+    start-up latency).
+  - **`startPreview` takes the kit as an argument**: generate calls `setKitResult` and `startPreview` in the same tick, so reading
+    `kit` state would gate on the previous kit.
 
 ## Preset naming (`kitNaming.ts`)
 
-- **The prefix describes what the kit is built from**, recomputed whenever folders are added, removed or disabled: no folders enabled gives `MOVE`, exactly one gives that folder's name, more than one gives `MKIT` because no single folder names the kit. It used to be set only on the first drop, so removing folder "AAAA" left kits built entirely from "BBBB" exporting as `AAAA-…`.
-- **Once the user types their own prefix, deriving stops** (`prefixEdited`). Do not overwrite a name the user has entered.
-- The suffix is rolled once on the first drop and thereafter belongs to the user, who changes it with the Randomize Suffix button. Folder changes must not reroll it.
-- Naming lives in `kitNaming.ts` rather than `App.tsx` so it can be tested — the suite is Node-only and cannot reach a component.
+- **The prefix describes what the kit is built from**, recomputed when folders are added, removed or disabled: none enabled gives
+  `MOVE`, one gives its name, more gives `MKIT`. Setting it only on first drop left `AAAA-` on kits built entirely from "BBBB".
+- **Once the user types a prefix, deriving stops** (`prefixEdited`).
+- **The suffix is rolled once on first drop**, then belongs to the user (Randomize Suffix button). Folder changes must not reroll
+  it.
+- Naming lives in `kitNaming.ts` so it can be tested (the suite is Node-only).
+- **Export names dedupe against what was actually exported, never what was generated** (`exportedNames` in `App.tsx`,
+  `uniqueKitName`). Rolling twenty kits and exporting one must not leave the survivor numbered. The counter counts collisions, not
+  batch position (`-${i + 1}` once produced `IHF-ksch-Flip-4`). Within a batch the suffix is re-rolled up to `SUFFIX_ATTEMPTS` times
+  first (pool is ~39 words); numbering is the fallback. **Names are recorded after the export resolves**: a failed export wrote no
+  file. A single export that collides renames and says so in a notice.
 
-## Analytics
+## UI and design system
 
-Cloudflare Web Analytics is loaded from `index.html` and is the only telemetry. A `@vercel/analytics` dependency was also present but never imported — dead weight, removed. Do not add a second provider.
+- **Tokens, not literals.** All theme colours (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes
+  (e.g. `text-pad-action`, 12px) live in `index.css` `@theme`. No raw `text-white`, `bg-black/60` or `text-red-400`; use
+  `text-inverse`, `overlay-*`, `danger-*`. A new UI colour is a new token with a stated job.
+- **Palette:** mid-dark indigo (surfaces `#1E1B34` darkest up to `#332C5C` pad), not near-black; the ladder is monotonic because
+  surfaces stack. Text ramp is violet-tinted and lifted (`--color-text-subtle` `#9A93C8`, not `#666`); scrims are indigo-black,
+  since pure black reads as mud. **Only surfaces, scrims and the header gradient are desaturated** (half saturation, hue and HSL
+  lightness untouched); text, borders and accents stay fully saturated or the app reads grey. **Desaturating raises luminance**, so
+  recompute every contrast figure against a surface when a surface moves (this once dropped snare pink to 3.98:1).
+- **Three accents, one job each.** Amber `#FFC93C` primary (actions, live values, focus, both panels); teal `#38E8D0` secondary, two
+  places only (usable-samples meter, Preview Kit); pink `#FF5F9E` is a pad category, never chrome.
+- **`text-text-muted-dark` (`#7B74AE`, 3.2:1 on panel) is not for reading text.** Reserved for controls that brighten on hover
+  (folder eye, remove X), the `-` between name fields and deliberately dimmed zero-count rows. Everything read uses
+  `text-text-subtle` (4.77:1 on panel, 5.15:1 on the pad bar) or lighter. Do not move text back to tighten hierarchy.
+- **An inline `code` chip is not a scrim**: chips use `--color-surface-code` (one step darker than their surface); scrims are darker
+  than everything.
+- **Per-category pad tint:** one hue each for Kick, Snare, Clap, CHH, OHH, Perc, Other as `--color-cat-*` in `@theme`;
+  `categoryAccent()` maps a category to one, and `Pad` sets `--category-accent` inline. Tint, border, glow, pad number, choke badge
+  and both bottom-bar buttons derive from that one property. **It must be a custom property, not a class**: Tailwind 4 scans source
+  text, so a runtime-assembled `bg-cat-${category}` compiles to nothing and pads come out untinted. `Hat` takes the CHH hue and
+  `Crash` the Perc hue (matching `poolCategoryFor`); an empty pad is tinted by the role it advertises. The custom property and
+  `.category-ink` were renamed from `--pad-accent`/`.pad-ink` when the sidebar started sharing them; do not build a second
+  mechanism.
+- **Hue is never printed as text at full strength** (`.category-ink` mixes 48% toward `--color-text-light`). 14px bold is not WCAG
+  large text (18.66px), so 4.5:1 applies, and snare pink, open-hat violet and "other" periwinkle sit near 3.3:1 on their own pad.
+  Snare pink at 4.54:1 is the binding constraint, checked against the tinted pad, hover surface and lock bar. Recompute when a hue
+  or a surface moves.
+- **`color-mix()` rules are hand-gated behind `@supports`, with plain rules above as fallback.** Written inline, the build
+  synthesises its own fallback (a 14% tint becomes a full accent fill; accent text on accent background in `.pad-lock-active`), and
+  that fallback wins. Do not move them out of the block.
+- **The pad grid sizes to leftover space:** `.pad-stage` takes the leftover height and `.pad-grid` is `min(100cqw, 100cqh)`.
+  Container query units, not viewport units (nothing can subtract header, sidebars and controls from `100vh` without going stale);
+  plain `width: 100%; aspect-ratio: 1` is the `@supports` fallback. Below `lg` the stage carries its own minimum and `flex-1` on the
+  section is `lg:` only (stacked it resolved to 32px and the grid overlaid the sidebar). `Pad` fills its cell (`w-full h-full`), no
+  `aspect-square`.
+- **Pad type scales with the pad** (`.pad-tile` container queries; `cqi` is relative to the content box, so a 125px pad queries
+  ~99px): `clamp(0.75rem, 10.5cqi, 0.875rem)`, **12px floor, 14px ceiling; do not lower the floor** (9-10px fit and was unreadable).
+  Hotkey and choke chips floor at 10px; under 130px the header row is 11px with no letter-spacing; captions hide under 104px and the
+  category line under 88px (hiding is the last resort). **The choke badge keeps its word down to 88px** (hiding it, or number-only,
+  lost choke info at ~125px pads): header row 11px, tighter gaps, play indicator hidden (a playing pad already has border, glow and
+  scale). Under 88px the action bar, its reserved space and tile padding shrink together, or the name clips into the bar. Measure
+  contents against the padding box, not the border box (16px of padding hid an 11px overflow); `.pad-actions` is full-bleed, exclude
+  it.
+- **Font sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text. The pad tile is the documented exception
+  (Lock/Shuffle `text-pad-action` 12px, hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
+- **Sidebar:** only the folder list shrinks (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`); heading, text line and count block
+  are siblings of the `aside`. Failed: scrolling the whole `aside`; wrapping heading+list in `flex-1 min-h-0` (a shrinkable flex
+  child overlaps siblings, it does not clip); capping the list height. Below ~700px height with twenty folders the whole sidebar
+  scrolls, which is acceptable.
+- **There is no drop zone box in the sidebar, only a line of text.** `handleDrop` is on the app root so the whole window is the
+  target; drag feedback comes from the full-window overlay.
+- **Placement:** Skip Loops and Skip Non-Drums sit inside the Usable Samples card between the count and the Breakdown by Type list
+  (cause and effect both visible), in the card's type (`text-sm`, uppercase, medium). Trim Silence sits directly above Export To
+  Move (an export setting). **Export To Move sits directly under the Batch Export Amount slider** (not pinned to the panel bottom),
+  with the progress line; error and notice banners trail the panel (they also report drops and folder loads). Folder status ("x
+  folder(s) used" / "Waiting for samples", ignoring disabled folders) sits above the Usable Samples card; there is no footer.
+- **Settings toggles carry no explainer text** beyond one line; what Skip Loops, Skip Non-Drums and Trim Silence do lives in help
+  section 5. Keep new options to one line.
+- **Breakdown by Type rows follow the pools:** `CHH + HAT` and `PERC + CRASH`, since that is where those samples are drawn from
+  (separate rows would read as unused); no row for a category that is not a role. **`PERC + CRASH` and `OTHER` stay separate rows**
+  despite sharing a draw: separate roles, columns and grid letters. Row labels use the same `--category-accent` as pads; a
+  zero-sample row stays grey. **Each row has an eye toggle** writing to `disabledTypes` (disabled when the row has no samples).
+- **Toasts:** `Toast` is presentational and `App` owns timing (`WARNING_TOAST_MS`, 5s); a second internal timer was a second source
+  of truth and kept resetting because `onClose` was a new closure (now a `useCallback`). Entrance animation is local CSS
+  (`.toast-enter`, honours `prefers-reduced-motion`), not `tailwindcss-animate` classes (bare Tailwind 4, no plugins, they compile
+  to nothing). `role="status"` (polite), not `role="alert"` (assertive).
+- **The UI must not state things the app does not know.** Hardcoded device status, firmware, bit depth and sample rate were removed.
+  Report only filled pads, source audio size, the active layout and usable-vs-total samples. The panel no longer says samples keep
+  their original format (removed for layout room, still true); re-add only if there is room.
+- **`index.html` carries the whole SEO surface**: description, canonical, Open Graph, Twitter tags and a `WebApplication` JSON-LD
+  block (the app is client-rendered, so crawlers see only that file). **The static block inside `#root` is not decoration**: React
+  replaces it on mount; keep it saying what the app does in the same words as the meta description, or it becomes cloaking.
+  `public/` holds `robots.txt`, `sitemap.xml`, `og-image.png` (1200x630, a real screenshot), which Vite copies to the build root.
+- **Icon:** header icon and favicon are the same drum image (`public/icon.png`, 32px and 180px copies). Header `<img>` has empty
+  `alt` (decoration beside a heading) and explicit width/height (no layout shift). **It is third-party work under an attribution
+  licence**, credited in help section 6 and the README as *Drum icon by iconfromus from Magnific* (attribution confirmed by the
+  owner; magnific.com 403s automated requests). Do not drop either credit, and do not let the 0BSD `LICENSE` be read as covering it.
+  Replacing the icon means removing the credits with it, not before.
+- **Help modal** (header `HelpCircle`, text `text-base sm:text-lg`): section 3 covers Preview Kit, Auto Preview and the pad tint; 4
+  Grid IDs, `PREFIX-gridid-Suffix` naming, batch and device transfer; 5 the filters, `ROLE_FALLBACKS` and the Perc/Other draw; 6
+  source code, issue tracker and contact; 7 thank-yous (drum-kit-generator, the drum icon, other tools). **A user-visible rule needs
+  a help entry, not only an AGENTS.md entry** (Preview and Grid IDs shipped without one). **The contact address is a relay mask**
+  (`uuemoswsq@mozmail.com`): it reaches an inbox without naming anyone, and the GitHub noreply address bounces silently
+  (`users.noreply.github.com` rejects mail) so it belongs in commit authorship only. No other address may appear in shipped content.
 
-## UI, Dimensions & Design System
+## Verified and unverified
 
-- **Centralized Theme Tokens (`index.css`):** All theme colors (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes (such as `text-pad-action` set to 12px for Lock/Shuffle buttons) are defined in `src/index.css` inside `@theme` rather than hardcoding hex values or raw font sizes into UI elements. There are no raw `text-white`, `bg-black/60` or `text-red-400` left in the components; `text-inverse`, `overlay-*` and `danger-*` cover those. Reintroducing one is how a palette change breaks in a place nobody looks.
-- **`text-text-muted-dark` is not for reading text.** It is `#7B74AE`, which is 3.2:1 on
-  the panel and 3.45:1 on the pad's bottom bar — under the 4.5:1 body text needs. It is
-  reserved for things the ratio does not apply to: an icon or glyph that is really a
-  control and brightens on hover (the folder eye, the remove ✕), the `-` between the two
-  name fields, and the deliberately dimmed zero-count rows in the breakdown card, whose
-  whole job is to read as absent. Everything a user actually reads uses
-  `text-text-subtle` (`#9A93C8`, 4.77:1 on the panel, 5.15:1 on the pad bar) or lighter.
-  The hint paragraphs, the export filename, "No folders loaded" and the Lock button label
-  were all on the dark step and have been moved up. Do not move them back to tighten the
-  hierarchy — use the lighter token and let the size and weight carry it.
-- **An inline `code` chip is not a scrim.** They were both `bg-black/60` before the tokens
-  existed and were de-hardcoded to the same `overlay` token, which left the chips in the
-  help modal punching near-black holes in a mid-indigo panel. A scrim wants to be darker
-  than everything; a chip wants to be one step darker than what it sits on. Hence
-  `--color-surface-code`.
-- **Only the surfaces are desaturated.** Every `--color-surface-*`, the two scrims and the
-  header gradient are the original indigo at **half saturation**, hue and HSL lightness
-  untouched so the ladder keeps its spacing. The text ramp, the borders and the accents
-  are deliberately still fully saturated — desaturating those too is what would make the
-  app read grey.
+**Verified on a real Move (settled, do not re-litigate):** `$schema` `song/1.7.0/devicePreset.json`; `Macro0` as an object beside
+plain-float `Macro1`-`Macro7`; `BundleInfo.json`; percent-encoded `sampleUri`; `STORE` bundles; pad order (UI pad 1 is the device's
+bottom-left, `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index`, pinned by a test because a wrong mapping still
+sounds on every pad, just not the one shown); choke groups (hats and crashes cut each other, rides ring through); trimming at both
+ends (`0.001` does not clip tails); drum cell `color` (see Preset generation). Do not "modernise" the `$schema` version, flatten
+`Macro0`, invert the grid or change the note mapping because they look wrong; they were guesses once and are not any more.
 
-  **Desaturating raises luminance at a fixed `L`** — grey is brighter than saturated
-  indigo — so every contrast figure computed against a surface has to be recomputed when a
-  surface moves. That is not a theoretical note: this change alone pushed the pad ink mix
-  from passing to 3.98:1 on snare pink, and the mix had to drop from 65% to 48% to
-  recover. A colour change with no visible relationship to text can still break the text.
-- **The palette is mid-dark indigo, not near-black.** It was `#090909`-and-greys, which
-  read as bland and mysterious; surfaces now run `#1E1B34` (darkest) up to `#332C5C`
-  (pad). Two things follow from the base being a colour rather than an absence of one:
-  the **text ramp is violet-tinted and lifted** (`--color-text-subtle` is `#9A93C8`, not
-  `#666`, which disappears on indigo), and the **scrims are indigo-black** — a pure black
-  scrim over indigo reads as mud. The ladder is monotonic on purpose: several places
-  stack two surfaces, a card inside a panel and the pad's bottom bar over the pad.
-- **Three accents, each with exactly one job.** Amber `#FFC93C` is primary — actions,
-  live values, focus, everything in both panels. Teal `#38E8D0` is secondary and appears
-  in two places only: the usable-samples meter and Preview Kit. Pink `#FF5F9E` is a pad
-  category and never chrome. Giving any of them a fourth use is how this goes back to
-  noise; a new UI colour should be a new token with a stated job, not a reach for one of
-  these.
-- **The `color-mix()` rules are hand-gated behind `@supports`, and the plain rules above
-  them are the fallback.** Written inline instead, the build synthesises its own fallback
-  by substituting the raw variable — which turns a 14% tint into a full-strength accent
-  fill, and puts accent-coloured text on an accent-coloured background in
-  `.pad-lock-active`. That fallback always wins, because it is emitted after anything
-  hand-written in the same rule. Do not move them out of the block.
-- **The pad grid sizes itself to the space left over, not to a fixed 700px.** The middle
-  column is a flex column: a `.pad-stage` that takes the leftover height, with the
-  controls row below it, and `.pad-grid` inside sized `min(100cqw, 100cqh)` so the square
-  follows whichever of the stage's dimensions is scarcer. It was `max-w-[700px]
-  aspect-square`, which overflowed a short window and refused to grow on a large one.
+**Confirmed by hand only (the Node suite cannot reach them, so only a browser or a Move catches a regression):** drag-and-drop and
+the directory walk (`getFilesFromDataTransfer`); audio preview and audition scoping (Shuffle plays that pad, a later full generate
+stays silent); the decode half of trimming (no `OfflineAudioContext` in Node, only `encodeWav` is unit-tested); whether a bundle
+still imports on the device; the palette and per-category tint in Chrome (grid id renders as `ksho_ccpp`).
 
-  **Container query units, not viewport units.** The stage is what remains after the
-  header, both sidebars and the controls row; nothing here can subtract those from `100vh`
-  without going stale the first time one of them changes height. The plain
-  `width: 100%; aspect-ratio: 1` rule stands on its own and is what runs if
-  `container-type: size` is unsupported — same `@supports` gating as the `color-mix` rules.
+**Filled grid without a real folder:** `/?seed` in dev, or headless Chrome over CDP against `npx vite preview`: dispatch a synthetic
+`drop` with stubbed `webkitGetAsEntry` entries over generated WAV blobs on `#root`'s first element child (not `window`: React listens
+at the root, below it), then `Page.captureScreenshot`.
 
-  **Below `lg` the stage carries its own minimum and the section is content-sized.**
-  Stacked, the page scrolls and there is no leftover height for `flex-1` to distribute:
-  it resolved to 32px while the stage kept its 335px minimum, so the grid rendered
-  straight over the sidebar. Measured, not guessed — `flex-1` on the section is
-  `lg:` only for that reason.
+**Suite coverage:** `test/kit.test.ts` (Node-only, via `tsx`, no components) covers kit generation, bundle building, sample
+detection, preset shape, pad-to-note mapping, choke grouping, kit naming and WAV handling.
 
-  **A pad shrinks with the stage, so its type scales with it** (container queries on
-  `.pad-tile`). Pad text is `clamp(0.75rem, 10.5cqi, 0.875rem)` — **12px floor, 14px
-  ceiling** — where `cqi` is a percentage of the pad's *content* box, padding and border
-  already subtracted, so a 215px pad queries against ~181px. The ceiling is reached from
-  about a 165px pad upward, which is why large pads read exactly as they did before the
-  grid became flexible.
-
-  **Do not lower the 12px floor.** An earlier version floored at 9-10px: it measured fine,
-  fit without clipping, and was too small to read. The hotkey and choke chips are the one
-  exception, floored at 10px — they are labels on a label, and holding them at 12px inside
-  a 100px pad crowds out the sample name beside them. Under a 130px content width the
-  whole header row is pinned at 11px instead, which is what makes the choke badge's word
-  fit; see the badge entry below.
-
-  Hiding is the last resort, not the first: captions go under 104px of content width and
-  the category line under 88px, because shrinking gets there first.
-
-  **The choke badge keeps its word down to an 88px content width**, which took three
-  attempts and is worth not undoing. Hiding the badge outright lost choke information at
-  ~125px pads — an ordinary window at ordinary zoom. Keeping only the number lost the
-  word at the same size. What finally fits it: the whole header row drops to 11px with no
-  letter-spacing under 130px, the gaps tighten, and the play indicator is hidden — it is
-  the one element there that says nothing on its own, since a playing pad already takes
-  the accent border, the glow and the scale.
-
-  **Measure pad contents against the pad's PADDING box, not its border box.** 16px of
-  padding hid an 11px overflow from a border-box check, and the indicator sat outside the
-  content area while the check reported clean. `.pad-actions` is the exception — it is
-  full-bleed by design, so exclude it from any such check. Under 88px the action
-  bar, its reserved space and the tile padding shrink together — move one without the
-  others and the sample name still clips into the bar.
-
-  Thresholds are content widths, not pad widths: a 125px pad queries at ~99px.
-
-  `Pad` fills its cell (`w-full h-full`) instead of declaring `aspect-square`: the grid is
-  a square with `grid-rows-4`, so the cells are already square and a pad that sized itself
-  would fight the stage for the height.
-- **`index.html` carries the whole SEO surface**: description, canonical, Open Graph and
-  Twitter tags, and a `WebApplication` JSON-LD block. The app is client-rendered, so a
-  crawler that runs no JavaScript sees only what is in that file — before this it saw a
-  title and an empty `<div id="root">`.
-
-  **The static block inside `#root` is not decoration.** React replaces it on mount, so it
-  exists for crawlers that execute nothing and for anyone on a slow connection. It must
-  keep saying what the app actually does, in the same words as the meta description: the
-  moment it drifts into keywords the page is cloaking, and it is the kind of thing nobody
-  notices because the app hides it a heartbeat later.
-
-  `public/` holds `robots.txt`, `sitemap.xml` and `og-image.png` (1200x630, a real
-  screenshot). Vite copies that directory to the root of the build.
-- **The header icon and the favicon are the same drum image** (`public/icon.png`, plus
-  32px and 180px copies for the tab and for iOS). It replaced a drum emoji, which had
-  replaced a yellow tile holding a rotated square. The header `<img>` carries an empty
-  `alt` and explicit width and height: it is decoration beside a heading that already
-  names the app, and the dimensions stop the header shifting while it loads.
-
-  **It is third-party work under an attribution licence**, credited in help section 6 and
-  in the README as *Drum icon by iconfromus from Magnific*, linking to the designer's
-  profile and to the icon. Attribution is required — confirmed by the repository owner,
-  not by this file, since magnific.com answers automated requests with a 403.
-
-  Do not drop either credit to tidy things up, and do not let the 0BSD licence in
-  `LICENSE` be read as covering `public/icon.png`: the README says explicitly that it does
-  not. Replacing the icon means removing the credits with it, not before.
-- **Help Modal & Header:** User manual modal is triggered by the header `HelpCircle` icon, with enlarged readable text (`text-base sm:text-lg`). Section 5 "Sample Filters & Processing" explains Skip Loops, Skip Non-Drums and Trim Silence; section 6 "Source Code & Contact" links the repository and the issue tracker and gives the contact address; section 7 "Thank You" credits drum-kit-generator, the drum icon, and the other kit-creation tools.
-
-  **The contact address is a relay mask** — `uuemoswsq@mozmail.com`. It reaches a real
-  inbox without naming anyone, which the GitHub noreply address it replaced could not do:
-  `users.noreply.github.com` rejects incoming mail, so a `mailto:` to it bounced silently
-  while looking like a working contact. The noreply address still belongs in commit
-  authorship; it is not a contact. No other address may appear in shipped content. Section 3 covers Preview Kit, Auto Preview and the per-category pad tint; section 4 covers Grid IDs and the `PREFIX-gridid-Suffix` naming; section 5 covers the filters, the `ROLE_FALLBACKS` behaviour and the Perc/Other shared draw.
-
-  **A user-visible rule needs a help entry, not only an AGENTS.md entry.** Preview and Grid IDs both shipped without one and went months undocumented, which is how a feature ends up existing only for whoever wrote it.
-- **The export toggles carry no explainer text in the settings panel**, with one exception. Skip Loops, Skip Non-Drums and Trim Silence are a label and a checkbox each; what they do is documented in help section 5. The panel is a column of controls, not documentation — keep new options to one line there and put the explanation in the modal. The silence-trimming bullet was moved out of section 4 at the same time so the three filters read together in one place.
-
-  Trim Silence keeps a single line beneath it — "Applied on export only — pads always audition the original file." That is not a description of the option, it answers *when* it takes effect, which the checkbox implies wrongly: the toggle sits in the panel while listening, so it reads as though it changes what the pads play. It does not. `trimSilence` is only ever passed to `exportKitZip`/`exportBatchKits`; `Pad.tsx` has no trimming and always plays the original file.
-- **Font Sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text, where there is room for it. The pad tile is the documented exception and its sizes are deliberate, not drift: Lock and Shuffle use `text-pad-action` (12px), the hotkey badge `text-xs`, and the choke badge `text-[10px] sm:text-xs`. Those three sit in a fixed-size tile alongside the sample name, and at `text-sm` they pushed the name out of the row. Do not "restore" them to 14px.
-- **Export To Move sits directly under the Batch Export Amount slider**, not pinned to
-  the bottom of the settings panel. The slider decides what the button produces, and with
-  the button at the far end of a scrolling panel the two were never on screen together.
-  The export progress line moved with it. Error and notice banners still trail the panel:
-  they report drops and folder loads as well as exports, so they are panel-level, not
-  button-level.
-- **The sidebar's folder list is the only part of it that shrinks.** Heading, drop zone,
-  list and the count block are siblings of the `aside`; the list takes what is left
-  (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`) and scrolls, so twenty folders can
-  never push the sample count or the filters below the fold — they are what you watch
-  while adding folders.
-
-  Two earlier shapes failed and are worth not repeating. Scrolling the whole `aside` put
-  the count a full screen out of view at twenty folders. Wrapping heading, drop zone and
-  list in a `flex-1 min-h-0` block let that block shrink below its own contents on a short
-  window, and its children painted over the count beneath — a flex child that can shrink
-  past its content will overlap its siblings, it does not clip itself. Capping the list
-  height instead stopped the overlap and put the count off screen again.
-
-  Below about 700px of window height with twenty folders the sidebar does scroll as a
-  whole. Everything is reachable and nothing overlaps; there is simply not enough room.
-- **Skip Loops and Skip Non-Drums do not re-roll the kit.** They change the pool the
-  *next* kit draws from. They used to regenerate immediately so the toggle would not look
-  inert; the feedback now sits directly above them instead — the usable count and the
-  per-type figures move the instant either is clicked. A kit generated before the filter
-  changed can therefore still hold a sample the filter would now exclude, which is the
-  intended trade: nothing is taken away from under you mid-listen.
-- **There is no drop zone in the sidebar, only a line of text.** `handleDrop` is on the
-  app root, so the whole window has always been the drop target; the bordered box just
-  claimed vertical space the folder list wanted while implying the drop had to land inside
-  it. Drag feedback comes from the full-window overlay, not from the sidebar.
-- **Skip Loops and Skip Non-Drums live inside the Usable Samples card, between the count
-  and the Breakdown by Type list; Trim Silence sits directly above Export To Move.** Both
-  filters change the total directly above them and the per-type figures directly below, so
-  that slot is the only place where cause and effect are both on screen. They carry the
-  card's own type — `text-sm`, uppercase, medium — not the export panel's. Trimming is an
-  export setting rather than a library filter, which is why it stays with the button that
-  performs it.
-- **Source Folder Status & Sidebar:** Folder status message ("x folder(s) used" / "Waiting for samples", excluding ignored/disabled folders) is displayed in the left sidebar directly above the Usable Samples card. The card features a vertical "Breakdown by Type" list with text-sm font size detailing x/y usable vs total sample counts per category (Kick, Snare, Clap, CHH, OHH, Hat, Crash, Perc, Other). The bottom footer has been removed.
-
-  **Rows follow the pools, not the categories:** `CHH + HAT` and `PERC + CRASH`, because
-  that is where those samples are drawn from. Separate Hat and Crash rows would read as
-  unused while their samples sit on closed-hat and percussion pads. The card also has no
-  row for a category that is not a role.
-
-  **Row labels carry the category hue, from the same `--category-accent` the pads set.**
-  A row and the pads it feeds are one colour by construction rather than two lists that
-  have to be kept in step, and `CHH + HAT` and `PERC + CRASH` tint from the pool exactly as
-  a pad holding a generic hat or a crash does. A row with no samples stays grey rather
-  than tinted — it should read as absent, not as available.
-
-  The custom property and `.category-ink` were called `--pad-accent` and `.pad-ink` while
-  the pads were their only user; they were renamed when the card started sharing them,
-  since a pad-named thing on a sidebar row invites someone to build a second mechanism.
-
-  **Each row carries an eye toggle that switches the whole type off**, the same control
-  and the same idea as disabling a source folder, writing into `disabledTypes`. It
-  regenerates on click for the reason the other filters do — a toggle that changes nothing
-  visible reads as broken — and passes the new set explicitly rather than reading state
-  back, which would still hold the old one in that tick. The toggle is disabled on a row
-  with no samples: there is nothing to switch off, and the row already reads as absent.
-
-  **`PERC + CRASH` and `OTHER` stay separate rows even though they share a draw.** They
-  are separate *roles*: each has its own column and its own letter in the grid id, so a
-  merged row would misreport what the grid holds. Pooling and drawing are different
-  things here — see `DRAW_GROUPS`.
-- **Pad warning messages are rendered in a Toast component (`src/components/Toast.tsx`).** `substituted`, `empty` and `unavailableRoles` are shown in a floating toast at the top centre, dismissing itself after 5 seconds or on the close button.
-  - **`Toast` is presentational; `App` owns the timing** (`WARNING_TOAST_MS`). The component ran a second 5s timer of its own, which was two sources of truth for one behaviour *and* never fired reliably: `onClose` was a new closure on every App render and sat in that effect's dependency list, so a preview re-rendering App kept resetting it. `onClose` is now a `useCallback`.
-  - **The entrance animation is local CSS (`.toast-enter` in `index.css`), not `animate-in slide-in-from-top-2`.** Those are `tailwindcss-animate` utilities; this project runs bare Tailwind 4 with no plugins, so they compiled to nothing and the toast just appeared. It honours `prefers-reduced-motion`.
-  - **`role="status"`, not `role="alert"`.** `alert` carries an implicit `aria-live="assertive"` that fought the explicit `polite`. A kit that filled imperfectly does not warrant interrupting a screen reader mid-sentence.
-- **The settings panel no longer says samples keep their original format.** Removed for layout reasons, not because it stopped being true — trimming still preserves the source rate and bit depth, and untrimmed samples are copied byte-for-byte. Re-add it only if the panel regains the room.
-- **The UI must not state things the app does not know.** Hardcoded device status, firmware version, bit depth and sample rate were all removed because none of them were ever read from anything. The panel reports only what the app actually knows: filled pads, source audio size, the active layout, usable samples against the total. Keep it that way.
-
----
-
-## Verified
-
-A generated bundle loads and plays on an Ableton Move, and the app has been exercised
-in a browser. Everything below is confirmed on real hardware — treat it as settled:
-
-- `$schema` `song/1.7.0/devicePreset.json` is accepted by the device.
-- `Macro0` as an object alongside plain-float `Macro1`–`Macro7` is accepted.
-- `BundleInfo.json` does not break the import.
-- `sampleUri` percent-encoding parses — samples resolve and sound.
-- `STORE`-compressed bundles are readable.
-- **Pad order is right.** Pad 1 in the UI is the bottom-left pad on the device;
-  `DISPLAY_INDICES` bottom-left-origin with `receivingNote: 36 + index` is correct.
-- **Choke groups work.** Hats cut each other, crashes cut each other, rides ring through.
-- **A drum cell's `color` is validated on import but ignored for pad display.** Palette
-  indices 17/12/29/21/24/18/51 were rejected — the bundle would not import. Indices 1-8
-  imported and left every pad the same colour. `5` is what ships. Per-pad colour on the
-  device is not reachable through this field.
-- **Trimming is clean, at both ends.** Trimmed samples match their source apart from
-  the removed silence. `0.001` (-60 dBFS) is below audibility for a decay tail, so
-  trailing trim does not clip percussion.
-- Drag-and-drop and audio preview work in the browser.
-
-Do not "modernise" the `$schema` version, flatten `Macro0`, invert the pad grid or
-change the note mapping on the theory that they look wrong. They were guesses once;
-they are not any more.
-
-## Confirmed by hand, not by the suite
-
-These were verified on the device, but the Node test suite cannot exercise them, so
-nothing will catch a regression except testing on hardware again:
-
-- Drag-and-drop and the directory walk (`getFilesFromDataTransfer`) — needs a browser.
-- Audio preview.
-- **Audition scoping.** Verified in a browser: pressing a pad's Shuffle plays that pad,
-  and generating a full kit afterwards stays silent. This is the invariant the old
-  `shouldPlayOnNextSample` ref broke — it could leave pads armed, so a later generate
-  fired several at once. `Pad` is a component and the runner is Node-only, so only a
-  browser can catch a regression here.
-- The decode half of trimming — `OfflineAudioContext` does not exist in Node. Only
-  `encodeWav` is unit-tested.
-- Whether a bundle still imports on the device at all.
-- **The palette and the per-category pad tint, seen in Chrome** — the empty grid, a full
-  16-pad kit, and the help modal. The categories are distinguishable at a glance, the
-  toast, breakdown card and choke badges read, and the grid id renders as `ksho_ccpp`,
-  which is the letter change confirmed in a browser rather than only in the suite.
-
-  **How, since the suite cannot do it:** `npx vite preview`, then Chrome headless with
-  `--remote-debugging-port`, driven over CDP — `Runtime.evaluate` to dispatch a synthetic
-  `drop` carrying stubbed `webkitGetAsEntry` entries over generated WAV blobs, then
-  `Page.captureScreenshot`. The drop must be dispatched on `#root`'s first element child,
-  not on `window`: the handler is an `onDrop` prop and React listens at the root, which
-  `window` sits above. That is worth keeping — it is the only way to see a *filled* grid
-  without a real sample folder, and the empty grid hides most of what the theme does.
-
-`DISPLAY_INDICES` and the `receivingNote`/`sendingNote` mapping *are* pinned by a test
-now, precisely because a wrong mapping still produces a bundle where every pad sounds —
-it just would not be the pad shown.
-
-## Test coverage
-
-The suite covers kit generation, bundle building, sample detection, preset shape, the
-pad-to-note mapping, choke grouping, kit naming and WAV handling.
