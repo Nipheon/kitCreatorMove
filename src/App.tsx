@@ -393,6 +393,8 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.target instanceof HTMLSelectElement) return;
       if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
+      // Custom toggles (the collection parent eye) expect Space to activate them.
+      if (e.key === ' ' && e.target instanceof HTMLElement && e.target.matches('[role=checkbox],[role=switch],[role=radio],[role=menuitemcheckbox]')) return;
       if (e.repeat) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // The dialog owns the keyboard while it is open: no pad hotkeys, no generating.
