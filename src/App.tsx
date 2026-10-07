@@ -506,11 +506,17 @@ export default function App() {
     if (e.dataTransfer.items) processFiles(e.dataTransfer.items);
   };
 
+  // Pads that stay put keep their roles: without this, dropping the only source of a role
+  // re-derives the grid under pads that did not move. An empty kit holds nothing, and the
+  // empty-library layout must not be held.
+  const heldLayoutFor = () => (kit.some(s => s !== null) ? kitResult.layout : undefined);
+
   const removeFolder = (id: string) => {
     const removed = sourceFolders.find(f => f.id === id);
     const updated = sourceFolders.filter(f => f.id !== id);
     const remaining = enabledSamples(updated);
     const removedIds = new Set(removed?.samples.map(s => s.id) ?? []);
+    const heldLayout = heldLayoutFor();
 
     // Keep every pad whose sample survived; only the emptied ones get refilled.
     const survivors = kit.map((sample, idx) =>
@@ -518,7 +524,7 @@ export default function App() {
     );
 
     const next: KitResult = remaining.length > 0
-      ? generateRandomKit(remaining, survivors, kitOptions)
+      ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
       : {
         kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
         layout: chooseLayout(remaining),
@@ -548,6 +554,7 @@ export default function App() {
     const updated = sourceFolders.map(f => (f.id === id ? { ...f, isEnabled: !willDisable } : f));
     const remaining = enabledSamples(updated);
     const targetIds = new Set(target.samples.map(s => s.id));
+    const heldLayout = heldLayoutFor();
 
     const survivors = kit.map((sample, idx) => {
       if (lockedPads[idx]) return sample;
@@ -558,7 +565,7 @@ export default function App() {
     setSourceFolders(updated);
     setKitResult(
       remaining.length > 0
-        ? generateRandomKit(remaining, survivors, kitOptions)
+        ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
         : {
           kit: survivors.map((s, idx) => (lockedPads[idx] ? s : null)),
           layout: chooseLayout(remaining),
@@ -577,13 +584,14 @@ export default function App() {
     }));
     const remaining = enabledSamples(updated);
     const survivors = kit.map(sample => (sample?.id !== sampleId ? sample : null));
+    const heldLayout = heldLayoutFor();
 
     // The lock belonged to the excluded sample; its replacement was never chosen by the user.
     setLockedPads(prev => prev.map((locked, idx) => (kit[idx]?.id === sampleId ? false : locked)));
     setSourceFolders(updated);
     setKitResult(
       remaining.length > 0
-        ? generateRandomKit(remaining, survivors, kitOptions)
+        ? generateRandomKit(remaining, survivors, kitOptions, heldLayout)
         : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] }
     );
     if (padIndex !== undefined) {

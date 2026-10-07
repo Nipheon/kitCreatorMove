@@ -383,6 +383,14 @@ real packs.
   sharing a name id can still differ on pads 13-16. Accepted — the top row was judged not
   worth the characters. Any check that two grids are genuinely identical must use `id`,
   which is what the settings panel shows.
+- **Removing, disabling or excluding a source keeps the kit's layout.** `removeFolder`,
+  `toggleFolder` and `handleExcludeSample` leave surviving pads in place, so they pass
+  the current `kitResult.layout` as `generateRandomKit`'s fourth argument — otherwise
+  losing the only open hats re-derives the grid under pads that did not move, and roles,
+  warnings and the exported `columnsId` describe a different grid. Availability is still
+  read from the current library, so a role it can no longer fill reports as unavailable.
+  An empty kit passes nothing (the empty-library layout must not be held). Full
+  regenerations (drop, randomize, type/filter toggles) derive a fresh layout on purpose.
 - **The preset prefix is three characters** (`PREFIX_LENGTH` in `kitNaming.ts`), cut down
   from four to make room for the grid id inside the same visible budget.
 

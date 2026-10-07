@@ -150,12 +150,16 @@ function availableRoles(usable: Sample[]): Set<Category> {
 export function generateRandomKit(
   samples: Sample[],
   lockedSamples: (Sample | null)[] = [],
-  options: KitOptions = {}
+  options: KitOptions = {},
+  heldLayout?: PadLayout
 ): KitResult {
   // Filtered before choosing the layout too: a folder of hat loops must not decide
   // which layout the kit uses.
   const usable = samples.filter(s => isUsableSample(s, options));
-  const layout = chooseLayout(usable);
+  // A held layout is for callers that keep pads in place while the library shrinks:
+  // re-deriving it would re-role pads that stay put. Availability below still reads
+  // the current library, so a role it can no longer fill shows as unavailable.
+  const layout = heldLayout ?? chooseLayout(usable);
   const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
 
   const pools: Record<Category, Sample[]> = {

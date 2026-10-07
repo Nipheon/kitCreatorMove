@@ -921,6 +921,49 @@ await test('the four canonical grids', () => {
   assert.equal(clapsOnly.id, 'ksho_cccc');
 });
 
+await test('a held layout is returned as given, and the library still reports what it cannot fill', () => {
+  const many = (n: number, category: Sample['category'], prefix: string) =>
+    Array.from({ length: n }, (_, i) => makeSample(`${prefix}${i}.wav`, category));
+  const core = [...many(13, 'Kick', 'k'), ...many(11, 'Snare', 's'), ...many(12, 'CHH', 'h')];
+  const full = [...core, ...many(1, 'OHH', 'o'), ...many(2, 'Perc', 'p')];
+  const withoutOpen = full.filter(s => s.category !== 'OHH');
+
+  const held = generateRandomKit(full).layout;
+  // The premise: losing the only open hat really does change the derived grid.
+  assert.notEqual(chooseLayout(withoutOpen).id, held.id);
+  assert.equal(held.id, 'ksho_pppp');
+
+  const result = generateRandomKit(withoutOpen, [], {}, held);
+  assert.equal(result.layout, held);
+  assert.equal(result.layout.columnsId, 'ksho');
+  assert.ok(result.unavailableRoles.includes('OHH'));
+  assert.equal(generateRandomKit(withoutOpen).layout.id, chooseLayout(withoutOpen).id);
+});
+
+await test('with a held layout survivors stay put and the emptied pad is refilled for its held role', () => {
+  const many = (n: number, category: Sample['category'], prefix: string) =>
+    Array.from({ length: n }, (_, i) => makeSample(`${prefix}${i}.wav`, category));
+  const core = [...many(13, 'Kick', 'k'), ...many(11, 'Snare', 's'), ...many(12, 'CHH', 'h')];
+  const full = [...core, ...many(1, 'OHH', 'o'), ...many(2, 'Perc', 'p')];
+  const before = generateRandomKit(full);
+  const openIdx = before.kit.findIndex(s => s?.category === 'OHH');
+  assert.ok(openIdx >= 0);
+
+  const withoutOpen = full.filter(s => s.category !== 'OHH');
+  assert.notEqual(chooseLayout(withoutOpen).id, before.layout.id);
+  const survivors = before.kit.map((s, i) => (i === openIdx ? null : s));
+  const after = generateRandomKit(withoutOpen, survivors, {}, before.layout);
+
+  assert.equal(after.layout, before.layout);
+  before.kit.forEach((s, i) => {
+    if (i !== openIdx) assert.equal(after.kit[i], s);
+  });
+  const refilled = after.kit[openIdx];
+  assert.ok(refilled && refilled.category !== 'OHH');
+  assert.ok(after.unavailableRoles.includes('OHH'));
+  assert.equal(new Set(after.kit.map(s => s?.id)).size, after.kit.length);
+});
+
 await test('the grid does not move when the library does', () => {
   // The point of the whole scheme: two packs holding the same kinds of sound lay out
   // identically, however differently sized their pools are.
