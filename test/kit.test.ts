@@ -44,6 +44,7 @@ import {
   PREFIX_LENGTH, prefixForFolders, prefixFromFolderName, safeFileName, SUFFIX_ATTEMPTS,
   uniqueKitName
 } from '../src/utils/kitNaming';
+import { buildPartnerIndex, hatStem, partnerPads } from '../src/utils/hatPartner';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { FULL_HASH_MAX_BYTES, fileSignature, identityOf, sampleIdentity } from '../src/utils/sampleSignature';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from '../src/utils/progressVisibility';
@@ -2422,6 +2423,207 @@ await test('progress indicator: hidden until the check has run past the delay', 
   assert.equal(shouldShowProgress(99, 100), false);
   assert.equal(shouldShowProgress(100, 100), true);
   assert.equal(PROGRESS_DELAY_MS, 250);
+});
+
+// ---- Closed/open hat partners ----
+
+await test('hatStem: names the song, not the numbering or the hat words', () => {
+  assert.equal(hatStem('BlockWatch-Hat.wav'), 'blockwatch');
+  assert.equal(hatStem('BlockWatch-HatOpn.wav'), 'blockwatch');
+  assert.equal(hatStem('LettingGo-Hat.wav'), hatStem('LettingGo-HatOpn.wav'));
+  assert.equal(hatStem('SpacedOut-Hat2.wav'), 'spacedout');
+  assert.equal(hatStem('SpacedOut-Hat.wav'), hatStem('SpacedOut-HatOpn.wav'));
+  assert.equal(hatStem('TakeWhatsMine-Hat.wav'), hatStem('TakeWhatsMine-HatOpn.wav'));
+  assert.equal(hatStem('Watchmen-Hat.wav'), hatStem('Watchmen-HatOpn.wav'));
+  assert.equal(hatStem('Dj_Premier hat 02.wav'), 'djpremier');
+  assert.equal(hatStem('Dj_Premier open hi-hat 3.wav'), 'djpremier');
+  assert.equal(hatStem('Dj_Premier closed hihat.aif'), 'djpremier');
+  assert.equal(hatStem('blockwatchhatopn.wav'), 'blockwatch');
+  assert.equal(hatStem('DJP_HAT_ (19).wav'), 'djp', 'a stem, but one the index rejects as shared');
+});
+
+await test('hatStem: numbering and hat words alone never give a stem', () => {
+  for (const name of ['DPHAT07.wav', 'Hat 02.wav', 'hat.wav', 'Open Hat 1.wav', 'CH 03.wav', '12.wav', 'OH.wav', 'x.wav', '']) {
+    assert.equal(hatStem(name), null, name);
+  }
+});
+
+await test('buildPartnerIndex: pairs closed and open hats on a distinctive stem', () => {
+  const closed = makeSample('BlockWatch-Hat.wav', 'Hat');
+  const closed2 = makeSample('SpacedOut-Hat.wav', 'CHH');
+  const closed3 = makeSample('SpacedOut-Hat2.wav', 'Hat');
+  const open = makeSample('BlockWatch-HatOpn.wav', 'OHH');
+  const open2 = makeSample('SpacedOut-HatOpn.wav', 'OHH');
+  const lonely = makeSample('Lonely-Hat.wav', 'Hat');
+  const index = buildPartnerIndex([closed, closed2, closed3, open, open2, lonely, makeSample('kick.wav', 'Kick')]);
+  assert.deepEqual(index.get(closed.id), [open]);
+  assert.deepEqual(index.get(closed2.id), [open2]);
+  assert.deepEqual(index.get(closed3.id), [open2]);
+  assert.equal(index.has(lonely.id), false);
+  assert.equal(index.has(open.id), false);
+});
+
+await test('buildPartnerIndex: a stem shared by more than three files does not pair, excluded files do not count', () => {
+  const closed = Array.from({ length: 4 }, (_, i) => makeSample(`DJP_HAT_ (${i}).wav`, 'Hat'));
+  const open = [makeSample('DJP_OPEN_HAT_ (1).wav', 'OHH')];
+  assert.equal(buildPartnerIndex([...closed, ...open]).size, 0, '4 closed on one stem');
+
+  const manyOpen = Array.from({ length: 4 }, (_, i) => makeSample(`DJP_OPEN_HAT_ (${i}).wav`, 'OHH'));
+  assert.equal(buildPartnerIndex([closed[0], ...manyOpen]).size, 0, '4 open on one stem');
+  assert.equal(buildPartnerIndex([...closed.slice(0, 3), ...manyOpen.slice(0, 3)]).size, 3, '3 and 3 still pair');
+
+  const a = makeSample('Song-Hat.wav', 'Hat');
+  const b = makeSample('Song-HatOpn.wav', 'OHH');
+  b.isExcluded = true;
+  assert.equal(buildPartnerIndex([a, b]).size, 0, 'excluded open hat');
+  b.isExcluded = false;
+  b.isDuplicate = true;
+  assert.equal(buildPartnerIndex([a, b]).size, 0, 'duplicate open hat');
+});
+
+await test('partnerPads: closed hat pad directly left of an open hat pad in the same row', () => {
+  const base = [makeSample('k.wav', 'Kick'), makeSample('s.wav', 'Snare'), makeSample('h.wav', 'Hat')];
+  const withOpen = chooseLayout([...base, makeSample('o.wav', 'OHH'), makeSample('p.wav', 'Perc')]);
+  assert.equal(withOpen.id, 'ksho_pppp');
+  assert.deepEqual(partnerPads(withOpen), [[2, 3], [6, 7], [10, 11]]);
+  assert.deepEqual(partnerPads(chooseLayout(base)), [], 'kssh has no open hats');
+  assert.deepEqual(partnerPads(chooseLayout([...base, makeSample('p.wav', 'Perc')])), []);
+  // Row ends never pair: index 3 is not next to index 4.
+  const alternating = { preferences: Array.from({ length: PAD_COUNT }, (_, i) => [i % 2 ? 'OHH' : 'CHH'] as Category[]) };
+  assert.deepEqual(partnerPads(alternating).map(([l]) => l), [0, 2, 4, 6, 8, 10, 12, 14].filter(l => l % 4 !== 3));
+});
+
+const MW_STEMS = ['BlockWatch', 'LettingGo', 'SpacedOut', 'TakeWhatsMine', 'Watchmen'];
+function musicWeaponsPool(): { samples: Sample[]; closed: Sample[]; open: Sample[] } {
+  const closed = MW_STEMS.map(s => makeSample(`${s}-Hat.wav`, 'Hat'));
+  closed.push(makeSample('SpacedOut-Hat2.wav', 'Hat'));
+  const open = MW_STEMS.map(s => makeSample(`${s}-HatOpn.wav`, 'OHH'));
+  const samples = [
+    ...closed, ...open,
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`Perc${i}.wav`, 'Perc'))
+  ];
+  return { samples, closed, open };
+}
+const fastIdentity = async (s: Sample) => s.id;
+
+await test('hat partners: the open pad right of a closed hat holds one of its partners (200 draws)', async () => {
+  const { samples, closed } = musicWeaponsPool();
+  const index = buildPartnerIndex(samples);
+  for (let n = 0; n < 200; n++) {
+    const result = await generateRandomKit(samples, [], {}, undefined, { identityOf: fastIdentity });
+    assert.equal(result.layout.id, 'ksho_pppp');
+    const hat = result.kit[2]!;
+    assert.ok(closed.includes(hat));
+    assert.ok(index.get(hat.id)!.includes(result.kit[3]!), `${hat.name} then ${result.kit[3]?.name}`);
+    const ids = result.kit.filter(Boolean).map(s => s!.id);
+    assert.equal(new Set(ids).size, ids.length, 'no sample twice');
+    assert.equal(result.empty.length, 0);
+  }
+});
+
+await test('hat partners: closed hats are not drawn more often because they have partners', async () => {
+  const { samples, closed } = musicWeaponsPool();
+  // Three closed hats with no partner: a bias towards partnered hats would show here.
+  const unpaired = ['Aaa', 'Bbb', 'Ccc'].map(n => makeSample(`${n}-Hat.wav`, 'Hat'));
+  const all = [...samples, ...unpaired];
+  const counts = new Map<string, number>();
+  const draws = 2000;
+  for (let n = 0; n < draws; n++) {
+    const result = await generateRandomKit(all, [], {}, undefined, { identityOf: fastIdentity });
+    const name = result.kit[2]!.name;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const expected = draws / (closed.length + unpaired.length);
+  for (const hat of [...closed, ...unpaired]) {
+    const seen = counts.get(hat.name) ?? 0;
+    assert.ok(seen > expected * 0.6 && seen < expected * 1.4, `${hat.name} drawn ${seen}, expected about ${expected}`);
+  }
+});
+
+await test('hat partners: a locked open pad is never overwritten', async () => {
+  const { samples, open } = musicWeaponsPool();
+  const locks: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  locks[3] = open[0];
+  for (let n = 0; n < 60; n++) {
+    const result = await generateRandomKit(samples, locks, {}, undefined, { identityOf: fastIdentity });
+    assert.equal(result.kit[3], open[0]);
+    const ids = result.kit.filter(Boolean).map(s => s!.id);
+    assert.equal(new Set(ids).size, ids.length);
+  }
+});
+
+await test('hat partners: a locked closed hat pulls its partner onto the open pad', async () => {
+  const { samples, closed, open } = musicWeaponsPool();
+  const locks: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  locks[2] = closed[1]; // LettingGo-Hat
+  for (let n = 0; n < 60; n++) {
+    const result = await generateRandomKit(samples, locks, {}, undefined, { identityOf: fastIdentity });
+    assert.equal(result.kit[2], closed[1]);
+    assert.equal(result.kit[3], open[1]);
+    const ids = result.kit.filter(Boolean).map(s => s!.id);
+    assert.equal(new Set(ids).size, ids.length);
+  }
+});
+
+await test('hat partners: no audio sits on two pads when partners are byte-identical copies', async () => {
+  const { samples, open } = musicWeaponsPool();
+  const copy = makeSample('BlockWatch-HatOpn.wav', 'OHH', 'same bytes');
+  const twin = makeSample('LettingGo-HatOpn.wav', 'OHH', 'same bytes');
+  const withTwins = [...samples.filter(s => s !== open[0] && s !== open[1]), copy, twin];
+  for (let n = 0; n < 80; n++) {
+    const result = await generateRandomKit(withTwins);
+    const identities = new Set<string>();
+    for (const s of result.kit) if (s) identities.add(await identityOf(s));
+    assert.equal(identities.size, result.kit.filter(Boolean).length, 'distinct audio on every pad');
+    for (const s of withTwins) s.isDuplicate = false;
+  }
+});
+
+await test('hat partners: a library without pairs draws as before', async () => {
+  const plain = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 5 }, (_, i) => makeSample(`hat ${i}.wav`, 'Hat')),
+    ...Array.from({ length: 5 }, (_, i) => makeSample(`open hat ${i}.wav`, 'OHH')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`perc${i}.wav`, 'Perc'))
+  ];
+  assert.equal(buildPartnerIndex(plain).size, 0);
+  const result = await generateRandomKit(plain);
+  assert.equal(result.empty.length, 0);
+  assert.deepEqual(result.kit.slice(0, 4).map(s => s!.category), ['Kick', 'Snare', 'Hat', 'OHH']);
+});
+
+await test('hat partners: rerolling a closed hat re-applies the rule, rerolling the open pad does not force it', async () => {
+  const { samples } = musicWeaponsPool();
+  const index = buildPartnerIndex(samples);
+  let kitResult = await generateRandomKit(samples, [], {}, undefined, { identityOf: fastIdentity });
+  for (let n = 0; n < 60; n++) {
+    const next = await rerollSinglePad(samples, kitResult.kit, 2, {}, kitResult.layout, { identityOf: fastIdentity });
+    const hat = next.kit[2]!;
+    assert.ok(index.get(hat.id)!.includes(next.kit[3]!), `${hat.name} then ${next.kit[3]?.name}`);
+    const ids = next.kit.filter(Boolean).map(s => s!.id);
+    assert.equal(new Set(ids).size, ids.length);
+    kitResult = next;
+  }
+
+  const locked = new Array(PAD_COUNT).fill(false);
+  locked[3] = true;
+  const start = await generateRandomKit(samples, [], {}, undefined, { identityOf: fastIdentity });
+  for (let n = 0; n < 20; n++) {
+    const next = await rerollSinglePad(samples, start.kit, 2, {}, start.layout, { identityOf: fastIdentity, lockedPads: locked });
+    assert.equal(next.kit[3], start.kit[3], 'locked open pad untouched');
+  }
+
+  let notPartner = 0;
+  for (let n = 0; n < 60; n++) {
+    const next = await rerollSinglePad(samples, start.kit, 3, {}, start.layout, { identityOf: fastIdentity });
+    assert.equal(next.kit[2], start.kit[2], 'closed hat untouched');
+    assert.notEqual(next.kit[3], start.kit[3]);
+    if (!index.get(next.kit[2]!.id)!.includes(next.kit[3]!)) notPartner++;
+  }
+  assert.ok(notPartner > 0, 'rerolling the open pad draws as usual');
 });
 
 if (failures > 0) {

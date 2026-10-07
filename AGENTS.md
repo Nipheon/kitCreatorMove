@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,progressVisibility,sampleSignature,scanProgress,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,hatPartner,kitGenerator,kitNaming,progressVisibility,sampleSignature,scanProgress,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -347,6 +347,28 @@ rule exists because a simpler version broke on real packs.
   differently).
 - **Shuffle never returns the pad's own sample**: it excludes the current sample and walks the preference chain. Only if the library
   holds nothing else does the pad keep it; shuffling must never empty a pad.
+- **Hat partners (`utils/hatPartner.ts`, applied at the end of `generateRandomKit` and in `rerollSinglePad`).** Sample packs ship
+  closed/open pairs with matching names (`BlockWatch-Hat` + `BlockWatch-HatOpn`). Closed hats are drawn exactly as before, with NO bias
+  towards ones that have partners (a test compares 2000 draws against a uniform expectation); afterwards, if the closed hat on a pad
+  has a partner open hat, the open-hat pad immediately to its right takes one. **Stem:** `hatStem` is the file name without extension,
+  split at separators, camelCase and letter/digit boundaries, with every number and the words open/opn/oh/ohh/closed/close/clsd/ch/
+  chh/hat/hats/hh/hihat (also "hi hat") removed, also when glued to another word (`DPHAT07`), lower-cased and joined; null unless a
+  remaining word has 3+ letters, so numbering alone never pairs (`Hat 02`, `DPHAT07`). **Distinctive stems only:** `buildPartnerIndex`
+  rejects a stem shared by more than 3 closed or more than 3 open files (`MAX_FILES_PER_STEM`): `DJP_HAT_ (19)` and its dozens of
+  siblings share the prefix `djp`, which names a pack, not a pair. **Name-only on purpose:** no audio is read or hashed, folders are
+  not used, so it costs nothing on a big library (stems are cached per sample; the index is built per draw from the usable samples,
+  and only when the layout has an adjacent pair). **Adjacency:** `partnerPads(layout)` reads the real grid: pad i pairs with i + 1
+  only when `i % 4 !== 3` and `preferences[i][0]` is CHH/Hat and `preferences[i+1][0]` is OHH. In `ksho_pppp` that is three pairs, one
+  per column-3/4 row (index 2->3, 6->7, 10->11); `kssh` has none. **Fix-up, not inline:** a closed hat can be placed in pass 1 (own
+  sound) or pass 2 (substitute), so the rule runs once on the finished fill, pairs in index order; the two-pass order is untouched.
+  The open pad takes a partner from the OHH pool (same lazy `identityOf` check as any draw, a repeat is flagged `isDuplicate` and
+  skipped) or, when the draw already put that partner on another unlocked open-hat pad, the two pads swap contents (no sample on two
+  pads); the sample that leaves goes back to its pool. Pads of an earlier pair that already hold their own partner are not raided, so
+  with two closed hats sharing one partner (`SpacedOut-Hat`, `SpacedOut-Hat2`) the lower pad wins. No usable partner: the pad keeps
+  what it has. **Locks:** a locked open pad is never overwritten; a locked closed hat still pulls its partner onto an unlocked open
+  pad. **Reroll:** rerolling a closed-hat pad re-applies the rule to the pad on its right unless that pad is locked (`lockedPads`
+  travels in the last argument, `DrawHooks`); rerolling an open pad draws as before. `substituted`/`empty` are computed on the
+  final kit. Enforced by tests in `test/kit.test.ts`.
 - **Hats choke in group 1, crashes in group 2.** Rides and a bare "cymbal" stay percussion and unchoked.
 - **Empty pads are deliberately not lockable**, asserted explicitly on the lock button.
 - **The pad is a plain `<div>` with a separate play `<button>` filling it, and lock/shuffle/exclude are sibling buttons**, so no

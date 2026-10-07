@@ -2,6 +2,7 @@ import {
   chooseLayout, drawGroupFor, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
 } from '../padLayout';
 import { Category, Sample } from '../types';
+import { buildPartnerIndex, partnerPads } from './hatPartner';
 import { identityOf } from './sampleSignature';
 
 export interface KitResult {
@@ -81,6 +82,8 @@ export interface DrawHooks {
   identityOf?: IdentityFn;
   /** Called with (pads decided, pads to fill); the last call has checked === total. */
   onProgress?: (checked: number, total: number) => void;
+  /** Single-pad reroll only: which pads are locked, so a closed-hat reroll never overwrites a locked open pad. */
+  lockedPads?: readonly boolean[];
 }
 
 /**
@@ -124,6 +127,78 @@ async function drawDeepest(
     const found = await claimFrom(pools[deepest], used, identity);
     if (found) return found;
   }
+}
+
+interface PartnerContext {
+  kit: (Sample | null)[];
+  pools: Record<Category, Sample[]>;
+  used: Set<string>;
+  identity: IdentityFn;
+  index: Map<string, Sample[]>;
+  pairs: [number, number][];
+  layout: PadLayout;
+  isLocked: (pad: number) => boolean;
+}
+
+/** True when the pad on the right already holds a partner of the closed hat on the left. */
+function holdsPartner(ctx: PartnerContext, [left, right]: [number, number]): boolean {
+  const closed = ctx.kit[left];
+  const open = ctx.kit[right];
+  return !!closed && !!open && !!ctx.index.get(closed.id)?.some(p => p.id === open.id);
+}
+
+/**
+ * The closed-hat/open-hat partner rule for one pad pair: when the closed hat on `left` has
+ * partners, the unlocked open-hat pad on `right` takes one. The closed hat was drawn exactly
+ * as without the rule, so partnered hats get no extra weight.
+ *
+ * A partner comes from the open-hat pool (same identity check as every draw, a repeat is flagged
+ * `isDuplicate`) or, when the draw already put it on another unlocked open-hat pad, by swapping
+ * the two pads' contents, so no sample is ever on two pads. Pads of an earlier pair that already
+ * hold a partner of their own closed hat are not raided (the lowest pad wins a shared partner). The sample that leaves `right` goes back to its pool.
+ * Does nothing (the pad keeps what it has) when no partner is usable.
+ */
+async function applyPartnerRule(ctx: PartnerContext, pair: [number, number]): Promise<void> {
+  const [left, right] = pair;
+  const ownIndex = ctx.pairs.findIndex(p => p[0] === left);
+  const { kit, pools, used, identity, index, pairs, layout } = ctx;
+  const closed = kit[left];
+  if (!closed || poolCategoryFor(closed) !== 'CHH' || ctx.isLocked(right)) return;
+  const partners = index.get(closed.id);
+  if (!partners || partners.length === 0 || holdsPartner(ctx, pair)) return;
+
+  const candidates = [...partners];
+  shuffle(candidates);
+  const previous = kit[right];
+  const previousIdentity = previous ? await identity(previous) : null;
+  if (previousIdentity !== null) used.delete(previousIdentity);
+
+  for (const candidate of candidates) {
+    if (candidate.isDuplicate) continue;
+    const poolAt = pools.OHH.indexOf(candidate);
+    if (poolAt >= 0) {
+      const id = await identity(candidate);
+      pools.OHH.splice(poolAt, 1);
+      if (used.has(id)) { candidate.isDuplicate = true; continue; }
+      used.add(id);
+      kit[right] = candidate;
+      if (previous) {
+        const back = pools[poolCategoryFor(previous)];
+        back.splice(Math.floor(Math.random() * (back.length + 1)), 0, previous);
+      }
+      return;
+    }
+    if (!previous) continue;
+    const from = kit.findIndex((s, j) => j !== right && s?.id === candidate.id);
+    if (from < 0 || ctx.isLocked(from) || layout.preferences[from]?.[0] !== 'OHH') continue;
+    // Only earlier pairs are protected: the lowest pad wins when two closed hats share a partner.
+    if (pairs.some((p, k) => k < ownIndex && p[1] === from && holdsPartner(ctx, p))) continue;
+    kit[from] = previous;
+    kit[right] = candidate;
+    break;
+  }
+  // Swapped or untouched: the previous sample is still on a pad, so its audio stays claimed.
+  if (previousIdentity !== null) used.add(previousIdentity);
 }
 
 /**
@@ -304,6 +379,22 @@ export async function generateRandomKit(
     tick();
   }
 
+  /**
+   * Hat partners, last: a closed hat can land in either pass, so the rule runs on the finished
+   * fill rather than inside one of them. The two-pass order is untouched; this only trades the
+   * open-hat pad on the right of a closed hat for one of its partners.
+   */
+  const pairs = partnerPads(layout);
+  if (pairs.length > 0) {
+    const index = buildPartnerIndex([...usable, ...lockedSamples.filter((s): s is Sample => !!s && !usable.includes(s))]);
+    if (index.size > 0) {
+      const ctx: PartnerContext = {
+        kit, pools, used, identity, index, pairs, layout, isLocked: pad => !!lockedSamples[pad]
+      };
+      for (const pair of pairs) await applyPartnerRule(ctx, pair);
+    }
+  }
+
   const result: KitResult = { kit, layout, ...summarisePads(kit, layout, availableRoles(usable)) };
   if (lockedDuplicates.length > 0) result.lockedDuplicates = lockedDuplicates;
   return result;
@@ -324,7 +415,7 @@ export async function rerollSinglePad(
   targetIndex: number,
   options: KitOptions = {},
   layout?: PadLayout,
-  { identityOf: identity = identityOf, onProgress }: DrawHooks = {}
+  { identityOf: identity = identityOf, onProgress, lockedPads }: DrawHooks = {}
 ): Promise<KitResult> {
   if (targetIndex < 0 || targetIndex >= PAD_COUNT) {
     return {
@@ -377,6 +468,19 @@ export async function rerollSinglePad(
 
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;
+
+  // A re-rolled closed hat pulls its partner onto the open-hat pad on its right; re-rolling the
+  // open pad itself draws as usual.
+  const pair = chosenSample ? partnerPads(heldLayout).find(([left]) => left === targetIndex) : undefined;
+  if (pair) {
+    const index = buildPartnerIndex(usable);
+    if (index.size > 0) {
+      await applyPartnerRule({
+        kit: nextKit, pools, used, identity, index, pairs: partnerPads(heldLayout), layout: heldLayout,
+        isLocked: pad => !!lockedPads?.[pad]
+      }, pair);
+    }
+  }
 
   return { kit: nextKit, layout: heldLayout, ...summarisePads(nextKit, heldLayout, availableRoles(usable)) };
 }

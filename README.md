@@ -12,6 +12,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🎛️ **Derived 4×4 Pad Grid**: The grid is built from the categories your library actually holds rather than picked from a fixed list. Up to four categories take a full-height column each; a fifth and beyond share the top row. Mapped to hardware MIDI notes 36–51 (Pad 1 = bottom-left).
 - 🆔 **Grid IDs**: Every grid gets a short fingerprint of its arrangement — `ksho` for Kick / Snare / Closed / Open, `ksho_ccpp` when claps and percussion share the top row. Kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device. The ID travels in the exported kit name.
 - 👁️ **Disable a Type**: Every row of the Breakdown by Type card has an eye icon. Switch a type off and every sample of it is left out of generation and the grid drops that column — the same idea as disabling a source folder. Rows are pools, so closed hats take generic hats with them and percussion takes crashes.
+- 🥁 **Hat Pairs**: Packs that ship matching closed and open hats (`BlockWatch-Hat.wav` and `BlockWatch-HatOpn.wav`) keep them together: a drawn closed hat puts its open partner on the open-hat pad directly to its right. Matched by file name only (numbers and shared pack prefixes never pair); closed hats are drawn as usual and locked pads are left alone.
 - 🔇 **Automatic Choking**: Hats choke each other (Choke Group 1), crashes choke each other (Choke Group 2). Rides are deliberately left to ring out.
 - 🔒 **Pad Locking & Single Reroll**: Lock pads to hold sounds while randomising the rest, or reroll individual pads on demand.
 - 🎹 **Keyboard Hotkeys**: Audition pads using grid row keys (`1 2 3 4`, `Q W E R`, `A S D F`, `Z X C V`); `Space` generates a new kit unless a field has focus or the manual is open. Ticking **Auto Preview** previews the current kit at once.
@@ -91,6 +92,7 @@ src/
     exporter.ts          # JSZip bundle, separate-file and zip batch export
     fileReader.ts        # Sample classification & folder parsing
     folderMerge.ts       # Folder de-duplication across drops
+    hatPartner.ts        # Closed/open hat pairs by file name
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit names, held layouts and batch building
     progressVisibility.ts # When the duplicate-check progress indicator may appear
