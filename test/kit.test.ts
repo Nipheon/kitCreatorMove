@@ -40,6 +40,7 @@ import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
   prefixFromFolderName, safeFileName, uniqueKitName
 } from '../src/utils/kitNaming';
+import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -1814,6 +1815,20 @@ await test('dedupe: same name+size but different content no longer collides; ide
   base[0] = a;
   const r = rerollSinglePad([a, b, aCopy], base, 5);
   assert.ok(r.kit[5] === null || r.kit[5]!.id === b.id);
+});
+
+await test('mergeScannedFolders merges against the current list', () => {
+  const scanned = [{ name: 'Kicks' }, { name: 'Snares' }];
+  // A folder removed during the scan can be dropped again.
+  assert.deepEqual(mergeScannedFolders([], scanned), { accepted: scanned, skippedDuplicates: 0 });
+  // A folder added during the scan is a duplicate now.
+  const r = mergeScannedFolders([{ name: 'kicks' }], scanned);
+  assert.deepEqual(r.accepted, [{ name: 'Snares' }]);
+  assert.equal(r.skippedDuplicates, 1);
+  // The same name twice in one drop counts once.
+  const twice = mergeScannedFolders([], [{ name: 'A' }, { name: 'a' }]);
+  assert.equal(twice.accepted.length, 1);
+  assert.equal(twice.skippedDuplicates, 1);
 });
 
 if (failures > 0) {

@@ -11,6 +11,7 @@ import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
   categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
 } from './utils/fileReader';
+import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { fileSignature } from './utils/sampleSignature';
 import {
@@ -415,24 +416,26 @@ export default function App() {
     if (dragDepth.current === 0) setIsDragging(false);
   };
 
+  // The newest committed state, for code that resumes after an await and would otherwise
+  // read the values captured when the drop started.
+  const latest = useRef({ sourceFolders, kit, lockedPads, kitOptions, prefixEdited });
+  latest.current = { sourceFolders, kit, lockedPads, kitOptions, prefixEdited };
+
   const processFiles = async (items: DataTransferItemList) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const folderData = await getFilesFromDataTransfer(items);
+      const scanned = await getFilesFromDataTransfer(items);
+      // Read after the await: the scan may have outlived edits made through the keyboard.
+      const current = latest.current;
+      const candidates = scanned
+        .map(folder => ({ name: folder.name || 'Dropped Files', files: folder.files }))
+        .filter(folder => folder.files.length > 0);
+      const { accepted, skippedDuplicates } = mergeScannedFolders(current.sourceFolders, candidates);
       const newFolders: SourceFolder[] = [];
-      const existingFolderNames = new Set(sourceFolders.map(f => f.name.toLowerCase()));
 
-      let skippedDuplicates = 0;
-
-      for (const folder of folderData) {
-        const folderName = folder.name || 'Dropped Files';
-        if (existingFolderNames.has(folderName.toLowerCase())) {
-          skippedDuplicates++;
-          continue;
-        }
-
+      for (const folder of accepted) {
         const samples: Sample[] = [];
         for (const { file, path } of folder.files) {
           const url = URL.createObjectURL(file);
@@ -453,15 +456,12 @@ export default function App() {
           });
         }
 
-        if (samples.length > 0) {
-          newFolders.push({
-            id: newId('folder'),
-            name: folderName,
-            isEnabled: true,
-            samples
-          });
-          existingFolderNames.add(folderName.toLowerCase());
-        }
+        newFolders.push({
+          id: newId('folder'),
+          name: folder.name,
+          isEnabled: true,
+          samples
+        });
       }
 
       if (newFolders.length === 0) {
@@ -478,15 +478,19 @@ export default function App() {
 
       // Computed outside the state updater: updaters must stay pure, and StrictMode
       // double-invokes them.
-      const wasEmpty = sourceFolders.length === 0;
-      const updated = [...sourceFolders, ...newFolders];
+      const wasEmpty = current.sourceFolders.length === 0;
+      const updated = [...current.sourceFolders, ...newFolders];
       const allSamples = enabledSamples(updated);
 
       setSourceFolders(updated);
       if (allSamples.length > 0) {
-        setKitResult(generateRandomKit(allSamples, lockedFrom(kit), kitOptions));
+        setKitResult(generateRandomKit(
+          allSamples,
+          current.lockedPads.map((locked, idx) => (locked ? current.kit[idx] : null)),
+          current.kitOptions
+        ));
       }
-      syncPrefix(updated);
+      if (!current.prefixEdited) setKitPrefix(prefixForFolders(updated));
       // The suffix is only rolled for the first drop; after that it is the user's,
       // changed by the Randomize Suffix button.
       if (wasEmpty) setKitSuffix(generateKitName(newFolders[0].name).suffix);
@@ -499,7 +503,8 @@ export default function App() {
   };
 
   // Deliberately not memoised: a stale closure here would make every drop after the
-  // first build its kit from that folder alone and ignore locked pads.
+  // first build its kit from that folder alone and ignore locked pads. processFiles reads
+  // `latest` after its scan, so changes made while it ran are kept.
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     dragDepth.current = 0;
