@@ -45,6 +45,7 @@ import {
   uniqueKitName
 } from '../src/utils/kitNaming';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
+import { computeSignaturesInBackground } from '../src/utils/signatureScheduler';
 import { FULL_HASH_MAX_BYTES, fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -1902,6 +1903,39 @@ await test('content identity: leading and trailing silence is ignored, gain and 
   assert.notEqual(await sig(a), await sig(buildWav(pcm({ bits: 24 }), { bits: 24 })));
   assert.equal(await sig(buildWav(new Uint8Array(400))), await sig(buildWav(new Uint8Array(900), { before: [['LIST', 8]] })));
   assert.notEqual(await sig(buildWav(new Uint8Array(400))), await sig(buildWav(new Uint8Array(400), { rate: 48000 })));
+});
+
+await test('background signatures: fill every sample, yield between batches, skip removed ones', async () => {
+  const mk = (n: number) => {
+    const s = makeSample(`Hat${n}.wav`, 'OHH', '');
+    s.file = new File([buildWav(pcm({ gain: 0.2 + n / 20 }))], s.name, { type: 'audio/wav' });
+    return s;
+  };
+  const samples = [0, 1, 2, 3, 4].map(mk);
+  const fallback = samples.map(sampleIdentity);
+  assert.ok(fallback.every((id, i) => id === `${samples[i].name}-${samples[i].file.size}`));
+  let yields = 0;
+  const removed = new Set([samples[3].id]);
+  await computeSignaturesInBackground(samples, {
+    batch: 1,
+    yieldFn: async () => { yields++; },
+    isAlive: s => !removed.has(s.id)
+  });
+  assert.equal(yields, 5);
+  assert.deepEqual(samples.map(s => s.signature !== undefined), [true, true, true, false, true]);
+  assert.equal(samples[3].signature, undefined);
+  assert.equal(sampleIdentity(samples[0]), samples[0].signature);
+  assert.equal(new Set(samples.filter(s => s.signature).map(sampleIdentity)).size, 4);
+  // Already-signed samples are not recomputed.
+  let calls = 0;
+  await computeSignaturesInBackground(samples, { yieldFn: async () => {}, compute: async () => { calls++; return 'x'; } });
+  assert.equal(calls, 1);
+  // The scheduler only yields between steps: nothing is hashed before the first yield.
+  const fresh = mk(9);
+  let hashedBeforeYield = true;
+  await computeSignaturesInBackground([fresh], { yieldFn: async () => { hashedBeforeYield = fresh.signature !== undefined; } });
+  assert.equal(hashedBeforeYield, false);
+  assert.ok(fresh.signature);
 });
 
 await test('content identity: audio above the cap hashes length plus head and tail', async () => {

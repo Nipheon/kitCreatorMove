@@ -8,7 +8,7 @@ export interface Sample {
   category: Category;
   url: string; // Object URL for preview
   isExcluded?: boolean;
-  /** Hash of the audio content; see `fileSignature`. Used to dedupe. */
+  /** Hash of the audio content; see `fileSignature`. Used to dedupe. Filled in place in the background after a drop. */
   signature?: string;
   /** Looks like a bar of music rather than a one-shot — skipped unless asked for. */
   isLoop?: boolean;

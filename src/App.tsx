@@ -14,7 +14,7 @@ import {
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
-import { fileSignature } from './utils/sampleSignature';
+import { computeSignaturesInBackground } from './utils/signatureScheduler';
 import {
   buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
   lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
@@ -475,12 +475,7 @@ export default function App() {
 
       for (const folder of accepted) {
         const samples: Sample[] = [];
-        const signatures: string[] = [];
-        // Bounded parallel: hashing reads each file's audio, so overlap the I/O without opening thousands at once.
-        for (let i = 0; i < folder.files.length; i += 8) {
-          signatures.push(...await Promise.all(folder.files.slice(i, i + 8).map(f => fileSignature(f.file))));
-        }
-        for (const [index, { file, path }] of folder.files.entries()) {
+        for (const { file, path } of folder.files) {
           const url = URL.createObjectURL(file);
 
           const category = categorizeSample(file.name, path);
@@ -494,8 +489,7 @@ export default function App() {
             // categoriser placed — a snare named "Break Snare" is still a snare.
             isLoop: looksLikeLoop(file.name, path, category),
             isNonDrum: looksNonDrum(category, file.name, path),
-            url,
-            signature: signatures[index]
+            url
           });
         }
 
@@ -534,6 +528,12 @@ export default function App() {
           current.lockedPads.map((locked, idx) => (locked ? current.kit[idx] : null)),
           current.kitOptions
         ));
+      }
+      // Content signatures are filled in afterwards, off the drop's critical path.
+      for (const folder of newFolders) {
+        void computeSignaturesInBackground(folder.samples, {
+          isAlive: () => latest.current.sourceFolders.some(f => f.id === folder.id)
+        });
       }
       if (!current.prefixEdited) setKitPrefix(prefixForFolders(updated));
       // The suffix is only rolled for the first drop; after that it is the user's,

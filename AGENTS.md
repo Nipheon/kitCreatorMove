@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,sampleSignature,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,sampleSignature,signatureScheduler,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -185,7 +185,11 @@ rule exists because a simpler version broke on real packs.
   ADPCM) hashes the whole `data` chunk plus the fmt essentials; AIFF and anything unparseable or truncated hashes the whole file,
   so AIFF copies with different metadata do not match. Hashed spans up to `FULL_HASH_MAX_BYTES` (1 MiB) are hashed whole, above
   it the length plus the first and last `EDGE_HASH_BYTES` (64 KB). The chunk walk uses `blob.slice` so a large LIST chunk or data
-  chunk is never loaded just to find it. `processFiles` computes signatures once per sample, 8 files at a time. **Both dedupe sites
+  chunk is never loaded just to find it. `processFiles` never awaits signatures: samples are created without one and `utils/signatureScheduler.ts`
+  (`computeSignaturesInBackground`) fills `Sample.signature` in place afterwards, 4 files per step with a yield to the event loop
+  between steps, skipping samples whose folder was removed (in-place mutation is deliberate: nothing renders from it, generation reads
+  it at call time). Until it is set `sampleIdentity` falls back to `name-size`, so a kit generated right after a drop can still hold
+  a duplicate pair; generation stays synchronous. **Both dedupe sites
   in `kitGenerator.ts` (full generate and single-pad reroll) must use it**, so they cannot drift. The set is rebuilt in folder
   order and keeps the first occurrence, not the best categorised, which is only safe while both copies categorise identically: a
   file that only one folder can explain is still at the mercy of list order. Accepted cost is silent variety loss, never a wrong

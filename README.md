@@ -94,6 +94,7 @@ src/
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit names, held layouts and batch building
     sampleSignature.ts   # Audio-content signature used to de-duplicate samples
+    signatureScheduler.ts # Computes those signatures in the background after a drop
     wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
 test/
   kit.test.ts           # Kit, naming, export and detection tests
