@@ -190,7 +190,7 @@ test('prefix across collections, or a collection plus a plain folder, is the mul
 // --- grouping, tri-state, multi-id plans -----------------------------------------------------
 
 const sample = (id: string): Sample =>
-  ({ id, file: new File([], `${id}.wav`), name: `${id}.wav`, category: 'Kick', url: '' });
+  ({ id, file: new File([], `${id}.wav`), name: `${id}.wav`, category: 'Kick', kind: 'kick', url: '' });
 const withSamples = (f: SourceFolder, ...ids: string[]): SourceFolder => ({ ...f, samples: ids.map(sample) });
 
 test('groupFolders keeps plain folders as they are and gathers siblings under one collection', () => {

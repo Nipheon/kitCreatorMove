@@ -29,12 +29,13 @@ import {
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
+import { defaultKind, KIND_LABELS, kindBelongsTo, kindsOf, KINDS_BY_CATEGORY, SampleKind } from '../src/utils/kinds';
 import {
   createPresetBundle, DOWNLOAD_GAP_MS, ExportError, exportBatchKits, exportBatchSeparately, isOutOfMemory,
   REVOKE_DELAY_MS
 } from '../src/utils/exporter';
 import {
-  categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
+  categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum
 } from '../src/utils/fileReader';
 import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, rerollSinglePad
@@ -58,6 +59,7 @@ const makeSample = (name: string, category: Sample['category'], body = name): Sa
   file: new File([body], name, { type: 'audio/wav' }),
   name,
   category,
+  kind: defaultKind(category),
   url: `blob:fake/${name}`
 });
 
@@ -2862,6 +2864,137 @@ await test('hat partners: rerolling a closed hat re-applies the rule, rerolling 
     if (!index.get(next.kit[2]!.id)!.includes(next.kit[3]!)) notPartner++;
   }
   assert.ok(notPartner > 0, 'rerolling the open pad draws as usual');
+});
+
+// --- sample kinds ---------------------------------------------------------------------------
+
+const ALL_CATEGORIES = Object.keys(KINDS_BY_CATEGORY) as Category[];
+
+await test('kinds: taxonomy is well formed', () => {
+  const all = new Set<SampleKind>();
+  for (const category of ALL_CATEGORIES) {
+    assert.ok(kindsOf(category).length > 0, category);
+    assert.ok(kindsOf(category).includes(defaultKind(category)), `${category} default is one of its kinds`);
+    for (const kind of kindsOf(category)) {
+      assert.ok(!all.has(kind), `${kind} belongs to one category only`);
+      all.add(kind);
+      assert.ok(kindBelongsTo(kind, category));
+    }
+  }
+  assert.deepEqual([...all].sort(), (Object.keys(KIND_LABELS) as SampleKind[]).sort(), 'every kind has a label, no label is spare');
+  for (const [kind, label] of Object.entries(KIND_LABELS)) assert.ok(label.length > 0 && label.length <= 9, `${kind} label "${label}" fits a pad header`);
+});
+
+await test('kinds: exact real names from the owner libraries', () => {
+  const cases: [string, Category, SampleKind][] = [
+    ['Kick_46.wav', 'Kick', 'kick'], ['BA9614m_Bd.wav', 'Kick', 'kick'], ['808_10.wav', 'Kick', '808'], ['Uzi 808.wav', 'Kick', '808'],
+    ['SNARE_07_20.wav', 'Snare', 'snare'], ['909Rim01-1.wav', 'Snare', 'rimshot'], ['RIM127.WAV', 'Snare', 'rimshot'],
+    ['VEH1 House Rimshot - 17.wav', 'Snare', 'rimshot'], ['sidestick_F#3.wav', 'Snare', 'sidestick'], ['DHitB-Sidestick02.wav', 'Snare', 'sidestick'],
+    ['Shawty Redd Clap 3.wav', 'Clap', 'clap'], ['klp02tt1.wav', 'Clap', 'clap'], ['Snap 3.wav', 'Clap', 'snap'], ['D2 SNAP-13.wav', 'Clap', 'snap'],
+    ['Closed HiHat-313.wav', 'CHH', 'closed'], ['808CHH02-1.wav', 'CHH', 'closed'], ['Open HiHat-072.wav', 'OHH', 'open'],
+    ['KENNY BEATS HI HAT 44.wav', 'Hat', 'hat'], ['DrHH44.wav', 'Hat', 'hat'],
+    ['SYNTHWAVE CRASH (1).WAV', 'Crash', 'crash'], ['Bld_Crs.wav', 'Crash', 'crash'], ['CYMRIDE33.wav', 'Crash', 'ride'],
+    ['ride or wrong_19.wav', 'Crash', 'ride'], ['Cymbals_01_V15.wav', 'Crash', 'cymbal'], ['JJ - SplashRev.wav', 'Crash', 'cymbal'],
+    ['Tom_05.wav', 'Perc', 'tom'], ['JMX_Toms_72.wav', 'Perc', 'tom'], ['CONGA 6.wav', 'Perc', 'conga'], ['808MC2_Orig.wav', 'Perc', 'conga'],
+    ['bongos_13.wav', 'Perc', 'bongo'], ['220 COWBELL.wav', 'Perc', 'cowbell'], ['808O56CB11.wav', 'Perc', 'cowbell'],
+    ['Shaker Afr_104.WAV', 'Perc', 'shaker'], ['EA-Tamb 01.aif', 'Perc', 'tambourine'], ['Plastic Tambourine One shots-9.wav', 'Perc', 'tambourine'],
+    ['Triangle (5).wav', 'Perc', 'triangle'], ['Harmonic Clave.wav', 'Perc', 'woodblock'], ['AOW CL.WAV', 'Perc', 'woodblock'],
+    ['PERCUSSION_1334.wav', 'Perc', 'percussion'], ['Djembe Open Slap Low.wav', 'Perc', 'percussion'],
+    ['AKWF_1161.wav', 'Other', 'other']
+  ];
+  for (const [name, category, kind] of cases) {
+    assert.deepEqual(classifySample(name), { category, kind }, name);
+    assert.equal(categorizeSample(name), category, `${name}: the wrapper returns the category`);
+  }
+});
+
+await test('kinds: phrases, glued spellings and the weak words', () => {
+  assert.deepEqual(classifySample('Side Stick 2.wav'), { category: 'Snare', kind: 'sidestick' });
+  assert.deepEqual(classifySample('cross stick.wav'), { category: 'Snare', kind: 'sidestick' });
+  assert.deepEqual(classifySample('Wood Block.wav'), { category: 'Perc', kind: 'woodblock' });
+  assert.deepEqual(classifySample('Finger Snap.wav'), { category: 'Clap', kind: 'snap' });
+  assert.deepEqual(classifySample('Hand Clap.wav'), { category: 'Clap', kind: 'clap' });
+  assert.deepEqual(classifySample('Bass Drum 3.wav'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(classifySample('808 Clap.wav'), { category: 'Clap', kind: 'clap' }, '808 only decides when nothing else does');
+  assert.deepEqual(classifySample('808 Kick.wav'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(classifySample('Shaking A Full Unopened Coca Cola Can.wav'), { category: 'Perc', kind: 'shaker' });
+  assert.deepEqual(classifySample('OHat.wav'), { category: 'OHH', kind: 'open' });
+  assert.deepEqual(classifySample('100 OP HAT.wav'), { category: 'OHH', kind: 'open' }, 'op hat');
+  assert.deepEqual(classifySample('Crash Cymbal.wav'), { category: 'Crash', kind: 'crash' }, 'the specific word beats cymbal');
+  assert.deepEqual(classifySample('Ride Cymbal.wav'), { category: 'Crash', kind: 'ride' });
+  assert.deepEqual(classifySample('Snap Clap.wav'), { category: 'Clap', kind: 'clap' }, 'a clap word beats snap');
+  assert.deepEqual(classifySample('Perc Shaker.wav'), { category: 'Perc', kind: 'shaker' }, 'the specific word beats perc');
+  assert.deepEqual(classifySample('bdc.wav'), { category: 'Kick', kind: 'kick' }, 'variant codes take the category default');
+  assert.deepEqual(classifySample('WhatEver.wav'), { category: 'Other', kind: 'other' });
+  assert.equal(classifySample('Custom Loop.wav').kind, 'other', 'tom inside custom is no tom');
+});
+
+await test('kinds: a folder gives the kind when it decided the category, or sharpens a weak name', () => {
+  const sample = (name: string, dir: string) => classifySample(name, dir);
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Toms'), { category: 'Perc', kind: 'tom' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Shakers'), { category: 'Perc', kind: 'shaker' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Rides'), { category: 'Crash', kind: 'ride' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Cymbals'), { category: 'Crash', kind: 'cymbal' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Snaps'), { category: 'Clap', kind: 'snap' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/808s'), { category: 'Kick', kind: '808' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Percussion'), { category: 'Perc', kind: 'percussion' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/snare rim+sidestick'), { category: 'Snare', kind: 'sidestick' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Closed Hats'), { category: 'CHH', kind: 'closed' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Bass Drums'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(sample('hit_01.wav', '/Pack/Misc'), { category: 'Other', kind: 'other' });
+  assert.deepEqual(sample('hihat_01.wav', '/Pack/Open Hats'), { category: 'OHH', kind: 'open' }, 'folder sharpens an unqualified hat');
+  assert.deepEqual(sample('closed hat.wav', '/Pack/Open Hats'), { category: 'CHH', kind: 'closed' }, 'the name still wins');
+  // A name that only says percussion or cymbal takes the kind of a folder in the same category.
+  assert.deepEqual(sample('Perc_01.wav', '/Pack/Toms'), { category: 'Perc', kind: 'tom' });
+  assert.deepEqual(sample('Cymbal 1.wav', '/Pack/Rides'), { category: 'Crash', kind: 'ride' });
+  // ... and never changes the category or overrides a specific name.
+  assert.deepEqual(sample('Perc_01.wav', '/Pack/Kicks'), { category: 'Perc', kind: 'percussion' });
+  assert.deepEqual(sample('Shaker 1.wav', '/Pack/Toms'), { category: 'Perc', kind: 'shaker' });
+  assert.deepEqual(sample('Kick 1.wav', '/Pack/808s'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(sample('Tom 1.wav', '/Pack/Shakers'), { category: 'Perc', kind: 'tom' });
+});
+
+await test('kinds: every kind-group word is in its category word list', () => {
+  const V = VOCABULARY;
+  const inList = (groups: [SampleKind, string[]][], list: string[], what: string) => {
+    for (const [kind, words] of groups) for (const w of words) assert.ok(list.includes(w), `${what}: ${kind} word "${w}" is in the category list`);
+  };
+  inList(V.SNARE_KINDS, V.SNARE, 'snare'); inList(V.CLAP_KINDS, V.CLAP, 'clap'); inList(V.CRASH_KINDS, V.CRASH, 'crash');
+  inList(V.PERC_KINDS, V.PERC, 'perc');
+  for (const w of V.PERC_GENERIC) assert.ok(V.PERC.includes(w));
+  for (const [kind] of [...V.SNARE_KINDS, ...V.CLAP_KINDS, ...V.CRASH_KINDS, ...V.PERC_KINDS]) assert.ok(Object.keys(KIND_LABELS).includes(kind));
+});
+
+await test('kinds: the kind always belongs to the category (word lists, pairs, folders, real names)', () => {
+  const V = VOCABULARY;
+  const words = [...new Set([...V.KICK, ...V.SNARE, ...V.CLAP, ...V.CRASH, ...V.PERC, ...V.HAT, ...V.CLOSED, ...V.OPEN,
+    '808', 'shaking', 'chat', 'ohat', 'openhat', 'ophh', 'clhh', 'bda', 'sdb', 'op', 'hi', 'side', 'stick', 'cross', 'wood', 'block', 'finger', 'hand',
+    'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox'])];
+  let n = 0;
+  const check = (name: string, dir = '') => {
+    const c = classifySample(name, dir);
+    n++;
+    assert.ok(kindBelongsTo(c.kind, c.category), `${name} @ ${dir}: ${c.kind} is no ${c.category} kind`);
+    assert.equal(categorizeSample(name, dir), c.category, `${name} @ ${dir}: wrapper agrees`);
+  };
+  for (const w of words) {
+    for (const form of [w, `${w}_01`, `Pre ${w}`, `pre${w}`, `${w}suf`, w.toUpperCase(), `X-${w}-2`]) { check(`${form}.wav`); check('hit.wav', `/Pack/${form}`); check('perc 1.wav', `/Pack/${form}`); check('hihat 1.wav', `/Pack/${form}`); }
+    for (const v of words) if ((w.length + v.length) % 3 === 0) { check(`${w} ${v}.wav`); check(`${w}_${v}.wav`, `/Pack/${v}`); }
+  }
+  // Characters of the real names above, plus a seeded shuffle of word pairs.
+  let seed = 12345;
+  const rnd = (m: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % m;
+  for (let i = 0; i < 6000; i++) check(`${words[rnd(words.length)]} ${rnd(99)} ${words[rnd(words.length)]}.wav`, `/Pack/${words[rnd(words.length)]}/${words[rnd(words.length)]}`);
+  assert.ok(n > 10000, `checked ${n} names`);
+});
+
+await test('kinds: the category is unchanged by the kind on the existing test names', () => {
+  const names = ['BohmSlappAltOpenHat.wav', 'TightSnare.wav', 'BigKick.wav', 'ClosedHat3.wav', 'WhatEver.wav', 'CHat.wav', 'OHat.wav',
+    'Subdrop.wav', 'Bassdrop.wav', 'Custom Loop.wav', 'Bottom End.wav', 'Atomic Blast.wav', 'Primary Tone.wav', 'BD 01.wav', 'Kit1 BD.wav', 'SD-05.wav',
+    'BBT_Bossa_C_Hat.wav', 'BBT_Bossa_O_Hat.wav', 'Op Hat [C4RT1].wav', 'power-c [ OpHat ].wav', 'Skophat.wav', 'Chop Hat.wav'];
+  for (const dir of ['', '/Pack/Open Hats', '/Pack/Closed Hats', '/Pack/Kicks', '/Pack/Toms', '/Loops']) {
+    for (const name of names) assert.equal(classifySample(name, dir).category, categorizeSample(name, dir), `${name} @ ${dir}`);
+  }
 });
 
 if (failures > 0) {

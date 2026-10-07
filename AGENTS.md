@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
 test/{kit,io,packs}.test.ts
 ```
 
@@ -263,6 +263,36 @@ rule exists because a simpler version broke on real packs.
   String Drop` are not loops, and `Kick LP`/`808 Son LP` stay kicks ("LP" being low-pass or a record). Pinned by tests.
 - **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
   token only.
+- **Kinds sit next to the category (`utils/kinds.ts`, `Sample.kind`); the category alone still decides everything.** Kits, pools,
+  choke, hat partners, filters and the grid never read `kind`; no UI shows it yet (the pad and sidebar step comes next). The type
+  `SampleKind` and `KINDS_BY_CATEGORY` are pure data (the first kind listed is the category's default, `defaultKind`): Kick `kick 808`,
+  Snare `snare rimshot sidestick`, Clap `clap snap`, CHH `closed`, OHH `open`, Hat `hat`, Crash `cymbal crash ride`, Perc
+  `percussion shaker tambourine cowbell conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
+  `bell` is NOT a kind: no bell word is in the vocabulary, and adding one would move files between categories. Toms are Perc (as
+  before), kind `tom`; maracas and cabasa read as `shaker`, claves as `woodblock`, timpani/djembe/cajon/guiro/tabla and the rest of
+  the generic words as `percussion`.
+- **`classifySample(name, dir)` returns `{ category, kind }`; `categorizeSample` is a one-line wrapper returning the category.** The
+  kind is read from the SAME rule that chose the category (`classifyKind`), never a second pass: inside a category the word groups
+  `SNARE_KINDS`, `CLAP_KINDS`, `CRASH_KINDS` and `PERC_KINDS` are tried most specific first (`sidestick` before `rim`, `crash`
+  before `ride` before the leftover cymbal words; `snap` only when no clap word is present, so `Snap Clap` is a clap), and no group
+  word gives the category default. `PERC` is built from `PERC_KINDS` + `PERC_GENERIC`, and a test checks every kind-group word is
+  also in the category list, so a word cannot change a category by being added to a kind group. `808` (bare token) is kind `808`,
+  `shaking` is `shaker`, a phrase carries its own kind, `op hat` is `open`. A category decided by a folder takes that folder word's
+  kind; the one refinement is that a name saying only "percussion" or "cymbal" (the weak kinds of `Perc` and `Crash`) takes the kind of
+  the nearest folder in the SAME category (`Perc_01.wav` in `Toms/` is a tom). That never changes a category, and a specific name
+  wins (`Shaker 1.wav` in `Toms/` stays a shaker, `Kick 1.wav` in `808s/` stays `kick`). Invariants, tested and checked over both
+  owner dumps (337,923 classifications, zero kinds outside their category): `kindBelongsTo(kind, category)` always holds, and the
+  categories, loop and non-drum flags of every file in both dumps are byte-identical to the run before kinds existed (zero
+  transitions; run the round-2 `bench.mts` and `diff.mts` before and after any change here).
+- **Kind accuracy (folder-named ground truth in both dumps, loops skipped, mixed folders such as `KICKS_TOMS` excluded; name only
+  -> name + folder):** snare 89.5 -> 98.8%, kick 88.5 -> 99.7, 808 79.0 -> 95.5 (a file called "kick" in an `808s` folder is `kick`),
+  clap 90.7 -> 95.2, crash 61.3 -> 92.7 (157 rides in crash folders), tom 88.1 -> 99.5, ride 82.2 -> 96.8, shaker 53.2 -> 95.3,
+  rimshot 66.1 -> 97.9, snap 60.9 -> 98.9, any-cymbal folders 66.5 -> 67.6 (hats mixed into `cymbals` folders), bongo 68.4 -> 87.5
+  (25 congas), conga 66.8 -> 97.4, cowbell 70.0 -> 90.7, tambourine 85.7 -> 88.2, woodblock 49.3 -> 80.0, triangle 100. Open and
+  closed are the category numbers (89.7 / 84.3 on one library). **Too little evidence (fewer than 3 distinct libraries or folders):**
+  `sidestick` (no folder of its own; only `snare rim+sidestick`, 14 files in one library, and the word appears in about 60 names,
+  mostly one library), `triangle` (1 library), `cowbell` and `woodblock` (3 libraries each, thin), `closed`/`open` (one library).
+  A frequent miss is the `RS_` prefix of one library (`RS_808CowBell.wav` reads as `rimshot`): it is a category matter, not tuned.
 - **The filename always wins over any folder**, with one narrow exception: an explicit open or closed hat folder sharpens a name
   that resolves to a bare `Hat` (`hihat_01.wav` in `Open Hats/` is an OHH). `closed hat.wav` in `Open Hats/` stays CHH; a kick in a
   hat folder stays a kick.

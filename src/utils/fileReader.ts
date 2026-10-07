@@ -1,4 +1,5 @@
 import { Category } from '../types';
+import { defaultKind, SampleKind } from './kinds';
 import { AdpcmError, decodeMsAdpcm } from './adpcm';
 import { parseWavFormat, readChunks, WavFormat } from './wavStripper';
 
@@ -421,24 +422,37 @@ const CRASH = [
   'crs'
 ];
 
-const PERC = [
-  'perc', 'percussion', 'tom', 'toms', 'bongo', 'bongos', 'conga', 'congas',
-  'shaker', 'tamb', 'tambourine', 'cowbell', 'woodblock', 'block', 'wood',
-  'clave', 'claves', 'cabasa', 'guiro', 'triangle', 'timbale', 'timbales',
-  'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'maraca', 'maracas',
-  'tabla', 'udu',
-  // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
-  'timp', 'timpani',
-  // TR-808 style: high/mid/low toms, cowbell, claves, maracas.
-  'ht', 'mt', 'lt', 'cb', 'cl', 'clv', 'cr',
+/**
+ * Percussion words grouped by the kind they name, most specific first (a name holding words of two
+ * groups takes the first). `PERC` is every word of every group plus the generic ones, so the category
+ * rule and the kind cannot drift apart.
+ */
+const PERC_KINDS: [SampleKind, string[]][] = [
+  // "Hi_Shk3", "Vb_Shk8" (6 packs). Maracas and cabasa are shaken too.
+  ['shaker', ['shaker', 'shk', 'maraca', 'maracas', 'cabasa']],
+  // "DJPR_TMB_002", "88 HAT+TMB": tambourine, with the shakers.
+  ['tambourine', ['tamb', 'tambourine', 'tmb']],
+  ['cowbell', ['cowbell', 'cb']],
   // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
   // leading hh in the filename is what tells them apart — see isHat below.
-  'hc', 'mc', 'lc',
-  // "Lst_Prc9", "PRC-F1_S" (14 packs) and "Hi_Shk3", "Vb_Shk8" (6 packs).
-  'prc', 'shk',
-  // "DJPR_TMB_002", "88 HAT+TMB": tambourine, with the shakers.
-  'tmb'
+  ['conga', ['conga', 'congas', 'hc', 'mc', 'lc']],
+  ['bongo', ['bongo', 'bongos']],
+  // TR-808 style: high/mid/low toms.
+  ['tom', ['tom', 'toms', 'ht', 'mt', 'lt']],
+  // `cl` and `clv` are the 808 claves.
+  ['woodblock', ['woodblock', 'block', 'wood', 'clave', 'claves', 'clv', 'cl']],
+  ['triangle', ['triangle']]
 ];
+/** Percussion known only as percussion: the kind is `percussion`. */
+const PERC_GENERIC = [
+  'perc', 'percussion', 'cr', 'guiro', 'timbale', 'timbales',
+  'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'tabla', 'udu',
+  // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
+  'timp', 'timpani',
+  // "Lst_Prc9", "PRC-F1_S" (14 packs).
+  'prc'
+];
+const PERC = [...PERC_KINDS.flatMap(([, words]) => words), ...PERC_GENERIC];
 
 const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
 const CLOSED = ['chh', 'chhs', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
@@ -501,19 +515,55 @@ function nameHasOpHat(name: string): boolean {
 }
 
 /** Multi-word names that only make sense as a phrase. */
-const PHRASES: [RegExp, Category][] = [
+const PHRASES: [RegExp, Category, SampleKind][] = [
   // Plural included: a folder called "Bass Drums" used to match nothing here, fall
   // through to Other, and then be discarded by the non-drum filter for saying "bass".
-  [/\bbass drums?\b/, 'Kick'],
-  [/\bside stick\b/, 'Snare'],
-  [/\bcross stick\b/, 'Snare'],
-  [/\bhand clap\b/, 'Clap'],
-  [/\bfinger snap\b/, 'Clap'],
-  [/\bwood block\b/, 'Perc'],
-  [/\bhi hat\b/, 'Hat']
+  [/\bbass drums?\b/, 'Kick', 'kick'],
+  [/\bside stick\b/, 'Snare', 'sidestick'],
+  [/\bcross stick\b/, 'Snare', 'sidestick'],
+  [/\bhand clap\b/, 'Clap', 'clap'],
+  [/\bfinger snap\b/, 'Clap', 'snap'],
+  [/\bwood block\b/, 'Perc', 'woodblock'],
+  [/\bhi hat\b/, 'Hat', 'hat']
 ];
 
+/**
+ * Kind words inside a category's word list, most specific first; a name holding none of them gets the
+ * category default. Every word here is also in the category's list (tested), so the kind is read from
+ * the very match that decided the category and never contradicts it.
+ */
+const SNARE_KINDS: [SampleKind, string[]][] = [
+  ['sidestick', ['sidestick']],
+  ['rimshot', ['rim', 'rims', 'rimshot', 'rs']]
+];
+const CLAP_KINDS: [SampleKind, string[]][] = [['snap', ['snap', 'snaps']]];
+/** A name with a clap word and a snap word is a clap: the snap kind needs the snap words alone. */
+const CLAP_NOT_SNAP = CLAP.filter(w => !CLAP_KINDS[0][1].includes(w));
+const CRASH_KINDS: [SampleKind, string[]][] = [
+  ['crash', ['crash', 'crashes', 'crsh', 'cc', 'csh', 'crs']],
+  ['ride', ['ride', 'rides', 'rd']]
+  // splash, china, cymbal(s), cym, cymb, cy: the category default `cymbal`.
+];
+
+/** The word lists, read-only, for tests that build names from them. */
+export const VOCABULARY = {
+  KICK, SNARE, CLAP, CRASH, PERC, HAT, CLOSED, OPEN, PERC_KINDS, PERC_GENERIC,
+  SNARE_KINDS, CLAP_KINDS, CRASH_KINDS
+};
+
+/** A category with the finer kind that came from the same rule. */
+export interface Classified {
+  category: Category;
+  kind: SampleKind;
+}
+
+const withDefault = (category: Category): Classified => ({ category, kind: defaultKind(category) });
+
 function classify(text: string, isFile = false): Category | null {
+  return classifyKind(text, isFile)?.category ?? null;
+}
+
+function classifyKind(text: string, isFile = false): Classified | null {
   const tokens = tokenize(text, isFile);
   if (tokens.length === 0) return null;
   // Short abbreviations must be whole tokens — "tom" inside "custom" is not a tom.
@@ -526,41 +576,45 @@ function classify(text: string, isFile = false): Category | null {
       list.some(k => t === k || (k.length >= GLUE_MIN && !WHOLE_TOKEN_ONLY.includes(k) && !GLUE_FALSE_FRIENDS.includes(t) && (t.startsWith(k) || t.endsWith(k))))
     );
 
+  const kindIn = (groups: [SampleKind, string[]][], category: Category): Classified => ({
+    category, kind: groups.find(([, words]) => has(words))?.[0] ?? defaultKind(category)
+  });
+
   const joined = tokens.join(' ');
-  for (const [pattern, category] of PHRASES) {
+  for (const [pattern, category, kind] of PHRASES) {
     if (pattern.test(joined)) {
       // "hi hat" still needs the open/closed pass below.
-      if (category !== 'Hat') return category;
+      if (category !== 'Hat') return { category, kind };
     }
   }
 
-  if (has(KICK)) return 'Kick';
-  if (has(SNARE)) return 'Snare';
-  if (has(CLAP)) return 'Clap';
+  if (has(KICK)) return withDefault('Kick');
+  if (has(SNARE)) return kindIn(SNARE_KINDS, 'Snare');
+  if (has(CLAP)) return has(CLAP_NOT_SNAP) ? withDefault('Clap') : kindIn(CLAP_KINDS, 'Clap');
 
   // Hats: identify the family first, then narrow only on an explicit qualifier.
   // A token beginning "hh" is a hi-hat: packs write HHCD0 / HHOD0 with the level
   // code glued on, which no whole-token or four-character rule would catch.
   const gluedQualifier = tokens.map(t => GLUED_HAT_QUALIFIERS[t]).find(Boolean);
-  if (gluedQualifier) return gluedQualifier;
+  if (gluedQualifier) return withDefault(gluedQualifier);
 
   const isHat = has(HAT) || /\bhi hat\b/.test(joined) || tokens.some(t => t.startsWith('hh'));
   if (isHat) {
-    if (has(CLOSED)) return 'CHH';
-    if (has(OPEN)) return 'OHH';
-    return 'Hat';
+    if (has(CLOSED)) return withDefault('CHH');
+    if (has(OPEN)) return withDefault('OHH');
+    return withDefault('Hat');
   }
   // Placed before the bare ch/oh rule below (in "SDbOH" the oh is the overhead mic), but a
   // crash or percussion word in the name still wins.
   const variantCode = tokens.map(t => VARIANT_CODES.find(([pattern]) => pattern.test(t))?.[1]).find(Boolean);
-  if (variantCode && !has(CRASH) && !has(PERC)) return variantCode;
+  if (variantCode && !has(CRASH) && !has(PERC)) return withDefault(variantCode);
 
   // Bare "CH01" / "OH03" with no hat word — in drum packs these are always hats.
-  if (tokens.includes('chh') || tokens.includes('chhs') || tokens.includes('ch')) return 'CHH';
-  if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return 'OHH';
+  if (tokens.includes('chh') || tokens.includes('chhs') || tokens.includes('ch')) return withDefault('CHH');
+  if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return withDefault('OHH');
 
-  if (has(CRASH)) return 'Crash';
-  if (has(PERC)) return 'Perc';
+  if (has(CRASH)) return kindIn(CRASH_KINDS, 'Crash');
+  if (has(PERC)) return kindIn(PERC_KINDS, 'Perc');
 
   /**
    * An 808 with nothing else to go on is the kick voice — that is what the name means in
@@ -568,11 +622,11 @@ function classify(text: string, isFile = false): Category | null {
    * and only on a bare token, so it cannot fire on a stray year or catalogue number that
    * happens to sit next to a real word.
    */
-  if (tokens.includes('808')) return 'Kick';
+  if (tokens.includes('808')) return { category: 'Kick', kind: '808' };
 
   // Cans and bottles shaken like a shaker ("Shaking A Full Unopened Coca Cola Can"). A weak
   // word, so it is checked after the 808 rule: "808 Shaking" in an 808s folder is a kick.
-  if (tokens.includes('shaking')) return 'Perc';
+  if (tokens.includes('shaking')) return { category: 'Perc', kind: 'shaker' };
 
   return null;
 }
@@ -752,13 +806,26 @@ export function looksLikeLoop(name: string, directory = '', category: Category =
  * sample sits in. There is no audio analysis.
  */
 export function categorizeSample(name: string, directory = ''): Category {
-  const classified = classify(name, true);
+  return classifySample(name, directory).category;
+}
+
+/** Kinds that only restate the category ("some percussion", "some cymbal"): a folder may sharpen them. */
+const isWeakKind = (c: Classified) => c.kind === defaultKind(c.category) && (c.category === 'Perc' || c.category === 'Crash');
+
+/**
+ * The category (see `categorizeSample`) together with the finer kind. The kind comes from the same
+ * rule that chose the category: the matched word group of the name, or of the folder when the folder
+ * decided. The one refinement: a name that only says "percussion" or "cymbal" takes the kind of the
+ * nearest folder in the SAME category (`Toms/hit_01.wav` is a tom, still a Perc), never a new category.
+ */
+export function classifySample(name: string, directory = ''): Classified {
+  const classified = classifyKind(name, true);
   // `op` ("overpowered") next to a hat word is an open hat, and the filename beats a closed-hat
   // folder. A name that already says something else (kick, snare, closed ...) keeps that.
   // A lone `c` token (`Op Hat [C4RT1]`, `power-c [ OpHat ]`) is the only closed word that does not count against it.
   if (nameHasOpHat(name)) {
-    const nameClass = classified === 'CHH' ? classify(name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' '), true) : classified;
-    if (nameClass === null || nameClass === 'Hat') return 'OHH';
+    const nameClass = classified?.category === 'CHH' ? classify(name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' '), true) : classified?.category ?? null;
+    if (nameClass === null || nameClass === 'Hat') return withDefault('OHH');
   }
   const fromName = classified;
 
@@ -772,20 +839,28 @@ export function categorizeSample(name: string, directory = ''): Category {
    * folder is explicitly open or closed, so an explicit filename still wins over a
    * folder that disagrees — `closed hat.wav` in `Open Hats/` stays CHH.
    */
-  if (fromName === 'Hat') {
+  if (fromName?.category === 'Hat') {
     for (const folder of folderCandidates(directory)) {
       const fromFolder = classify(folder);
-      if (fromFolder === 'CHH' || fromFolder === 'OHH') return fromFolder;
+      if (fromFolder === 'CHH' || fromFolder === 'OHH') return withDefault(fromFolder);
     }
   }
 
-  if (fromName) return fromName;
+  if (fromName) {
+    if (isWeakKind(fromName)) {
+      for (const folder of folderCandidates(directory)) {
+        const fromFolder = classifyKind(folder);
+        if (fromFolder?.category === fromName.category) return fromFolder;
+      }
+    }
+    return fromName;
+  }
 
   for (const folder of folderCandidates(directory)) {
-    const fromFolder = classify(folder);
+    const fromFolder = classifyKind(folder);
     if (fromFolder) return fromFolder;
   }
-  return 'Other';
+  return withDefault('Other');
 }
 
 /**

@@ -7,7 +7,7 @@
  * silence: the pads need something loadable, not something audible.
  */
 import { Sample, SourceFolder } from './types';
-import { categorizeSample, looksLikeLoop, looksNonDrum } from './utils/fileReader';
+import { classifySample, looksLikeLoop, looksNonDrum } from './utils/fileReader';
 
 const SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
@@ -74,12 +74,13 @@ export function devSeedFolders(count = 1): SourceFolder[] {
 export function devSeedFolder(index = 0): SourceFolder {
   const dir = '/neptunes kit';
   const samples: Sample[] = NAMES.map((name, i) => {
-    const category = categorizeSample(name, dir);
+    const { category, kind } = classifySample(name, dir);
     return {
       id: `seed-${index}-${i}`,
       file: new File([name], name, { type: 'audio/wav' }),
       name,
       category,
+      kind,
       url: SILENT_WAV,
       isLoop: looksLikeLoop(name, dir, category),
       isNonDrum: looksNonDrum(category, name, dir)

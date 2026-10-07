@@ -11,7 +11,7 @@ import {
 import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
-  categorizeSample, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
+  classifySample, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
@@ -595,13 +595,14 @@ export default function App() {
       for (const folder of accepted) {
         const samples: Sample[] = [];
         for (const { file, path } of folder.files) {
-          const category = categorizeSample(file.name, path);
+          const { category, kind } = classifySample(file.name, path);
 
           samples.push({
             id: newId('sample'),
             file,
             name: file.name,
             category,
+            kind,
             // The category is passed so the break rule can stay off anything the
             // categoriser placed — a snare named "Break Snare" is still a snare.
             isLoop: looksLikeLoop(file.name, path, category),

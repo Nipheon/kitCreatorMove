@@ -1,3 +1,5 @@
+import type { SampleKind } from './utils/kinds';
+
 export type Category =
   | 'Kick' | 'Snare' | 'Clap' | 'CHH' | 'OHH' | 'Hat' | 'Crash' | 'Perc' | 'Other';
 
@@ -6,6 +8,8 @@ export interface Sample {
   file: File;
   name: string;
   category: Category;
+  /** Finer sound type from the same rule as the category; always one of `kindsOf(category)` (`utils/kinds.ts`). */
+  kind: SampleKind;
   /** Preview URL when the sample brings its own (dev seed, tests). Otherwise made on first play by `sampleUrl`. */
   url?: string;
   isExcluded?: boolean;
