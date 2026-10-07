@@ -509,8 +509,13 @@ rule exists because a simpler version broke on real packs.
 - **The help dialog is `role="dialog"` `aria-modal` with `aria-labelledby`.** Focus moves into it on open and back to the Help
   button on close, Escape closes it and Tab is trapped inside.
 - **Pad semantics are in the pad entry above** (play button, sibling controls, disabled `Pad N, empty`).
-- **Known gaps, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
-  `pointer-events-none` layer; pad hotkeys still fire while the help dialog is open.
+- **Keyboard:** the global key handler is registered once, so it reaches `randomizeKit` and the help state through `randomizeRef`
+  and `helpOpenRef`; never close over state in it. Space generates from anywhere (a focused pad button too; Enter still activates
+  buttons), is ignored in text inputs, selects, checkboxes, sliders, contenteditable and while the help dialog is open (pad hotkeys
+  are also off then), ignores key repeat, and cancels the button click on keyup. It does nothing during a scan or export.
+  Ticking Auto Preview previews the current kit immediately (`toggleAutoPreview`); unticking leaves a running preview alone.
+- **Known gap, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
+  `pointer-events-none` layer.
 
 ## Verified and unverified
 

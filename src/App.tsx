@@ -284,6 +284,15 @@ export default function App() {
     startPreview(kitResult.kit);
   }, [isPreviewing, stopPreview, startPreview, kitResult.kit]);
 
+  // Ticking the box means 'preview what I am looking at now', not 'from the next generate'.
+  // Unticking only stops future automatic previews; a running one is left to finish.
+  const toggleAutoPreview = (checked: boolean) => {
+    setAutoPreview(checked);
+    if (checked && !isPreviewing && !generating.current && kitResult.kit.some(s => s !== null)) {
+      startPreview(kitResult.kit);
+    }
+  };
+
   useEffect(() => {
     if (!isPreviewing) return;
 
@@ -367,11 +376,31 @@ export default function App() {
     };
   }, [isHelpOpen]);
 
+  // The key handler below is registered once, so it reaches the newest randomizeKit and
+  // help state through these refs rather than closing over stale values.
+  const randomizeRef = useRef<() => void>(() => {});
+  const helpOpenRef = useRef(false);
+  helpOpenRef.current = isHelpOpen;
+  const spaceHandled = useRef(false);
+
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.target instanceof HTMLSelectElement) return;
+      if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
       if (e.repeat) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // The dialog owns the keyboard while it is open: no pad hotkeys, no generating.
+      if (helpOpenRef.current) return;
+
+      if (e.key === ' ') {
+        // Space generates from anywhere, including a pad button that was just clicked.
+        // Enter still activates a focused button.
+        e.preventDefault();
+        spaceHandled.current = true;
+        randomizeRef.current();
+        return;
+      }
 
       const KEY_TO_PAD: Record<string, number> = {
         '1': 12, '2': 13, '3': 14, '4': 15,
@@ -389,8 +418,20 @@ export default function App() {
       }
     };
 
+    // A button is clicked by Space on keyup; cancel that too when keydown generated instead.
+    const handleGlobalKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ' && spaceHandled.current) {
+        e.preventDefault();
+        spaceHandled.current = false;
+      }
+    };
+
     window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('keyup', handleGlobalKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+      window.removeEventListener('keyup', handleGlobalKeyUp);
+    };
   }, []);
 
   const kitOptions = { skipLoops, skipNonDrums, disabledTypes };
@@ -758,6 +799,12 @@ export default function App() {
         }
       }
     }
+  };
+
+  // The Space shortcut must not start a generation while a scan or an export is running.
+  randomizeRef.current = () => {
+    if (isLoading || isExporting) return;
+    void randomizeKit();
   };
 
   const rerollPad = async (index: number) => {
@@ -1200,7 +1247,7 @@ export default function App() {
                 <input
                   type='checkbox'
                   checked={autoPreview}
-                  onChange={(e) => setAutoPreview(e.target.checked)}
+                  onChange={(e) => toggleAutoPreview(e.target.checked)}
                   className='accent-accent-teal w-4 h-4 cursor-pointer'
                 />
                 Auto Preview
@@ -1416,6 +1463,7 @@ export default function App() {
                       <div>Z X C V</div>
                     </div>
                   </li>
+                  <li><strong className='text-text-bright'>Space:</strong> Generates a new kit from anywhere on the page, except while you are typing in a field or the manual is open.</li>
                   <li><strong className='text-text-bright'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
                   <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
                   <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
