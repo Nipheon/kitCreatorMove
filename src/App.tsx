@@ -69,6 +69,8 @@ export default function App() {
   const [disabledTypes, setDisabledTypes] = useState<ReadonlySet<Category>>(new Set());
   const [showWarning, setShowWarning] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const helpButtonRef = useRef<HTMLButtonElement>(null);
+  const helpDialogRef = useRef<HTMLDivElement>(null);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
   const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -308,6 +310,47 @@ export default function App() {
       setShowWarning(false);
     }
   }, [kitResult]);
+
+  // Help dialog: focus moves in on open and back to the Help button on close; Escape
+  // closes; Tab cycles inside the dialog.
+  useEffect(() => {
+    if (!isHelpOpen) return;
+    const opener = helpButtonRef.current;
+    const dialog = helpDialogRef.current;
+    dialog?.focus();
+
+    const handleDialogKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsHelpOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab' || !dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active) || (e.shiftKey && (active === first || active === dialog))) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      opener?.focus();
+    };
+  }, [isHelpOpen]);
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -831,6 +874,8 @@ export default function App() {
             Exports an .ablpresetbundle — copy it to your Move
           </div>
           <button
+            ref={helpButtonRef}
+            type='button'
             onClick={() => setIsHelpOpen(true)}
             className='flex items-center gap-1.5 px-3 py-1.5 bg-surface-pad hover:bg-surface-btn-hover border border-border-main hover:border-accent-yellow text-text-light hover:text-accent-yellow rounded text-sm font-semibold uppercase tracking-wider transition-all cursor-pointer'
             title='Open User Manual & Help'
@@ -1061,10 +1106,11 @@ export default function App() {
         <aside className='w-full lg:w-80 bg-surface-panel border-t lg:border-t-0 lg:border-l border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
           <h2 className='text-sm uppercase tracking-[0.2em] font-semibold text-text-subtle mb-6'>Preset Settings</h2>
           <div className='space-y-6'>
-            <div className='space-y-2'>
+            <div className='space-y-2' role='group' aria-labelledby='preset-name-label'>
               <div className='flex justify-between items-center'>
-                <label className='text-sm text-text-muted uppercase'>Preset Name</label>
+                <span id='preset-name-label' className='text-sm text-text-muted uppercase'>Preset Name</span>
                 <button
+                  type='button'
                   onClick={() => setKitSuffix(generateKitName('').suffix)}
                   className='text-sm text-accent-yellow hover:brightness-125 transition-all flex items-center gap-1 cursor-pointer'
                 >
@@ -1186,14 +1232,22 @@ export default function App() {
 
       {isHelpOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-overlay-strong backdrop-blur-md p-4 overflow-y-auto'>
-          <div className='bg-surface-modal border border-border-main rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden'>
+          <div
+            ref={helpDialogRef}
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='help-dialog-title'
+            tabIndex={-1}
+            className='bg-surface-modal border border-border-main rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden outline-none'
+          >
             {/* Modal Header */}
             <div className='flex items-center justify-between px-6 sm:px-8 py-5 border-b border-border-dark bg-surface-modal-header shrink-0'>
               <div className='flex items-center gap-3'>
                 <HelpCircle size={24} className='text-accent-yellow' />
-                <h2 className='text-base sm:text-lg font-bold uppercase tracking-widest text-text-bright'>Kit Creator for Ableton Move — User Manual</h2>
+                <h2 id='help-dialog-title' className='text-base sm:text-lg font-bold uppercase tracking-widest text-text-bright'>Kit Creator for Ableton Move — User Manual</h2>
               </div>
               <button
+                type='button'
                 onClick={() => setIsHelpOpen(false)}
                 className='text-text-muted hover:text-text-bright p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer'
                 aria-label='Close manual'
@@ -1384,6 +1438,7 @@ export default function App() {
             {/* Modal Footer */}
             <div className='px-6 sm:px-8 py-4 border-t border-border-dark bg-surface-modal-header flex justify-end shrink-0'>
               <button
+                type='button'
                 onClick={() => setIsHelpOpen(false)}
                 className='px-6 py-2.5 bg-accent-yellow text-text-inverse font-bold uppercase text-sm tracking-wider rounded-lg hover:brightness-110 transition-all cursor-pointer'
               >

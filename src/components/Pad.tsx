@@ -204,13 +204,6 @@ export const Pad: React.FC<PadProps> = ({
     return () => window.removeEventListener('play-pad', onPlayPad);
   }, [index, handlePlay]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handlePlay();
-    }
-  };
-
   const hotkey = PAD_HOTKEYS[index];
 
   /**
@@ -225,26 +218,31 @@ export const Pad: React.FC<PadProps> = ({
     '--category-accent': categoryAccent(sample ? sample.category : expectedCategory)
   } as React.CSSProperties;
 
-  // A div rather than a button: the lock, reroll, and exclude controls are buttons themselves,
-  // and interactive elements cannot be nested inside a button.
+  // The tile is a plain wrapper. The play surface is a real button laid over it, and the
+  // exclude/lock/shuffle buttons are its siblings, so no interactive element is nested in
+  // another. The visible content sits above the play button with pointer-events off, so
+  // clicks fall through to it; the control buttons switch pointer-events back on.
   return (
     <div
-      role="button"
-      tabIndex={sample ? 0 : -1}
-      aria-disabled={!sample}
-      aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
-      onClick={sample ? handlePlay : undefined}
-      onKeyDown={sample ? handleKeyDown : undefined}
       style={padStyle}
       className={`pad-tile group relative overflow-hidden w-full h-full min-h-0 bg-surface-pad border rounded-lg p-3 sm:p-4 flex flex-col justify-between transition-all duration-100 ease-out text-left ${
         sample
           ? isPlaying
             ? 'pad-tinted pad-glow border-[var(--category-accent)] scale-[0.98]'
-            : 'pad-tinted border-border-main hover:border-[var(--category-accent)] cursor-pointer'
-          : 'border-border-main opacity-50 cursor-not-allowed'
+            : 'pad-tinted border-border-main hover:border-[var(--category-accent)]'
+          : 'border-border-main opacity-50'
       }`}
     >
-      <div className='pad-header flex w-full justify-between items-center'>
+      <button
+        type='button'
+        disabled={!sample}
+        onClick={handlePlay}
+        aria-label={sample ? `Play ${sample.name}` : `Pad ${index + 1}, empty`}
+        className={`absolute inset-0 w-full h-full focus-visible:outline-2 focus-visible:-outline-offset-2 ${
+          sample ? 'cursor-pointer' : 'cursor-not-allowed'
+        }`}
+      />
+      <div className='pad-header pointer-events-none relative flex w-full justify-between items-center'>
         <div className='pad-header-group flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0'>
           <span className='pad-number category-ink text-sm font-bold shrink-0'>
             {(index + 1).toString().padStart(2, '0')}
@@ -266,7 +264,7 @@ export const Pad: React.FC<PadProps> = ({
         <div className={`pad-indicator w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 transition-all ${isPlaying ? 'bg-[var(--category-accent)] pad-dot-glow scale-110' : 'border border-border-light'}`}></div>
       </div>
 
-      <div className='pad-body w-full mt-auto mb-8 sm:mb-9'>
+      <div className='pad-body pointer-events-none relative w-full mt-auto mb-8 sm:mb-9'>
         <div className='pad-category w-full text-sm uppercase tracking-wider font-medium mb-0.5'>
           {sample ? sample.category : expectedCategory}
         </div>
@@ -281,14 +279,11 @@ export const Pad: React.FC<PadProps> = ({
               sample ? sample.name : 'Empty'
             )}
           </div>
-          <div className='flex items-center gap-1 shrink-0'>
+          <div className='flex items-center gap-1 shrink-0 pointer-events-auto'>
             {sample && onExclude && (
               <button
                 type='button'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExclude(sample.id, index);
-                }}
+                onClick={() => onExclude(sample.id, index)}
                 className='text-text-subtle hover:text-danger-text transition-colors p-1'
                 title='Exclude sample'
                 aria-label={`Exclude ${sample.name}`}
@@ -305,10 +300,7 @@ export const Pad: React.FC<PadProps> = ({
         <button
           type='button'
           disabled={!sample}
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleLock();
-          }}
+          onClick={onToggleLock}
           aria-pressed={isLocked}
           aria-label={isLocked ? `Unlock pad ${index + 1}` : `Lock pad ${index + 1}`}
           className={`w-1/2 flex items-center justify-center gap-1.5 transition-colors ${
@@ -328,10 +320,7 @@ export const Pad: React.FC<PadProps> = ({
         <button
           type='button'
           disabled={!sample || isLocked || !onReroll}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (onReroll) onReroll(index);
-          }}
+          onClick={() => onReroll?.(index)}
           className={`w-1/2 border-l border-border-bar flex items-center justify-center gap-1.5 transition-colors ${
             !sample || isLocked || !onReroll
               ? 'text-border-main cursor-not-allowed'
