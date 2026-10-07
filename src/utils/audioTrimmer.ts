@@ -16,6 +16,8 @@ export interface TrimResult {
   trimmed: boolean;
   /** Set when trimming was attempted and failed, so the caller can report it. */
   failed?: boolean;
+  /** Set when the format is one the trimmer does not handle (AIFF, 8/32-bit, odd rates). */
+  unsupported?: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ export function createTrimmer() {
         format.sampleRate > MAX_RATE
       ) {
         // Preserving the original beats silently re-encoding it at some other format.
-        return { blob: file, trimmed: false };
+        return { blob: file, trimmed: false, unsupported: true };
       }
 
       try {

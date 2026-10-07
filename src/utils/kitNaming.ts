@@ -24,7 +24,7 @@ export const MULTI_FOLDER_PREFIX = 'MKT';
 export const PREFIX_LENGTH = 3;
 
 export function prefixFromFolderName(folderName: string): string {
-  const words = folderName.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
+  const words = folderName.replace(/[_-]+/g, ' ').replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 0);
   let prefix = '';
   if (words.length >= 3) {
     prefix = words[0][0] + words[1][0] + words[2][0];
@@ -34,6 +34,16 @@ export function prefixFromFolderName(folderName: string): string {
     prefix = words[0].substring(0, PREFIX_LENGTH);
   }
   return (prefix + 'KIT').substring(0, PREFIX_LENGTH).toUpperCase();
+}
+
+/**
+ * A user-typed name is used for a download and for a zip entry, where `/` would nest
+ * the bundle in a subfolder and `\ : * ? " < > |` and control characters are rejected
+ * by common filesystems. The preset's displayed name is left as typed.
+ */
+export function safeFileName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim();
+  return cleaned.length > 0 ? cleaned : DEFAULT_PREFIX;
 }
 
 export function randomSuffix(): string {

@@ -15,7 +15,8 @@ export interface DroppedFolder {
  * Move plays WAV and AIFF only. Compressed formats would be copied into the bundle
  * untouched and then fail on the device, which is worse than never accepting them.
  */
-export const isAudioFile = (name: string) => /\.(wav|aiff?)$/i.test(name);
+export const isAudioFile = (name: string) =>
+  /\.(wav|aiff?)$/i.test(name) && !name.startsWith('._'); // `._x.wav` is macOS AppleDouble metadata, not audio
 
 const directoryOf = (fullPath: string) => {
   const cut = fullPath.lastIndexOf('/');
@@ -46,15 +47,20 @@ async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> 
 
   while (queue.length > 0) {
     const entry = queue.shift()!;
-    if (entry.isFile) {
-      const file = await new Promise<File>((resolve, reject) =>
-        (entry as FileSystemFileEntry).file(resolve, reject)
-      );
-      // The subfolder a sample sits in is often the only clue to what it is.
-      if (isAudioFile(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
-    } else if (entry.isDirectory) {
-      const reader = (entry as FileSystemDirectoryEntry).createReader();
-      queue.push(...await readAllEntries(reader));
+    try {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve, reject) =>
+          (entry as FileSystemFileEntry).file(resolve, reject)
+        );
+        // The subfolder a sample sits in is often the only clue to what it is.
+        if (isAudioFile(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
+      } else if (entry.isDirectory && entry.name !== '__MACOSX') {
+        const reader = (entry as FileSystemDirectoryEntry).createReader();
+        queue.push(...await readAllEntries(reader));
+      }
+    } catch (err) {
+      // One unreadable file or folder must not discard everything else in the drop.
+      console.warn(`Skipped unreadable entry ${entry.fullPath}:`, err);
     }
   }
 
@@ -73,12 +79,18 @@ export async function getFilesFromDataTransfer(
     .map(item => item.webkitGetAsEntry())
     .filter((entry): entry is FileSystemEntry => entry !== null);
 
+  // Loose files share one folder; a folder per file would flip the prefix to MKT and
+  // flood the sidebar.
+  const loose: DroppedFile[] = [];
+
   for (const entry of entries) {
     const files = await collectAudioFiles(entry);
-    if (files.length > 0) {
-      result.push({ name: entry.name, files });
-    }
+    if (files.length === 0) continue;
+    if (entry.isFile) loose.push(...files);
+    else result.push({ name: entry.name, files });
   }
+
+  if (loose.length > 0) result.push({ name: 'Dropped Files', files: loose });
 
   return result;
 }

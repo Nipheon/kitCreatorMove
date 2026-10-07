@@ -2,11 +2,11 @@ import JSZip from 'jszip';
 import { chokeGroupFor, PAD_COUNT } from '../padLayout';
 import { Sample } from '../types';
 import { generateAblPreset } from './ablPresetTemplate';
+import { safeFileName } from './kitNaming';
 import { createTrimmer } from './audioTrimmer';
-import { stripWavMetadata } from './wavStripper';
 
 export interface ExportOptions {
-  /** Strip leading silence. Off means samples are copied byte-for-byte. */
+  /** Strip leading and trailing silence. Off means samples are copied byte-for-byte. */
   trimSilence: boolean;
   onProgress?: (done: number, total: number) => void;
 }
@@ -14,6 +14,8 @@ export interface ExportOptions {
 export interface ExportReport {
   /** Samples where trimming was attempted and threw. */
   trimFailures: number;
+  /** Samples in a format the trimmer does not handle; exported unchanged. */
+  trimSkipped: number;
 }
 
 /** Sample packs reuse names like "Kick.wav", so pad-prefix every entry to keep them distinct. */
@@ -33,7 +35,7 @@ export async function createPresetBundle(
   kitName: string,
   options: ExportOptions,
   trimmer: Trimmer = createTrimmer(),
-  report: ExportReport = { trimFailures: 0 }
+  report: ExportReport = { trimFailures: 0, trimSkipped: 0 }
 ): Promise<Blob> {
   const zip = new JSZip();
   const samplesFolder = zip.folder('Samples');
@@ -57,10 +59,11 @@ export async function createPresetBundle(
       const result = await trimmer.trim(sample.file);
       audio = result.blob;
       if (result.failed) report.trimFailures++;
+      if (result.unsupported) report.trimSkipped++;
     }
 
     const filename = zipEntryName(sample, index);
-    samplesFolder.file(filename, await stripWavMetadata(audio));
+    samplesFolder.file(filename, audio);
     // Encoding left as-is: unverified against what Ableton actually parses.
     sampleUris[index] = `Samples/${encodeURIComponent(filename)}`;
   }
@@ -93,10 +96,10 @@ export async function exportKitZip(
   kitName: string,
   options: ExportOptions
 ): Promise<ExportReport> {
-  const report: ExportReport = { trimFailures: 0 };
+  const report: ExportReport = { trimFailures: 0, trimSkipped: 0 };
   options.onProgress?.(0, 1);
   const blob = await createPresetBundle(kit, kitName, options, createTrimmer(), report);
-  downloadBlob(blob, `${kitName}.ablpresetbundle`);
+  downloadBlob(blob, `${safeFileName(kitName)}.ablpresetbundle`);
   options.onProgress?.(1, 1);
   return report;
 }
@@ -106,18 +109,18 @@ export async function exportBatchKits(
   batchName: string,
   options: ExportOptions
 ): Promise<ExportReport> {
-  const report: ExportReport = { trimFailures: 0 };
+  const report: ExportReport = { trimFailures: 0, trimSkipped: 0 };
   const trimmer = createTrimmer();
   const masterZip = new JSZip();
 
   for (const [index, entry] of kits.entries()) {
     options.onProgress?.(index, kits.length);
     const bundle = await createPresetBundle(entry.kit, entry.name, options, trimmer, report);
-    masterZip.file(`${entry.name}.ablpresetbundle`, bundle);
+    masterZip.file(`${safeFileName(entry.name)}.ablpresetbundle`, bundle);
   }
   options.onProgress?.(kits.length, kits.length);
 
   const blob = await masterZip.generateAsync({ type: 'blob', compression: 'STORE' });
-  downloadBlob(blob, `${batchName}_Batch.zip`);
+  downloadBlob(blob, `${safeFileName(batchName)}_Batch.zip`);
   return report;
 }

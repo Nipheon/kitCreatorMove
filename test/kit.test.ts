@@ -36,7 +36,7 @@ import {
 import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
-  prefixFromFolderName, uniqueKitName
+  prefixFromFolderName, safeFileName, uniqueKitName
 } from '../src/utils/kitNaming';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
@@ -404,6 +404,11 @@ await test('only WAV and AIFF are accepted', () => {
   }
 });
 
+await test('macOS AppleDouble files are not audio', () => {
+  assert.equal(isAudioFile('._Kick.wav'), false);
+  assert.equal(isAudioFile('Kick.wav'), true);
+});
+
 await test('loops are recognised from the filename or folder', () => {
   for (const [name, dir] of [
     ['perc_loop_fake12.wav', ''], ['hat_loop.wav', ''], ['loop_amen.flac', ''],
@@ -738,6 +743,19 @@ await test('prefixes are three uppercase characters', () => {
   for (const name of ['A', 'Some Very Long Folder Name Here', '!!!', '70s Breakbeats']) {
     assert.equal(prefixFromFolderName(name).length, PREFIX_LENGTH, name);
   }
+});
+
+await test('underscores and hyphens separate words in a folder prefix', () => {
+  assert.equal(prefixFromFolderName('My_Pack_Vol_2'), 'MPV');
+  assert.equal(prefixFromFolderName('Trap-Drums-Vol1'), 'TDV');
+});
+
+await test('typed names cannot escape the file name or nest in a zip', () => {
+  assert.equal(safeFileName('a/b'), 'a-b');
+  assert.equal(safeFileName('a\\b:c*d'), 'a-b-c-d');
+  assert.equal(safeFileName('  '), DEFAULT_PREFIX);
+  assert.equal(safeFileName(''), DEFAULT_PREFIX);
+  assert.equal(safeFileName('MOV-ksho-Zap'), 'MOV-ksho-Zap');
 });
 
 await test('a name is only numbered when it is already taken', () => {
@@ -1325,6 +1343,19 @@ await test('identically named samples get distinct zip entries', async () => {
     assert.ok(file, `missing ${name}`);
     assert.equal(await file.async('string'), await sample.file.text());
   }
+});
+
+await test('with trimming off a wav is copied byte-for-byte, metadata chunks included', async () => {
+  const bytes = makeWav({ extraChunk: { id: 'LIST', bytes: 40 }, frames: 16 });
+  const sample: Sample = {
+    id: 'keep', file: new File([bytes], 'Kick.wav'), name: 'Kick.wav', category: 'Kick' as Category,
+    isLoop: false, isNonDrum: false, url: ''
+  } as Sample;
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = sample;
+  const zip = await JSZip.loadAsync(await (await createPresetBundle(kit, 'Keep', NO_TRIM)).arrayBuffer());
+  const out = new Uint8Array(await zip.file('Samples/00_Kick.wav')!.async('uint8array'));
+  assert.deepEqual(Array.from(out), Array.from(new Uint8Array(bytes)));
 });
 
 await test('every sampleUri resolves to a real zip entry', async () => {

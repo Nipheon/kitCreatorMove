@@ -84,6 +84,9 @@ export default function App() {
   const exportedNames = useRef(new Set<string>());
   /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
   const readyWaitCleanup = useRef<(() => void) | null>(null);
+  // Detaches the listener waiting for the current step's `pad-started`; stopPreview must
+  // remove it, or a stopped sequence resumes when that pad is next played.
+  const padStartedCleanup = useRef<(() => void) | null>(null);
 
   /**
    * Dev convenience: `?seed` on a dev server fills the grid from a real pack's filenames,
@@ -135,6 +138,8 @@ export default function App() {
     previewTimerIds.current = [];
     readyWaitCleanup.current?.();
     readyWaitCleanup.current = null;
+    padStartedCleanup.current?.();
+    padStartedCleanup.current = null;
     setIsPreviewing(false);
     window.dispatchEvent(new CustomEvent('stop-all-audio'));
   }, []);
@@ -179,16 +184,21 @@ export default function App() {
 
       const onPadStarted = (e: Event) => {
         if ((e as CustomEvent<number>).detail === padIndex) {
-          window.removeEventListener('pad-started', onPadStarted);
+          detach();
           advanceStep();
         }
       };
+      const detach = () => {
+        window.removeEventListener('pad-started', onPadStarted);
+        if (padStartedCleanup.current === detach) padStartedCleanup.current = null;
+      };
 
       window.addEventListener('pad-started', onPadStarted);
+      padStartedCleanup.current = detach;
 
       // Fallback timer in case pad is empty or audio playback fails/errors
       const fallbackTimerId = window.setTimeout(() => {
-        window.removeEventListener('pad-started', onPadStarted);
+        detach();
         advanceStep();
       }, 1000);
       previewTimerIds.current.push(fallbackTimerId);
@@ -568,6 +578,8 @@ export default function App() {
     const remaining = enabledSamples(updated);
     const survivors = kit.map(sample => (sample?.id !== sampleId ? sample : null));
 
+    // The lock belonged to the excluded sample; its replacement was never chosen by the user.
+    setLockedPads(prev => prev.map((locked, idx) => (kit[idx]?.id === sampleId ? false : locked)));
     setSourceFolders(updated);
     setKitResult(
       remaining.length > 0
@@ -727,8 +739,16 @@ export default function App() {
       // names are still free.
       names.forEach(name => exportedNames.current.add(name));
 
+      const trimNotes: string[] = [];
       if (report.trimFailures > 0) {
-        setNotice(`${report.trimFailures} sample(s) could not be trimmed and were exported unchanged.`);
+        trimNotes.push(`${report.trimFailures} sample(s) could not be trimmed and were exported unchanged.`);
+      }
+      if (report.trimSkipped > 0) {
+        trimNotes.push(`${report.trimSkipped} sample(s) are in a format that cannot be trimmed (AIFF, 8-bit, 32-bit or unusual sample rate) and were exported unchanged.`);
+      }
+      if (trimNotes.length > 0) {
+        // Appended, not replaced: the rename notice set above must survive.
+        setNotice(prev => [prev, ...trimNotes].filter(Boolean).join(' '));
       }
     } catch (err) {
       console.error('Export failed:', err);

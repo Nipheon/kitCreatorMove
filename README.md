@@ -80,7 +80,7 @@ src/
     fileReader.ts        # Sample classification & folder parsing
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit prefix & suffix generation
-    wavStripper.ts       # Metadata stripping & WAV header parsing
+    wavStripper.ts       # WAV header parsing (stripWavMetadata is no longer used by export)
 test/
   kit.test.ts           # Test suite
 ```

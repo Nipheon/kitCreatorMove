@@ -126,7 +126,7 @@ to match new behaviour unless the behaviour change is the point of the task.
 - **Do not touch `encodeURIComponent` in `exporter.ts`.** The encoding is unverified
   against what Ableton actually parses and is deliberately left alone.
 - **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were accepted once:
-  they pass through `stripWavMetadata` and `trimSilence` untouched, so the export
+  they pass through `trimSilence` untouched, so the export
   succeeds and then fails on the device. Refusing at the door is the honest failure.
 - **AIFF is accepted but never processed.** `readWavFormat` returns `null` for
   `FORM`/`AIFF`, so trimming is skipped and the file is copied byte-for-byte. Correct —
