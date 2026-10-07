@@ -1538,7 +1538,7 @@ await test('every drum cell ships the colour that imports', async () => {
 await test('wav format is read without decoding', async () => {
   const wav = new Blob([makeWav({ sampleRate: 48000, bitsPerSample: 24, channels: 2 })]);
   const format = await readWavFormat(wav);
-  assert.deepEqual(format, { numChannels: 2, sampleRate: 48000, bitsPerSample: 24 });
+  assert.deepEqual(format, { numChannels: 2, sampleRate: 48000, bitsPerSample: 24, audioFormat: 1 });
 });
 
 await test('metadata chunks are stripped, audio is preserved', async () => {
@@ -1586,7 +1586,7 @@ await test('encodeWav writes 16-bit samples the browser can read back', async ()
   const blob = encodeWav([input], 44100, 16);
 
   const format = await readWavFormat(blob);
-  assert.deepEqual(format, { numChannels: 1, sampleRate: 44100, bitsPerSample: 16 });
+  assert.deepEqual(format, { numChannels: 1, sampleRate: 44100, bitsPerSample: 16, audioFormat: 1 });
 
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const view = new DataView(bytes.buffer);
@@ -1605,7 +1605,7 @@ await test('encodeWav writes 24-bit samples, including negatives', async () => {
   const blob = encodeWav([input], 48000, 24);
 
   const format = await readWavFormat(blob);
-  assert.deepEqual(format, { numChannels: 1, sampleRate: 48000, bitsPerSample: 24 });
+  assert.deepEqual(format, { numChannels: 1, sampleRate: 48000, bitsPerSample: 24, audioFormat: 1 });
 
   const bytes = new Uint8Array(await blob.arrayBuffer());
   const view = new DataView(bytes.buffer);

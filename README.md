@@ -6,7 +6,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 
 ## Features
 
-- 📁 **Folder Drag & Drop**: Drop sample folders directly into the browser. Reads `.wav` and `.aiff` files recursively. Nothing is uploaded — everything runs in the page.
+- 📁 **Folder Drag & Drop**: Drop sample folders directly into the browser. Reads `.wav` and `.aiff` files recursively; Microsoft ADPCM WAVs are converted to 16-bit WAV, other compressed WAVs are skipped with a notice. Nothing is uploaded — everything runs in the page.
 - 🎯 **Smart Classification**: Detects sample roles (*Kick*, *Snare*, *Closed Hat*, *Open Hat*, *Clap*, *Crash*, *Percussion*, *Other*) from filenames and folder names, tuned against real sample libraries. A hat with no open/closed qualifier is treated as closed, a crash is drawn from the percussion pool, and a bare `808` is a kick.
 - 🧹 **Loop & Non-Drum Filtering**: Leaves out loops (a bar count, a tempo like `128bpm`, or a filename saying "break" on a file it could not otherwise categorise) and uncategorised material that looks like effects, vocals, scratches or melody — including anything sitting in an `Extras`, `Imported` or `Misc` folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is untouched. Both filters are toggles.
 - 🎛️ **Derived 4×4 Pad Grid**: The grid is built from the categories your library actually holds rather than picked from a fixed list. Up to four categories take a full-height column each; a fifth and beyond share the top row. Mapped to hardware MIDI notes 36–51 (Pad 1 = bottom-left).
@@ -86,6 +86,7 @@ src/
     Toast.tsx           # Warning notification
   utils/
     ablPresetTemplate.ts # Ableton Move preset JSON generator
+    adpcm.ts             # MS ADPCM to 16-bit PCM WAV conversion at import
     audioTrimmer.ts      # OfflineAudioContext silence trimming
     exporter.ts          # JSZip bundle, separate-file and zip batch export
     fileReader.ts        # Sample classification & folder parsing

@@ -1,4 +1,6 @@
 import { Category } from '../types';
+import { AdpcmError, decodeMsAdpcm } from './adpcm';
+import { parseWavFormat } from './wavStripper';
 
 export interface DroppedFile {
   file: File;
@@ -9,6 +11,83 @@ export interface DroppedFile {
 export interface DroppedFolder {
   name: string;
   files: DroppedFile[];
+}
+
+/** What the import changed or refused, for the UI to report. */
+export interface DropReport {
+  /** Names of files converted from MS ADPCM to 16-bit PCM. */
+  converted: string[];
+  /** Files skipped because the app cannot read their format. */
+  rejected: { name: string; reason: string }[];
+}
+
+export const newDropReport = (): DropReport => ({ converted: [], rejected: [] });
+
+/** Human-readable messages for a report, empty when nothing was converted or skipped. */
+export function describeDropReport(report: DropReport): string[] {
+  const out: string[] = [];
+  const list = (names: string[]) => names.slice(0, 5).join(', ') + (names.length > 5 ? `, +${names.length - 5} more` : '');
+  if (report.converted.length > 0) {
+    const n = report.converted.length;
+    out.push(`Converted ${n} sample${n === 1 ? '' : 's'} from ADPCM to 16-bit WAV (browsers and the Move cannot play ADPCM): ${list(report.converted)}.`);
+  }
+  if (report.rejected.length > 0) {
+    const n = report.rejected.length;
+    out.push(`Skipped ${n} sample${n === 1 ? '' : 's'} the app cannot read: ${list(report.rejected.map(r => `${r.name} (${r.reason})`))}.`);
+  }
+  return out;
+}
+
+const FORMAT_NAMES: Record<number, string> = {
+  0x0002: 'MS ADPCM', 0x0006: 'A-law', 0x0007: 'mu-law', 0x0011: 'IMA ADPCM',
+  0x0031: 'GSM 6.10', 0x0050: 'MPEG audio', 0x0055: 'MP3', 0x0161: 'WMA', 0x00ff: 'AAC'
+};
+const formatName = (tag: number) =>
+  FORMAT_NAMES[tag] ?? `unknown WAV format 0x${tag.toString(16).padStart(4, '0')}`;
+
+/** How much of a file to read to find the `fmt ` chunk before falling back to the whole file. */
+const HEAD_BYTES = 64 * 1024;
+
+/**
+ * Decides what to do with a WAV. PCM and float pass through as the very same File: they
+ * are never re-encoded. MS ADPCM is converted to PCM16; every other format is rejected.
+ * A file with no readable `fmt ` chunk is left alone, as before.
+ */
+async function prepareWav(file: File, report: DropReport): Promise<File | null> {
+  let buffer: ArrayBuffer | null = null;
+  let format = null;
+  try {
+    const head = await file.slice(0, HEAD_BYTES).arrayBuffer();
+    format = parseWavFormat(head);
+    if (format === null && file.size > HEAD_BYTES) {
+      buffer = await file.arrayBuffer();
+      format = parseWavFormat(buffer);
+    }
+  } catch (err) {
+    console.warn(`Could not inspect ${file.name}:`, err);
+    return file;
+  }
+  if (format === null) return file;
+
+  const tag = format.audioFormat === 0xfffe && format.subFormat !== undefined ? format.subFormat : format.audioFormat;
+  if (tag === 1 || tag === 3) return file;
+
+  if (format.audioFormat === 2) {
+    try {
+      buffer ??= await file.arrayBuffer();
+      const pcm = decodeMsAdpcm(buffer);
+      report.converted.push(file.name);
+      return new File([pcm], file.name, { type: 'audio/wav' });
+    } catch (err) {
+      console.warn(`Could not decode ADPCM ${file.name}:`, err);
+      const why = err instanceof AdpcmError ? err.message : 'unreadable';
+      report.rejected.push({ name: file.name, reason: `MS ADPCM, ${why}` });
+      return null;
+    }
+  }
+
+  report.rejected.push({ name: file.name, reason: formatName(tag) });
+  return null;
 }
 
 /**
@@ -41,7 +120,10 @@ async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSy
   return all;
 }
 
-export async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedFile[]> {
+export async function collectAudioFiles(
+  root: FileSystemEntry,
+  report: DropReport = newDropReport()
+): Promise<DroppedFile[]> {
   const files: DroppedFile[] = [];
   const queue: FileSystemEntry[] = [root];
 
@@ -53,7 +135,10 @@ export async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedF
           (entry as FileSystemFileEntry).file(resolve, reject)
         );
         // The subfolder a sample sits in is often the only clue to what it is.
-        if (isAudioFile(file.name)) files.push({ file, path: directoryOf(entry.fullPath) });
+        if (isAudioFile(file.name)) {
+          const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : file;
+          if (ready) files.push({ file: ready, path: directoryOf(entry.fullPath) });
+        }
       } else if (entry.isDirectory && entry.name !== '__MACOSX') {
         const reader = (entry as FileSystemDirectoryEntry).createReader();
         queue.push(...await readAllEntries(reader));
@@ -68,7 +153,8 @@ export async function collectAudioFiles(root: FileSystemEntry): Promise<DroppedF
 }
 
 export async function getFilesFromDataTransfer(
-  items: DataTransferItemList
+  items: DataTransferItemList,
+  report: DropReport = newDropReport()
 ): Promise<DroppedFolder[]> {
   const result: DroppedFolder[] = [];
 
@@ -84,7 +170,7 @@ export async function getFilesFromDataTransfer(
   const loose: DroppedFile[] = [];
 
   for (const entry of entries) {
-    const files = await collectAudioFiles(entry);
+    const files = await collectAudioFiles(entry, report);
     if (files.length === 0) continue;
     if (entry.isFile) loose.push(...files);
     else result.push({ name: entry.name, files });

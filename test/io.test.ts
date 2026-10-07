@@ -7,7 +7,8 @@
  */
 import assert from 'node:assert/strict';
 import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
-import { collectAudioFiles, getFilesFromDataTransfer } from '../src/utils/fileReader';
+import { decodeMsAdpcm } from '../src/utils/adpcm';
+import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer } from '../src/utils/fileReader';
 import { readWavFormat } from '../src/utils/wavStripper';
 
 let failures = 0;
@@ -213,7 +214,7 @@ await test('trim cuts leading and trailing silence and keeps rate and bit depth'
     assert.equal(result.trimmed, true);
     assert.ok(!result.unsupported && !result.failed);
     const fmt = await readWavFormat(result.blob);
-    assert.deepEqual(fmt, { numChannels: 1, sampleRate: rate, bitsPerSample: bits });
+    assert.deepEqual(fmt, { numChannels: 1, sampleRate: rate, bitsPerSample: bits, audioFormat: 1 });
     const out = decodePcm(await result.blob.arrayBuffer());
     assert.equal(out.length, 50);
     assert.ok(Math.abs(out.getChannelData(0)[0] - 0.5) < 0.001);
@@ -334,6 +335,196 @@ await test('trim output is stable across seeded random inputs', async () => {
       assert.equal(decodePcm(await result.blob.arrayBuffer()).length, body);
     }
   }
+});
+
+// ── MS ADPCM import ───────────────────────────────────────────────────────────
+
+const COEFFS: [number, number][] = [[256, 0], [512, -256], [0, 0], [192, 64], [240, 0], [460, -208], [392, -232]];
+const ADAPT = [230, 230, 230, 230, 307, 409, 512, 614, 768, 614, 512, 409, 307, 230, 230, 230];
+
+const ascii = (text: string) => [...text].map(c => c.charCodeAt(0));
+const le16 = (v: number) => [v & 0xff, (v >> 8) & 0xff];
+const le32 = (v: number) => [v & 0xff, (v >>> 8) & 0xff, (v >>> 16) & 0xff, (v >>> 24) & 0xff];
+const chunk = (id: string, body: number[]) => [...ascii(id), ...le32(body.length), ...body, ...(body.length % 2 ? [0] : [])];
+
+/** Wraps encoded blocks in the fmt layout of a real MS-ADPCM file (cbSize 32, 7 coefficient pairs, fact). */
+function adpcmWav(blocks: number[][], ch: number, rate: number, blockAlign: number, spb: number, tag = 2) {
+  const data = blocks.flatMap((b, i) => (i < blocks.length - 1 ? [...b, ...Array(blockAlign - b.length).fill(0)] : b));
+  const fmt = [
+    ...le16(tag), ...le16(ch), ...le32(rate), ...le32(Math.floor((rate * blockAlign) / spb)),
+    ...le16(blockAlign), ...le16(4), ...le16(32), ...le16(spb), ...le16(COEFFS.length),
+    ...COEFFS.flatMap(([a, b]) => [...le16(a), ...le16(b)])
+  ];
+  const body = [...ascii('WAVE'), ...chunk('fmt ', fmt), ...chunk('fact', le32(blocks.length * spb)), ...chunk('data', data)];
+  return new Uint8Array([...ascii('RIFF'), ...le32(body.length), ...body]);
+}
+
+/** Minimal MS-ADPCM encoder (predictor 0). `pcm` is interleaved; each block holds `spb` frames. */
+function encodeAdpcm(pcm: Int16Array, ch: number, rate: number, blockAlign: number, tag = 2) {
+  const spb = 2 + Math.floor(((blockAlign - 7 * ch) * 2) / ch);
+  const frames = pcm.length / ch;
+  const blocks: number[][] = [];
+  for (let start = 0; start + 2 <= frames; start += spb) {
+    const bytes: number[] = [];
+    const delta = Array(ch).fill(16);
+    const s1 = Array.from({ length: ch }, (_, c) => pcm[(start + 1) * ch + c]);
+    const s2 = Array.from({ length: ch }, (_, c) => pcm[start * ch + c]);
+    for (let c = 0; c < ch; c++) bytes.push(0);
+    for (let c = 0; c < ch; c++) bytes.push(...le16(delta[c]));
+    for (let c = 0; c < ch; c++) bytes.push(...le16(s1[c]));
+    for (let c = 0; c < ch; c++) bytes.push(...le16(s2[c]));
+    let high = true;
+    let cur = 0;
+    for (let f = start + 2; f < Math.min(frames, start + spb); f++) {
+      for (let c = 0; c < ch; c++) {
+        const [c1, c2] = COEFFS[0];
+        const p = Math.trunc((s1[c] * c1 + s2[c] * c2) / 256);
+        const q = Math.max(-8, Math.min(7, Math.round((pcm[f * ch + c] - p) / delta[c])));
+        const recon = Math.max(-32768, Math.min(32767, p + q * delta[c]));
+        const nib = q & 0x0f;
+        if (high) cur = nib << 4; else bytes.push(cur | nib);
+        high = !high;
+        s2[c] = s1[c];
+        s1[c] = recon;
+        delta[c] = Math.max(16, (ADAPT[nib] * delta[c]) >> 8);
+      }
+    }
+    if (!high) bytes.push(cur);
+    blocks.push(bytes);
+  }
+  return adpcmWav(blocks, ch, rate, blockAlign, spb, tag);
+}
+
+const wave = (freq: number, frames: number, amp = 12000) =>
+  Int16Array.from({ length: frames }, (_, i) => Math.round(Math.sin((2 * Math.PI * freq * i) / 44100) * amp));
+
+const interleave = (l: Int16Array, r: Int16Array) => {
+  const out = new Int16Array(l.length * 2);
+  l.forEach((v, i) => { out[i * 2] = v; out[i * 2 + 1] = r[i]; });
+  return out;
+};
+
+const pcmOf = (bytes: ArrayBuffer) => new Int16Array(bytes.slice(44));
+
+const maxErr = (a: Int16Array, b: Int16Array) => {
+  let m = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) m = Math.max(m, Math.abs(a[i] - b[i]));
+  return m;
+};
+
+const asBuffer = (u: Uint8Array) => u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength) as ArrayBuffer;
+
+await test('MS ADPCM decodes mono close to the source with a valid PCM16 header', async () => {
+  const src = wave(440, 1000);
+  const out = await decodeMsAdpcm(asBuffer(encodeAdpcm(src, 1, 22050, 256))).arrayBuffer();
+  assert.deepEqual(await readWavFormat(new Blob([out])), { numChannels: 1, sampleRate: 22050, bitsPerSample: 16, audioFormat: 1 });
+  const view = new DataView(out);
+  const pcm = pcmOf(out);
+  assert.equal(view.getUint32(4, true), out.byteLength - 8);
+  assert.equal(view.getUint32(40, true), pcm.length * 2);
+  assert.equal(pcm.length, 1000);
+  // The two header samples are exact; the rest follows within quantisation error.
+  assert.equal(pcm[0], src[0]);
+  assert.equal(pcm[1], src[1]);
+  assert.ok(maxErr(pcm, src) < 1500, `max error ${maxErr(pcm, src)}`);
+});
+
+await test('MS ADPCM decodes stereo, keeping channels apart', async () => {
+  const l = wave(300, 900);
+  const r = wave(900, 900, 6000);
+  const out = await decodeMsAdpcm(asBuffer(encodeAdpcm(interleave(l, r), 2, 44100, 512))).arrayBuffer();
+  const pcm = pcmOf(out);
+  assert.equal(pcm.length, 1800);
+  assert.ok(maxErr(pcm, interleave(l, r)) < 1500);
+  assert.equal(pcm[0], l[0]);
+  assert.equal(pcm[1], r[0]);
+});
+
+await test('MS ADPCM fixture with the layout of the reported file yields wSamplesPerBlock frames per block', async () => {
+  // tag 2, 2ch, 44100 Hz, align 2048, 4 bits, cbSize 32, 7 coefficient pairs, fact chunk.
+  const frames = 0x7f4 * 3;
+  const wav = encodeAdpcm(interleave(wave(200, frames), wave(250, frames)), 2, 44100, 2048);
+  const out = await decodeMsAdpcm(asBuffer(wav)).arrayBuffer();
+  assert.equal(pcmOf(out).length / 2, frames);
+  assert.equal((await readWavFormat(new Blob([asBuffer(wav)])))?.audioFormat, 2);
+});
+
+await test('MS ADPCM handles a short final block', async () => {
+  const frames = 0x7f4 + 300;
+  const wav = encodeAdpcm(interleave(wave(200, frames), wave(250, frames)), 2, 44100, 2048);
+  const n = pcmOf(await decodeMsAdpcm(asBuffer(wav)).arrayBuffer()).length / 2;
+  assert.ok(Math.abs(n - frames) <= 1, `got ${n}, want ${frames}`);
+});
+
+await test('MS ADPCM rejects an invalid predictor index and an empty data chunk', () => {
+  const buf = asBuffer(encodeAdpcm(wave(300, 500), 1, 22050, 256));
+  const view = new DataView(buf);
+  let off = 12;
+  while (String.fromCharCode(...new Uint8Array(buf, off, 4)) !== 'data') {
+    const size = view.getUint32(off + 4, true);
+    off += 8 + size + (size % 2);
+  }
+  new Uint8Array(buf)[off + 8] = 9;
+  assert.throws(() => decodeMsAdpcm(buf), /predictor/);
+  view.setUint32(off + 4, 0, true);
+  assert.throws(() => decodeMsAdpcm(buf));
+});
+
+const entryFor = (dir: string, name: string, bytes: Uint8Array): Fake => ({
+  isFile: true, isDirectory: false, name, fullPath: `${dir}/${name}`,
+  file: (ok: (f: File) => void) => ok(new File([bytes as BlobPart], name))
+} as unknown as Fake);
+
+const emptyReport = () => ({ converted: [] as string[], rejected: [] as { name: string; reason: string }[] });
+
+await test('collectAudioFiles converts ADPCM, rejects other formats, passes PCM and float through byte-identical', async () => {
+  const adpcm = encodeAdpcm(interleave(wave(200, 3000), wave(250, 3000)), 2, 44100, 2048);
+  const ima = encodeAdpcm(wave(200, 500), 1, 22050, 256, 0x11);
+  const pcm = new Uint8Array(await encodeWav([new Float32Array(50).fill(0.25)], 44100, 16).arrayBuffer());
+  const float = pcm.slice();
+  float[20] = 3; // format tag 3, IEEE float
+  const noFmt = new Uint8Array(ascii('RIFFxxxxWAVE'));
+  const files: [string, Uint8Array][] = [
+    ['click.wav', adpcm], ['ima.wav', ima], ['pcm.wav', pcm], ['float.wav', float],
+    ['odd.wav', noFmt], ['cut.wav', adpcm.slice(0, 80)]
+  ];
+  const root = dirEntry('', 'Pack', p => files.map(([n, b]) => entryFor(p, n, b)));
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(root, report));
+  assert.deepEqual(names(got), ['click.wav', 'float.wav', 'odd.wav', 'pcm.wav']);
+  assert.deepEqual(report.converted, ['click.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name).sort(), ['cut.wav', 'ima.wav']);
+  assert.match(report.rejected.find(r => r.name === 'ima.wav')!.reason, /IMA ADPCM/);
+  const byName = Object.fromEntries(got.map(g => [g.file.name, g.file]));
+  assert.deepEqual(new Uint8Array(await byName['pcm.wav'].arrayBuffer()), pcm);
+  assert.deepEqual(new Uint8Array(await byName['float.wav'].arrayBuffer()), float);
+  assert.equal(byName['click.wav'].type, 'audio/wav');
+  assert.deepEqual(await readWavFormat(byName['click.wav']), { numChannels: 2, sampleRate: 44100, bitsPerSample: 16, audioFormat: 1 });
+  const notes = describeDropReport(report);
+  assert.equal(notes.length, 2);
+  assert.match(notes[0], /Converted 1 sample from ADPCM to 16-bit WAV.*click\.wav/);
+  assert.match(notes[1], /Skipped 2 samples the app cannot read: .*ima\.wav \(IMA ADPCM\)/);
+});
+
+await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is rejected otherwise', async () => {
+  const ext = (sub: number) => {
+    const b = new Uint8Array(68);
+    const v = new DataView(b.buffer);
+    b.set(ascii('RIFF'), 0); v.setUint32(4, 60, true);
+    b.set(ascii('WAVE'), 8);
+    b.set(ascii('fmt '), 12); v.setUint32(16, 40, true);
+    v.setUint16(20, 0xfffe, true); v.setUint16(22, 1, true); v.setUint32(24, 44100, true);
+    v.setUint32(28, 88200, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    v.setUint16(36, 22, true); v.setUint16(38, 16, true); v.setUint16(44, sub, true);
+    b.set(ascii('data'), 60); v.setUint32(64, 0, true);
+    return b;
+  };
+  assert.equal((await readWavFormat(new Blob([ext(1)])))?.subFormat, 1);
+  const root = dirEntry('', 'P', p => [entryFor(p, 'a.wav', ext(1)), entryFor(p, 'b.wav', ext(0x11))]);
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(root, report));
+  assert.deepEqual(names(got), ['a.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name), ['b.wav']);
 });
 
 if (failures > 0) {

@@ -2,9 +2,13 @@ export interface WavFormat {
   numChannels: number;
   sampleRate: number;
   bitsPerSample: number;
+  /** The `fmt ` format tag: 1 PCM, 2 MS ADPCM, 3 IEEE float, 0xFFFE extensible, ... */
+  audioFormat: number;
+  /** For WAVE_FORMAT_EXTENSIBLE (0xFFFE) only: the format tag of the sub-format GUID. */
+  subFormat?: number;
 }
 
-interface RiffChunk {
+export interface RiffChunk {
   id: string;
   size: number;
   offset: number;
@@ -21,7 +25,7 @@ const readFourCC = (view: DataView, offset: number) =>
  * actually remain — a truncated file would otherwise produce an output header
  * claiming more data than the payload holds.
  */
-function readChunks(buffer: ArrayBuffer): RiffChunk[] | null {
+export function readChunks(buffer: ArrayBuffer): RiffChunk[] | null {
   if (buffer.byteLength < 12) return null;
   const view = new DataView(buffer);
   if (readFourCC(view, 0) !== 'RIFF' || readFourCC(view, 8) !== 'WAVE') return null;
@@ -45,20 +49,29 @@ function readChunks(buffer: ArrayBuffer): RiffChunk[] | null {
   return chunks;
 }
 
+/** Parses the `fmt ` chunk of an in-memory WAV, or null when there is none. */
+export function parseWavFormat(buffer: ArrayBuffer): WavFormat | null {
+  const chunks = readChunks(buffer);
+  const fmt = chunks?.find(c => c.id === 'fmt ');
+  if (!fmt || fmt.size < 16) return null;
+
+  const view = new DataView(buffer);
+  const audioFormat = view.getUint16(fmt.offset, true);
+  const format: WavFormat = {
+    numChannels: view.getUint16(fmt.offset + 2, true),
+    sampleRate: view.getUint32(fmt.offset + 4, true),
+    bitsPerSample: view.getUint16(fmt.offset + 14, true),
+    audioFormat
+  };
+  // The sub-format GUID starts at byte 24; its first two bytes are the real format tag.
+  if (audioFormat === 0xfffe && fmt.size >= 26) format.subFormat = view.getUint16(fmt.offset + 24, true);
+  return format;
+}
+
 /** Source format straight from the `fmt ` chunk, without decoding the audio. */
 export async function readWavFormat(blob: Blob): Promise<WavFormat | null> {
   try {
-    const buffer = await blob.arrayBuffer();
-    const chunks = readChunks(buffer);
-    const fmt = chunks?.find(c => c.id === 'fmt ');
-    if (!fmt || fmt.size < 16) return null;
-
-    const view = new DataView(buffer);
-    return {
-      numChannels: view.getUint16(fmt.offset + 2, true),
-      sampleRate: view.getUint32(fmt.offset + 4, true),
-      bitsPerSample: view.getUint16(fmt.offset + 14, true)
-    };
+    return parseWavFormat(await blob.arrayBuffer());
   } catch (err) {
     console.error('Failed to read WAV format:', err);
     return null;

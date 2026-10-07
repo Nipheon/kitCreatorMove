@@ -9,7 +9,8 @@ import {
 import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
-  categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
+  categorizeSample, describeDropReport, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum,
+  newDropReport
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
@@ -459,8 +460,11 @@ export default function App() {
     setIsLoading(true);
     setError(null);
 
+    const report = newDropReport();
     try {
-      const scanned = await getFilesFromDataTransfer(items);
+      const scanned = await getFilesFromDataTransfer(items, report);
+      const reportNotes = describeDropReport(report);
+      if (reportNotes.length > 0) setNotice(prev => [prev, ...reportNotes].filter(Boolean).join(' '));
       // Read after the await: the scan may have outlived edits made through the keyboard.
       const current = latest.current;
       const candidates = scanned
@@ -505,7 +509,9 @@ export default function App() {
             ? skippedDuplicates === 1
               ? 'That folder is already loaded.'
               : `Those ${skippedDuplicates} folders are already loaded.`
-            : 'No .wav or .aiff files found in what you dropped. Move plays those two formats only.'
+            : report.rejected.length > 0
+              ? 'None of the dropped samples could be read; see the note above.'
+              : 'No .wav or .aiff files found in what you dropped. Move plays those two formats only.'
         );
         return;
       }

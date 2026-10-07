@@ -15,7 +15,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,Toast}.tsx
-src/utils/{ablPresetTemplate,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,sampleSignature,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,sampleSignature,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
 
@@ -104,6 +104,13 @@ path with more than three segments means you are in the wrong place.
   the encoding alone.
 - **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were once accepted, passed through trimming untouched and failed
   on the device. Refuse at the door.
+- **WAV format is checked at import (`prepareWav` in `fileReader.ts`).** PCM (1), IEEE float (3) and extensible with a PCM/float
+  sub-format pass through as the very same `File`, byte for byte; never re-encode them. MS ADPCM (2) is decoded by `adpcm.ts` to a
+  16-bit PCM WAV (same rate and channels, no resampling, exact samples) because browsers cannot play it and the Move does not
+  either. Any other tag (IMA ADPCM, mu-law, A-law, MP3, GSM, unknown) or undecodable ADPCM is skipped and listed in the `DropReport`
+  (`converted`/`rejected`), which `App.processFiles` appends to the notice; one bad file never discards the rest of the drop. A WAV
+  with no readable `fmt ` chunk is left alone. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
+  for extensible, `subFormat`.
 - **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
   export (it remains in `wavStripper.ts` and is tested); do not re-introduce stripping on the untrimmed path.
 - **Trimming only re-encodes a 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
