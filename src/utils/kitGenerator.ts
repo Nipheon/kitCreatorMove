@@ -2,6 +2,7 @@ import {
   chooseLayout, drawGroupFor, PAD_COUNT, PadLayout, poolCategoryFor, satisfiesRole
 } from '../padLayout';
 import { Category, Sample } from '../types';
+import { sampleIdentity } from './sampleSignature';
 
 export interface KitResult {
   kit: (Sample | null)[];
@@ -181,10 +182,10 @@ export function generateRandomKit(
   const locked = lockedSamples.filter((s): s is Sample => s !== null && s !== undefined);
   const lockedIds = new Set(locked.map(s => s.id));
   // Same file dropped from two folders should not be able to fill two pads.
-  const seenSignatures = new Set(locked.map(s => `${s.name}-${s.file.size}`));
+  const seenSignatures = new Set(locked.map(s => sampleIdentity(s)));
 
   usable.forEach(s => {
-    const signature = `${s.name}-${s.file.size}`;
+    const signature = sampleIdentity(s);
     if (!lockedIds.has(s.id) && !seenSignatures.has(signature) && !s.isExcluded) {
       pools[poolCategoryFor(s)].push(s);
       seenSignatures.add(signature);
@@ -286,7 +287,7 @@ export function rerollSinglePad(
   nextKit.forEach(sample => {
     if (sample) {
       usedIds.add(sample.id);
-      usedSignatures.add(`${sample.name}-${sample.file.size}`);
+      usedSignatures.add(sampleIdentity(sample));
     }
   });
 
@@ -297,7 +298,7 @@ export function rerollSinglePad(
   };
 
   usable.forEach(s => {
-    const signature = `${s.name}-${s.file.size}`;
+    const signature = sampleIdentity(s);
     if (!usedIds.has(s.id) && !usedSignatures.has(signature) && !s.isExcluded) {
       pools[poolCategoryFor(s)].push(s);
     }

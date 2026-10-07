@@ -40,6 +40,7 @@ import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
   prefixFromFolderName, safeFileName, uniqueKitName
 } from '../src/utils/kitNaming';
+import { fileSignature, sampleIdentity } from '../src/utils/sampleSignature';
 import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
 const NO_TRIM = { trimSilence: false };
@@ -1786,6 +1787,33 @@ await test('dots in folder names are kept; only the file extension is stripped',
   assert.equal(looksLikeLoop('Kick.01.wav', '', 'Kick'), false);
   assert.equal(looksNonDrum('Other', 'Hit.wav', 'Packs/Vocal.Chops'), true);
   assert.equal(looksNonDrum('Other', 'Fx.01.wav'), true);
+});
+
+await test('dedupe: same name+size but different content no longer collides; identical copies still dedupe', async () => {
+  const mk = async (name: string, body: string): Promise<Sample> => {
+    const s = makeSample(name, 'Kick', body);
+    s.signature = await fileSignature(s.file);
+    return s;
+  };
+  const a = await mk('Kick.wav', 'aaaa');
+  const b = await mk('Kick.wav', 'bbbb');
+  const aCopy = await mk('Kick.wav', 'aaaa');
+  assert.notEqual(sampleIdentity(a), sampleIdentity(b));
+  assert.equal(sampleIdentity(a), sampleIdentity(aCopy));
+  const big1 = new Uint8Array(100000);
+  const big2 = new Uint8Array(100000);
+  big2[99999] = 1;
+  assert.notEqual(await fileSignature(new Blob([big1])), await fileSignature(new Blob([big2])));
+  for (let i = 0; i < 20; i++) {
+    const { kit } = generateRandomKit([a, b, aCopy]);
+    const ids = kit.filter((s): s is Sample => s !== null).map(sampleIdentity);
+    assert.equal(ids.length, 2);
+    assert.equal(new Set(ids).size, 2);
+  }
+  const base: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  base[0] = a;
+  const r = rerollSinglePad([a, b, aCopy], base, 5);
+  assert.ok(r.kit[5] === null || r.kit[5]!.id === b.id);
 });
 
 if (failures > 0) {

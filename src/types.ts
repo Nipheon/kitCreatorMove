@@ -8,6 +8,8 @@ export interface Sample {
   category: Category;
   url: string; // Object URL for preview
   isExcluded?: boolean;
+  /** Size plus a hash of the file's head and tail; see `fileSignature`. Used to dedupe. */
+  signature?: string;
   /** Looks like a bar of music rather than a one-shot — skipped unless asked for. */
   isLoop?: boolean;
   /**

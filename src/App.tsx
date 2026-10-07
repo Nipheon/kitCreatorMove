@@ -12,6 +12,7 @@ import {
   categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
 } from './utils/fileReader';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
+import { fileSignature } from './utils/sampleSignature';
 import {
   DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders, uniqueKitName
 } from './utils/kitNaming';
@@ -447,7 +448,8 @@ export default function App() {
             // categoriser placed — a snare named "Break Snare" is still a snare.
             isLoop: looksLikeLoop(file.name, path, category),
             isNonDrum: looksNonDrum(category, file.name, path),
-            url
+            url,
+            signature: await fileSignature(file)
           });
         }
 
