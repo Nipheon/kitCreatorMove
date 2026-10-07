@@ -8,7 +8,8 @@
 import assert from 'node:assert/strict';
 import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
-import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer } from '../src/utils/fileReader';
+import { collectAudioFiles, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER } from '../src/utils/fileReader';
+import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { readWavFormat } from '../src/utils/wavStripper';
 import { describeScanProgress, throttle } from '../src/utils/scanProgress';
 
@@ -581,6 +582,88 @@ await test('describeScanProgress words the pending row and rounds what is announ
   assert.equal(describeScanProgress('Kicks', 99).announce, 'Scanning Kicks');
 });
 
+// ── Picker (<input type="file">) ──────────────────────────────────────────────
+
+/** A File as a directory input reports it: `webkitRelativePath` is read-only, so it is defined on. */
+const picked = (relativePath: string, bytes: Uint8Array | string = 'x'): File => {
+  const file = new File([bytes as BlobPart], relativePath.split('/').pop()!);
+  if (relativePath.includes('/')) Object.defineProperty(file, 'webkitRelativePath', { value: relativePath, configurable: true });
+  return file;
+};
+
+await test('getFilesFromFileList groups by first path segment with the same paths as a drop', async () => {
+  const tree: Record<string, string[]> = {
+    'Pack/Kicks': ['k1.wav', 'k2.aif'], 'Pack': ['root.wav'], 'Pack/Hats/Open': ['oh.wav']
+  };
+  const rel = Object.entries(tree).flatMap(([dir, fs]) => fs.map(f => `${dir}/${f}`));
+  const viaPicker = await getFilesFromFileList(rel.map(r => picked(r)));
+  assert.deepEqual(viaPicker.map(f => f.name), ['Pack']);
+
+  const root = dirEntry('', 'Pack', p => [
+    entryFor(p, 'root.wav', new Uint8Array([1])),
+    dirEntry(p, 'Kicks', q => [entryFor(q, 'k1.wav', new Uint8Array([1])), entryFor(q, 'k2.aif', new Uint8Array([1]))]),
+    dirEntry(p, 'Hats', q => [dirEntry(q, 'Open', r => [entryFor(r, 'oh.wav', new Uint8Array([1]))])])
+  ]);
+  const viaDrop = await collectAudioFiles(root);
+  const pairs = (fs: { file: File; path: string }[]) => fs.map(f => `${f.path}|${f.file.name}`).sort();
+  assert.deepEqual(pairs(viaPicker[0].files), pairs(viaDrop));
+  assert.deepEqual(pairs(viaPicker[0].files), ['/Pack/Hats/Open|oh.wav', '/Pack/Kicks|k1.wav', '/Pack/Kicks|k2.aif', '/Pack|root.wav']);
+});
+
+await test('getFilesFromFileList puts files without a relative path in Dropped Files with an empty path, like a loose drop', async () => {
+  const got = await getFilesFromFileList([picked('a.wav'), picked('b.aiff'), picked('c.mp3')]);
+  assert.deepEqual(got.map(f => f.name), ['Dropped Files']);
+  assert.deepEqual(got[0].files.map(f => [f.file.name, f.path]), [['a.wav', ''], ['b.aiff', '']]);
+  const items = { length: 1, 0: { kind: 'file', webkitGetAsEntry: () => entryFor('', 'a.wav', new Uint8Array([1])) } } as unknown as DataTransferItemList;
+  assert.equal((await getFilesFromDataTransfer(items))[0].files[0].path, '');
+});
+
+await test('getFilesFromFileList skips AppleDouble, __MACOSX and non-audio files', async () => {
+  const got = await getFilesFromFileList([
+    picked('P/Kicks/._k.wav'), picked('P/__MACOSX/Kicks/k.wav'), picked('P/notes.txt'), picked('P/cover.png'), picked('P/Kicks/k.wav')
+  ]);
+  assert.deepEqual(got.map(f => f.name), ['P']);
+  assert.deepEqual(got[0].files.map(f => f.file.name), ['k.wav']);
+});
+
+await test('getFilesFromFileList converts ADPCM, reports unknown formats, and one unreadable file keeps the rest', async () => {
+  const adpcm = encodeAdpcm(interleave(wave(200, 3000), wave(250, 3000)), 2, 44100, 2048);
+  const ima = encodeAdpcm(wave(200, 500), 1, 22050, 256, 0x11);
+  const pcm = new Uint8Array(await encodeWav([new Float32Array(50).fill(0.25)], 44100, 16).arrayBuffer());
+  const broken = picked('P/broken.wav', pcm);
+  Object.defineProperty(broken, 'webkitRelativePath', { get() { throw new Error('unreadable'); } });
+  const report = emptyReport();
+  const got = await quiet(() => getFilesFromFileList(
+    [picked('P/a.wav', adpcm), picked('P/ima.wav', ima), broken, picked('P/pcm.wav', pcm)], { report }
+  ));
+  assert.deepEqual(names(got[0].files), ['a.wav', 'pcm.wav']);
+  assert.deepEqual(report.converted, ['a.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name), ['ima.wav']);
+  assert.deepEqual(new Uint8Array(await got[0].files.find(f => f.file.name === 'pcm.wav')!.file.arrayBuffer()), pcm);
+});
+
+await test('picked folders go through the shared merge: an existing folder name is skipped, the rest kept', async () => {
+  const got = await getFilesFromFileList([picked('Kicks/k.wav'), picked('Kicks/s/k2.wav'), picked('loose.wav')]);
+  const { accepted, skippedDuplicates } = mergeScannedFolders([{ name: 'kicks' }], got);
+  assert.deepEqual(accepted.map(f => f.name), ['Dropped Files']);
+  assert.equal(skippedDuplicates, 1);
+});
+
+await test('getFilesFromFileList reports progress like a drop: 0 per folder first, rising counts, loose files shared', async () => {
+  const events: { folder: string; files: number }[] = [];
+  const got = await getFilesFromFileList(
+    [picked('One/a.wav'), picked('One/s/b.wav'), picked('Empty/x.txt'), picked('P/__MACOSX/k.wav'), picked('x.wav'), picked('y.wav')],
+    { onProgress: p => events.push({ ...p }) }
+  );
+  assert.deepEqual(events.slice(0, 3), [
+    { folder: 'One', files: 0 }, { folder: 'Empty', files: 0 }, { folder: LOOSE_FILES_FOLDER, files: 0 }
+  ]);
+  const counts = (name: string) => events.slice(3).filter(e => e.folder === name).map(e => e.files);
+  assert.deepEqual(counts('One'), [1, 2]);
+  assert.deepEqual(counts('Empty'), []);
+  assert.deepEqual(counts(LOOSE_FILES_FOLDER), [1, 2]);
+  assert.deepEqual(got.map(f => f.name), ['One', LOOSE_FILES_FOLDER]);
+});
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed`);

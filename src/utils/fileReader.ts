@@ -103,6 +103,16 @@ const directoryOf = (fullPath: string) => {
 };
 
 /**
+ * The per-file step shared by a drop and a picker: keeps audio only, converts or rejects
+ * WAVs, and returns null for anything that is not to be imported.
+ */
+async function prepareAudioFile(file: File, path: string, report: DropReport): Promise<DroppedFile | null> {
+  if (!isAudioFile(file.name)) return null;
+  const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : file;
+  return ready ? { file: ready, path } : null;
+}
+
+/**
  * readEntries returns at most 100 entries per call, so it has to be drained
  * until it yields an empty batch.
  */
@@ -150,12 +160,10 @@ export async function collectAudioFiles(
           (entry as FileSystemFileEntry).file(resolve, reject)
         );
         // The subfolder a sample sits in is often the only clue to what it is.
-        if (isAudioFile(file.name)) {
-          const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : file;
-          if (ready) {
-            files.push({ file: ready, path: directoryOf(entry.fullPath) });
-            onFound?.(files.length);
-          }
+        const ready = await prepareAudioFile(file, directoryOf(entry.fullPath), report);
+        if (ready) {
+          files.push(ready);
+          onFound?.(files.length);
         }
       } else if (entry.isDirectory && entry.name !== '__MACOSX') {
         const reader = (entry as FileSystemDirectoryEntry).createReader();
@@ -212,6 +220,79 @@ export async function getFilesFromDataTransfer(
 
   if (loose.length > 0) result.push({ name: LOOSE_FILES_FOLDER, files: loose });
 
+  return result;
+}
+
+export interface PickedScanOptions {
+  report?: DropReport;
+  /** Same contract as `getFilesFromDataTransfer`: `files: 0` per top-level folder first, then running counts. */
+  onProgress?: (progress: ScanProgress) => void;
+}
+
+/**
+ * The picker counterpart of `getFilesFromDataTransfer`, for `<input type="file">`. A
+ * directory input gives every File a `webkitRelativePath` ("Pack/Kicks/kick.wav"): the
+ * first segment is the folder, as a drop would report it, and the rest becomes `path`
+ * in the same shape `collectAudioFiles` builds from `entry.fullPath` ("/Pack/Kicks").
+ * Files without one (a plain file picker) share the single LOOSE_FILES_FOLDER.
+ */
+export async function getFilesFromFileList(
+  files: FileList | File[],
+  options: PickedScanOptions = {}
+): Promise<DroppedFolder[]> {
+  const report = options.report ?? newDropReport();
+  // A FileList is live and the input is cleared after a pick: copy before awaiting.
+  const picked = Array.from(files);
+  const byFolder = new Map<string, DroppedFile[]>();
+  const loose: DroppedFile[] = [];
+  const { onProgress } = options;
+
+  // `__MACOSX` entries never become a folder, so they are not announced either.
+  const topFolderOf = (file: File) => {
+    try {
+      const segments = (file.webkitRelativePath || '').split('/').filter(Boolean);
+      if (segments.length < 2) return LOOSE_FILES_FOLDER;
+      return segments.slice(0, -1).includes('__MACOSX') ? null : segments[0];
+    } catch {
+      return null; // the scan loop below reports the unreadable file
+    }
+  };
+  if (onProgress) {
+    const names = new Set<string>();
+    for (const file of picked) {
+      const name = topFolderOf(file);
+      if (name !== null) names.add(name);
+    }
+    for (const name of names) onProgress({ folder: name, files: 0 });
+  }
+
+  for (const file of picked) {
+    try {
+      const segments = (file.webkitRelativePath || '').split('/').filter(Boolean);
+      if (segments.length < 2) {
+        const ready = await prepareAudioFile(file, '', report);
+        if (ready) {
+          loose.push(ready);
+          onProgress?.({ folder: LOOSE_FILES_FOLDER, files: loose.length });
+        }
+        continue;
+      }
+      const dirs = segments.slice(0, -1);
+      if (dirs.includes('__MACOSX')) continue;
+      const ready = await prepareAudioFile(file, '/' + dirs.join('/'), report);
+      if (!ready) continue;
+      const list = byFolder.get(dirs[0]) ?? [];
+      list.push(ready);
+      byFolder.set(dirs[0], list);
+      onProgress?.({ folder: dirs[0], files: list.length });
+    } catch (err) {
+      // One unreadable file must not discard everything else in the pick.
+      console.warn(`Skipped unreadable file ${file.name}:`, err);
+    }
+  }
+
+  const result: DroppedFolder[] = [...byFolder].map(([name, list]) => ({ name, files: list }));
+  if (loose.length > 0) result.push({ name: LOOSE_FILES_FOLDER, files: loose });
   return result;
 }
 

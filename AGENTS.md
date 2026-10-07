@@ -14,7 +14,7 @@ Everything lives at the repository root, next to `package.json`:
 index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  README.md  LICENSE  AGENTS.md  .gitignore
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
-src/components/{Pad,Toast}.tsx
+src/components/{Pad,PickSources,Toast}.tsx
 src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,kitGenerator,kitNaming,progressVisibility,sampleSignature,scanProgress,wavStripper}.ts
 test/{kit,io}.test.ts
 ```
@@ -160,6 +160,20 @@ rule exists because a simpler version broke on real packs.
 - **Drop handling skips junk:** `isAudioFile` rejects `._*` AppleDouble files (`._kick.wav` is metadata, not audio),
   `collectAudioFiles` skips `__MACOSX` folders and unreadable entries without aborting the scan, and loose files dropped without a
   folder are grouped into one `Dropped Files` folder (a folder per file would flip the prefix to `MKT` and flood the sidebar).
+- **Pick folders / Pick files (`components/PickSources.tsx`, `getFilesFromFileList`):** drag and drop does not exist on mobile, so two
+  buttons open hidden `<input type="file">`s (one `webkitdirectory multiple`, one `multiple` with an audio `accept`). Not
+  `showDirectoryPicker`: the owner ruled it out (Chromium-desktop only). `getFilesFromFileList` groups by the FIRST segment of each
+  `webkitRelativePath` (the folder name a drop would report) and sets `path` to `'/' + the directory part`, the same string
+  `collectAudioFiles` builds from `entry.fullPath` (a test compares both routes on one tree); files without a relative path go to
+  `Dropped Files` with path `''`. Per-file work (`isAudioFile`, `prepareWav`) is the shared `prepareAudioFile`, so ADPCM conversion,
+  rejection reports and the `._`/`__MACOSX` filters cannot drift between routes; one unreadable file is skipped, not fatal. The
+  scan takes an options object (`{ report }`) so an `onProgress` can be added later. Both buttons call `App.processFiles` (it takes
+  `DataTransferItemList | File[]`), i.e. the same merge, kit draw and notices as a drop. Snapshot `Array.from(input.files)` BEFORE
+  any await and then set `input.value = ''`: the FileList is live, and without the reset picking the same folder again fires no
+  `change`. Buttons are disabled while `isLoading || isGenerating`. Hint wording lives in `PICK_HINT_FINE/COARSE`; under
+  `(pointer: coarse)` the hint stops saying "drag" and the buttons turn prominent. Platform honesty: iOS Safari and some Android
+  browsers degrade `webkitdirectory` to a plain file picker and this cannot be detected reliably, so help and README say so and
+  point at Pick files; do not claim folder selection works everywhere.
 - **Words of four or more characters also match glued** as prefix or suffix (`popkick`, `linnhats`, `realclaps`, `RIDED0`); shorter
   ones must be whole tokens.
 - **`chat` and `ohat` match as whole tokens only** (`GLUED_HAT_QUALIFIERS`); glued they filed `chatter` and `ohateful` as hi-hats.
@@ -438,7 +452,7 @@ rule exists because a simpler version broke on real packs.
   are siblings of the `aside`. Failed: scrolling the whole `aside`; wrapping heading+list in `flex-1 min-h-0` (a shrinkable flex
   child overlaps siblings, it does not clip); capping the list height. Below ~700px height with twenty folders the whole sidebar
   scrolls, which is acceptable.
-- **There is no drop zone box in the sidebar, only a line of text.** `handleDrop` is on the app root so the whole window is the
+- **There is no drop zone box in the sidebar, only a line of text** (plus the Pick folders / Pick files buttons under it). `handleDrop` is on the app root so the whole window is the
   target; drag feedback comes from the full-window overlay.
 - **Scan progress is inline, not an overlay (`ScanProgress` in `fileReader.ts`, `utils/scanProgress.ts`).** `getFilesFromDataTransfer`
   takes an optional third `onProgress({ folder, files })`: once per top-level entry with `files: 0` before anything is read (loose
@@ -508,7 +522,8 @@ ends (`0.001` does not clip tails); drum cell `color` (see Preset generation). D
 `Macro0`, invert the grid or change the note mapping because they look wrong; they were guesses once and are not any more.
 
 **Confirmed by hand only (the Node suite cannot reach them, so only a browser or a Move catches a regression):** drag-and-drop and
-the directory walk (`getFilesFromDataTransfer`); audio preview and audition scoping (Shuffle plays that pad, a later full generate
+the directory walk (`getFilesFromDataTransfer`); the Pick buttons on a real phone (headless Chromium with `setInputFiles` on the directory
+input was checked, iOS Safari and Android folder pickers were not); audio preview and audition scoping (Shuffle plays that pad, a later full generate
 stays silent); the real browser decode half of trimming (Node only has a fake `OfflineAudioContext`); whether a bundle
 still imports on the device; the palette and per-category tint in Chrome (grid id renders as `ksho_ccpp`).
 

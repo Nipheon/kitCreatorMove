@@ -1,6 +1,7 @@
 import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
+import { PickSources } from './components/PickSources';
 import { Toast } from './components/Toast';
 import {
   categoryAccent, chokeGroupFor, chooseLayout, DISPLAY_INDICES,
@@ -9,7 +10,7 @@ import {
 import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
-  categorizeSample, describeDropReport, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum,
+  categorizeSample, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
@@ -509,7 +510,7 @@ export default function App() {
     setNotice(prev => [prev, `Locked pad${result.lockedDuplicates!.length > 1 ? 's' : ''} ${pads} hold${result.lockedDuplicates!.length > 1 ? '' : 's'} the same audio as another locked pad; locks are left as they are.`].filter(Boolean).join(' '));
   };
 
-  const processFiles = async (items: DataTransferItemList) => {
+  const processFiles = async (items: DataTransferItemList | File[]) => {
     setIsLoading(true);
     setError(null);
 
@@ -518,11 +519,14 @@ export default function App() {
       setScanning(prev => prev.map(row => (row.folder === p.folder ? p : row)));
     const showCountThrottled = throttle(showCount, SCAN_UI_INTERVAL_MS);
     try {
-      const scanned = await getFilesFromDataTransfer(items, report, p => {
+      const onProgress = (p: ScanProgress) => {
         // The zero-count calls list every dropped entry at once and must not be throttled away.
         if (p.files === 0) setScanning(prev => (prev.some(row => row.folder === p.folder) ? prev : [...prev, p]));
         else showCountThrottled(p);
-      });
+      };
+      const scanned = Array.isArray(items)
+        ? await getFilesFromFileList(items, { report, onProgress })
+        : await getFilesFromDataTransfer(items, report, onProgress);
       const reportNotes = describeDropReport(report);
       if (reportNotes.length > 0) setNotice(prev => [prev, ...reportNotes].filter(Boolean).join(' '));
       // Read after the await: the scan may have outlived edits made through the keyboard.
@@ -973,9 +977,7 @@ export default function App() {
           {/* A line, not a drop zone. The whole window is the drop target — `handleDrop`
               sits on the app root — so a bordered box here only claimed vertical space
               the folder list wanted, while implying the drop had to land inside it. */}
-          <p className='text-sm text-text-subtle mb-4 shrink-0'>
-            Drag sample folders anywhere on this window.
-          </p>
+          <PickSources onPick={processFiles} disabled={isLoading || isGenerating} />
           <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
             {sourceFolders.map(folder => (
               <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
@@ -1393,6 +1395,7 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding & Scanning Sample Folders</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
+                  <li><strong className='text-text-bright'>Pick folders / Pick files:</strong> No drag and drop, for instance on a phone? Use the buttons above the folder list. Pick folders opens your system's folder picker and loads the folder you choose, with its subfolders, exactly like a drop. If your browser only lets you pick files, use Pick files: loose files are grouped into one Dropped Files folder.</li>
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>

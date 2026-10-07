@@ -6,7 +6,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 
 ## Features
 
-- 📁 **Folder Drag & Drop**: Drop sample folders directly into the browser. Reads `.wav` and `.aiff` files recursively; Microsoft ADPCM WAVs are converted to 16-bit WAV, other compressed WAVs are skipped with a notice. Nothing is uploaded — everything runs in the page.
+- 📁 **Folder Drag & Drop**: Drop sample folders directly into the browser, or use **Pick folders** / **Pick files** where dragging is not possible (a phone, say). Some mobile browsers only offer a file picker for folders; use Pick files there. Reads `.wav` and `.aiff` files recursively; Microsoft ADPCM WAVs are converted to 16-bit WAV, other compressed WAVs are skipped with a notice. Nothing is uploaded — everything runs in the page.
 - 🎯 **Smart Classification**: Detects sample roles (*Kick*, *Snare*, *Closed Hat*, *Open Hat*, *Clap*, *Crash*, *Percussion*, *Other*) from filenames and folder names, tuned against real sample libraries. A hat with no open/closed qualifier is treated as closed, a crash is drawn from the percussion pool, and a bare `808` is a kick.
 - 🧹 **Loop & Non-Drum Filtering**: Leaves out loops (a bar count, a tempo like `128bpm`, or a filename saying "break" on a file it could not otherwise categorise) and uncategorised material that looks like effects, vocals, scratches or melody — including anything sitting in an `Extras`, `Imported` or `Misc` folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is untouched. Both filters are toggles.
 - 🎛️ **Derived 4×4 Pad Grid**: The grid is built from the categories your library actually holds rather than picked from a fixed list. Up to four categories take a full-height column each; a fifth and beyond share the top row. Mapped to hardware MIDI notes 36–51 (Pad 1 = bottom-left).
@@ -104,7 +104,7 @@ test/
 
 ## How It Works
 
-1. **Drop Sample Folders**: Drag any folder of drum samples into the app window.
+1. **Drop Sample Folders**: Drag any folder of drum samples into the app window, or press **Pick folders** (or **Pick files**) to choose them from your device.
 2. **Library Analysis**: Every file is classified from its name, falling back to the folder it sits in. Loops and non-drum material are filtered out, and the sidebar breaks the library down by category.
 3. **Grid Derivation**: The categories present decide the grid — four columns, four rows, with a shared top row when more than four categories are available. The result carries a Grid ID such as `ksho` or `ksho_ccpp`.
 4. **Generate & Audition**: Hit **Generate Random Kit**, or play pads with the mouse and hotkeys. Lock what you like, reroll what you don't, exclude samples you never want to see again.
