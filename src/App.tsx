@@ -11,7 +11,7 @@ import { exportBatchKits, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
   categorizeSample, getFilesFromDataTransfer, looksLikeLoop, looksNonDrum
 } from './utils/fileReader';
-import { emptyKit, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
+import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import {
   DEFAULT_PREFIX, generateKitName, PREFIX_LENGTH, prefixForFolders, uniqueKitName
 } from './utils/kitNaming';
@@ -690,12 +690,16 @@ export default function App() {
     const taken = new Set(exportedNames.current);
     const kits: { kit: (Sample | null)[]; name: string }[] = [];
 
+    // Held so a filter changed since the last generate cannot give kits 2..n another grid
+    // than kit 1, which is named with the on-screen layout.
+    const heldLayout = heldLayoutFor();
+
     const first = uniqueKitName(exportName, taken);
     taken.add(first);
     kits.push({ kit: [...kit], name: first });
 
     for (let i = 1; i < batchSize; i++) {
-      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions);
+      const next = generateRandomKit(samples, lockedFrom(kit), kitOptions, heldLayout);
       // Every kit in a batch is built from the same library, so they all share a grid
       // and the id is the same for each — which is the point: a batch is swappable.
       let name = '';
@@ -731,8 +735,10 @@ export default function App() {
     try {
       const names: string[] = [];
       let report;
+      let emptyNote: string | null = null;
       if (batchSize > 1) {
         const batch = buildBatch();
+        emptyNote = emptyPadsNotice(batch);
         names.push(...batch.map(entry => entry.name));
         report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
       } else {
@@ -754,6 +760,7 @@ export default function App() {
       if (report.trimSkipped > 0) {
         trimNotes.push(`${report.trimSkipped} sample(s) are in a format that cannot be trimmed (AIFF, 8-bit, 32-bit or unusual sample rate) and were exported unchanged.`);
       }
+      if (emptyNote) trimNotes.push(emptyNote);
       if (trimNotes.length > 0) {
         // Appended, not replaced: the rename notice set above must survive.
         setNotice(prev => [prev, ...trimNotes].filter(Boolean).join(' '));

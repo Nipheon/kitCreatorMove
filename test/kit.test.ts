@@ -33,7 +33,9 @@ import { createPresetBundle } from '../src/utils/exporter';
 import {
   categorizeSample, isAudioFile, looksLikeLoop, looksNonDrum
 } from '../src/utils/fileReader';
-import { generateRandomKit, isUsableSample, rerollSinglePad } from '../src/utils/kitGenerator';
+import {
+  countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, rerollSinglePad
+} from '../src/utils/kitGenerator';
 import {
   DEFAULT_PREFIX, KIT_SUFFIXES, MULTI_FOLDER_PREFIX, PREFIX_LENGTH, prefixForFolders,
   prefixFromFolderName, safeFileName, uniqueKitName
@@ -1724,6 +1726,54 @@ await test('rerollSinglePad holds the layout it is given when the options have s
   assert.equal(held.layout, built.layout);
   const outOfRange = rerollSinglePad(samples, built.kit, PAD_COUNT, { skipLoops: true }, built.layout);
   assert.equal(outOfRange.layout, built.layout);
+});
+
+await test('holding the layout never leaves more pads empty than recomputing it', () => {
+  const many = (prefix: string, cat: Sample['category'], n: number, extra: Partial<Sample> = {}) =>
+    Array.from({ length: n }, (_, i) => ({ ...makeSample(`${prefix}${i}.wav`, cat), ...extra }));
+
+  const loopFilter: Sample[] = [
+    ...many('hp_kick', 'Kick', 3), ...many('hp_snare', 'Snare', 3), ...many('hp_chh', 'CHH', 3),
+    ...many('hp_clap', 'Clap', 1), ...many('hp_ohhloop', 'OHH', 4, { isLoop: true })
+  ];
+  const small: Sample[] = [...many('sm_kick', 'Kick', 4), ...many('sm_snare', 'Snare', 3), ...many('sm_hat', 'CHH', 3)];
+  const rich: Sample[] = [
+    ...many('rc_kick', 'Kick', 6), ...many('rc_snare', 'Snare', 5), ...many('rc_chh', 'CHH', 4),
+    ...many('rc_ohh', 'OHH', 3), ...many('rc_perc', 'Perc', 4)
+  ];
+  const cases: { name: string; lib: Sample[]; first: object; second: object; locked: (Sample | null)[] }[] = [
+    { name: 'filter changes layout', lib: loopFilter, first: { skipLoops: false }, second: { skipLoops: true }, locked: [] },
+    { name: 'small library', lib: small, first: {}, second: {}, locked: [] },
+    { name: 'locked pads', lib: rich, first: {}, second: { skipNonDrums: true },
+      locked: [rich[0], null, rich[6], ...new Array(13).fill(null)] },
+    { name: 'locked pads, small', lib: small, first: {}, second: {},
+      locked: [small[0], null, small[5], ...new Array(13).fill(null)] }
+  ];
+
+  for (const c of cases) {
+    for (let run = 0; run < 100; run++) {
+      const held = generateRandomKit(c.lib, c.locked, c.first).layout;
+      const heldKit = generateRandomKit(c.lib, c.locked, c.second, held).kit;
+      const freshKit = generateRandomKit(c.lib, c.locked, c.second).kit;
+      const heldEmpty = heldKit.filter(s => s === null).length;
+      const freshEmpty = freshKit.filter(s => s === null).length;
+      assert.ok(heldEmpty <= freshEmpty, `${c.name}: held ${heldEmpty} empty vs recomputed ${freshEmpty}`);
+    }
+  }
+  const premise = generateRandomKit(loopFilter, [], { skipLoops: false }).layout.id !==
+    generateRandomKit(loopFilter, [], { skipLoops: true }).layout.id;
+  assert.ok(premise, 'premise: the filter must change the layout in the first case');
+});
+
+await test('empty-pad notice counts kits with at least one empty pad', () => {
+  const full = new Array(PAD_COUNT).fill(null).map((_, i) => makeSample(`np${i}.wav`, 'Kick'));
+  const gap = [...full.slice(0, PAD_COUNT - 1), null];
+  assert.equal(countKitsWithEmptyPads([{ kit: full }, { kit: gap }, { kit: gap }]), 2);
+  assert.equal(emptyPadsNotice([{ kit: full }, { kit: full }]), null);
+  assert.equal(
+    emptyPadsNotice([{ kit: full }, { kit: gap }, { kit: gap }]),
+    '2 of 3 kits have empty pads: the library has fewer usable samples than pads.'
+  );
 });
 
 if (failures > 0) {

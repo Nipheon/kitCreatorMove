@@ -391,6 +391,13 @@ real packs.
   read from the current library, so a role it can no longer fill reports as unavailable.
   An empty kit passes nothing (the empty-library layout must not be held). Full
   regenerations (drop, randomize, type/filter toggles) derive a fresh layout on purpose.
+- **A batch holds the on-screen kit's layout.** `buildBatch` passes `kitResult.layout`
+  (through `heldLayoutFor()`, so an empty kit passes nothing) to kits 2..n, so a filter
+  changed since the last generate cannot give them another grid than kit 1, which is named
+  with the on-screen `columnsId`. Holding never adds empty pads: pad filling falls back to
+  the deepest pool, so empties depend only on how many usable samples there are (pinned in
+  `test/kit.test.ts`). After a batch, `emptyPadsNotice` appends a notice when any kit has
+  empty pads; it is appended to the trim notices, never replacing them.
 - **The preset prefix is three characters** (`PREFIX_LENGTH` in `kitNaming.ts`), cut down
   from four to make room for the grid id inside the same visible budget.
 

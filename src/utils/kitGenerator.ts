@@ -137,6 +137,18 @@ function pickGroupPool(pools: Record<Category, Sample[]>, category: Category): S
  * The roles the library can fill, in pool terms — a generic hat counts as closed-hat
  * availability and a crash as percussion, matching where `poolCategoryFor` puts them.
  */
+/** How many kits in a batch have at least one empty pad. */
+export function countKitsWithEmptyPads(kits: { kit: (Sample | null)[] }[]): number {
+  return kits.filter(entry => entry.kit.some(s => s === null)).length;
+}
+
+/** The notice for a batch with empty pads, or null when every kit is full. */
+export function emptyPadsNotice(kits: { kit: (Sample | null)[] }[]): string | null {
+  const count = countKitsWithEmptyPads(kits);
+  if (count === 0) return null;
+  return `${count} of ${kits.length} kits have empty pads: the library has fewer usable samples than pads.`;
+}
+
 function availableRoles(usable: Sample[]): Set<Category> {
   const available = new Set<Category>();
   usable.forEach(s => {
