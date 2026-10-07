@@ -30,4 +30,10 @@ export interface SourceFolder {
   name: string;
   samples: Sample[];
   isEnabled?: boolean;
+  /**
+   * Set on a sub-pack of a dropped collection (see `utils/packSplit.ts`). Siblings share
+   * `id`; `name` is the collection's name. The folder list stays flat, so toggling,
+   * removal, counts and generation work per sub-pack as they do for any folder.
+   */
+  parent?: { id: string; name: string };
 }

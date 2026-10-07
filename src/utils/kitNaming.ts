@@ -62,6 +62,8 @@ export function generateKitName(folderName: string) {
  *   no folders enabled    -> DEFAULT_PREFIX
  *   exactly one           -> derived from that folder's name
  *   more than one         -> MULTI_FOLDER_PREFIX, since no single folder names it
+ *   more than one, all sub-packs of the same collection -> derived from the collection's
+ *                            name ("Kit 3" alone would give "KIT")
  *
  * This is recomputed whenever folders are added, removed or disabled. It used to be
  * set only on the first drop, so a kit built entirely from "BBBB" still exported as
@@ -70,6 +72,8 @@ export function generateKitName(folderName: string) {
 export function prefixForFolders(folders: SourceFolder[]): string {
   const enabled = folders.filter(f => f.isEnabled !== false);
   if (enabled.length === 0) return DEFAULT_PREFIX;
+  const parent = enabled[0].parent;
+  if (parent && enabled.every(f => f.parent?.id === parent.id)) return prefixFromFolderName(parent.name);
   if (enabled.length > 1) return MULTI_FOLDER_PREFIX;
   return prefixFromFolderName(enabled[0].name);
 }

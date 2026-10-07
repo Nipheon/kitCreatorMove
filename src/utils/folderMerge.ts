@@ -1,18 +1,28 @@
+type Keyed = { name: string; parent?: { name: string } };
+
+/**
+ * The identity used to spot an already-loaded folder: its name, preceded by its collection's
+ * name for a sub-pack. Two collections that both hold "Kit 1" therefore do not collide,
+ * while dropping the same collection twice still matches every one of its children.
+ */
+export const folderKey = (f: Keyed): string =>
+  (f.parent ? `${f.parent.name}/${f.name}` : f.name).toLowerCase();
+
 /**
  * Decides which scanned folders join the folder list as it is NOW. A scan can take a
  * while, so the list it was started against may have changed; callers pass the current
- * list. Names match case-insensitively; a name repeated within one drop counts once.
+ * list. Keys (`folderKey`) match case-insensitively; a key repeated within one drop counts once.
  * Returns the folders to add and how many were skipped as duplicates.
  */
-export function mergeScannedFolders<T extends { name: string }>(
-  current: readonly { name: string }[],
+export function mergeScannedFolders<T extends Keyed>(
+  current: readonly Keyed[],
   scanned: readonly T[]
 ): { accepted: T[]; skippedDuplicates: number } {
-  const seen = new Set(current.map(f => f.name.toLowerCase()));
+  const seen = new Set(current.map(folderKey));
   const accepted: T[] = [];
   let skippedDuplicates = 0;
   for (const folder of scanned) {
-    const key = folder.name.toLowerCase();
+    const key = folderKey(folder);
     if (seen.has(key)) {
       skippedDuplicates++;
       continue;

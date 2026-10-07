@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "test": "tsx test/kit.test.ts && tsx test/io.test.ts"
+    "test": "tsx test/kit.test.ts && tsx test/io.test.ts && tsx test/packs.test.ts"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

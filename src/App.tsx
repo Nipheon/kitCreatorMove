@@ -2,6 +2,7 @@ import { FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { PickSources } from './components/PickSources';
+import { SourceFolderRows } from './components/SourceFolderRows';
 import { Toast } from './components/Toast';
 import {
   categoryAccent, chokeGroupsFor, chooseLayout, DISPLAY_INDICES,
@@ -10,10 +11,12 @@ import {
 import { Category, Sample, SourceFolder } from './types';
 import { ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, kitSizeBytes } from './utils/exporter';
 import {
-  categorizeSample, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, looksLikeLoop, looksNonDrum,
+  categorizeSample, describeDropReport, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
 import { mergeScannedFolders } from './utils/folderMerge';
+import { planRemove, planToggle } from './utils/folderGroups';
+import { expandCollections } from './utils/packSplit';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
@@ -574,10 +577,21 @@ export default function App() {
       if (reportNotes.length > 0) setNotice(prev => [prev, ...reportNotes].filter(Boolean).join(' '));
       // Read after the await: the scan may have outlived edits made through the keyboard.
       const current = latest.current;
-      const candidates = scanned
-        .map(folder => ({ name: folder.name || 'Dropped Files', files: folder.files }))
+      const topLevel = scanned
+        .map(folder => ({ name: folder.name || LOOSE_FILES_FOLDER, files: folder.files }))
         .filter(folder => folder.files.length > 0);
-      const { accepted, skippedDuplicates } = mergeScannedFolders(current.sourceFolders, candidates);
+      // The single place a collection is split, for the drop and the Pick folders route alike.
+      // A collection already loaded lends its id, so children re-added after a removal rejoin it.
+      const loadedParents = new Map(
+        current.sourceFolders.filter(f => f.parent).map(f => [f.parent!.name.toLowerCase(), f.parent!.id])
+      );
+      const { folders: candidates, splits } = expandCollections(
+        topLevel, LOOSE_FILES_FOLDER, name => loadedParents.get(name.toLowerCase()) ?? newId('collection')
+      );
+      const { accepted } = mergeScannedFolders(current.sourceFolders, candidates);
+      // Counted per dropped entry, so a collection dropped twice reads as one folder, not seven.
+      const acceptedNames = new Set(accepted.map(f => f.parent?.name ?? f.name));
+      const skippedDuplicates = topLevel.filter(t => !acceptedNames.has(t.name)).length;
       const newFolders: SourceFolder[] = [];
 
       for (const folder of accepted) {
@@ -601,7 +615,8 @@ export default function App() {
           id: newId('folder'),
           name: folder.name,
           isEnabled: true,
-          samples
+          samples,
+          ...(folder.parent ? { parent: folder.parent } : {})
         });
       }
 
@@ -626,6 +641,11 @@ export default function App() {
       const allSamples = enabledSamples(updated);
 
       setSourceFolders(updated);
+      const splitNotes = splits
+        .map(sp => ({ name: sp.name, count: accepted.filter(f => f.parent?.name === sp.name).length }))
+        .filter(sp => sp.count > 0)
+        .map(sp => `Split "${sp.name}" into ${sp.count} sub-pack${sp.count === 1 ? '' : 's'}.`);
+      if (splitNotes.length > 0) setNotice(prev => [prev, ...splitNotes].filter(Boolean).join(' '));
       // Same batch as the real rows, so a pending row is swapped, not followed by a second one.
       setScanning([]);
       // The drop itself hashes nothing; only samples drawn into this kit are read. This
@@ -673,18 +693,14 @@ export default function App() {
   // empty-library layout must not be held.
   const heldLayoutFor = () => heldLayout(kit, kitResult.layout);
 
-  const removeFolder = async (id: string) => {
+  // One path for a folder and for a whole collection: any number of ids, one regeneration.
+  const removeFolders = async (ids: string[]) => {
     if (generating.current) return;
-    const removed = sourceFolders.find(f => f.id === id);
-    const updated = sourceFolders.filter(f => f.id !== id);
+    const plan = planRemove(sourceFolders, ids, kit, lockedPads);
+    if (!plan) return;
+    const { updated, survivors, removed } = plan;
     const remaining = enabledSamples(updated);
-    const removedIds = new Set(removed?.samples.map(s => s.id) ?? []);
     const heldLayout = heldLayoutFor();
-
-    // Keep every pad whose sample survived; only the emptied ones get refilled.
-    const survivors = kit.map((sample, idx) =>
-      lockedPads[idx] || (sample && !removedIds.has(sample.id)) ? sample : null
-    );
 
     const next: KitResult | null = remaining.length > 0
       ? await runGeneration(report => generateRandomKit(remaining, survivors, kitOptions, heldLayout, { onProgress: report }))
@@ -706,26 +722,18 @@ export default function App() {
     // its sample even when its folder is removed, so only revoke what the new kit
     // no longer references — otherwise that pad's preview goes silently dead.
     const stillUsed = new Set(next.kit.filter((s): s is Sample => s !== null).map(s => s.id));
-    removed?.samples.forEach(s => {
+    removed.flatMap(f => f.samples).forEach(s => {
       if (!stillUsed.has(s.id)) revokeSampleUrl(s);
     });
   };
 
-  const toggleFolder = async (id: string) => {
+  const toggleFolders = async (ids: string[], enable: boolean) => {
     if (generating.current) return;
-    const target = sourceFolders.find(f => f.id === id);
-    if (!target) return;
-    const willDisable = target.isEnabled !== false;
-    const updated = sourceFolders.map(f => (f.id === id ? { ...f, isEnabled: !willDisable } : f));
+    const plan = planToggle(sourceFolders, ids, enable, kit, lockedPads);
+    if (!plan) return;
+    const { updated, survivors } = plan;
     const remaining = enabledSamples(updated);
-    const targetIds = new Set(target.samples.map(s => s.id));
     const heldLayout = heldLayoutFor();
-
-    const survivors = kit.map((sample, idx) => {
-      if (lockedPads[idx]) return sample;
-      if (willDisable && sample && targetIds.has(sample.id)) return null;
-      return sample;
-    });
 
     const next: KitResult | null = remaining.length > 0
       ? await runGeneration(report => generateRandomKit(remaining, survivors, kitOptions, heldLayout, { onProgress: report }))
@@ -1025,33 +1033,7 @@ export default function App() {
               the folder list wanted, while implying the drop had to land inside it. */}
           <PickSources onPick={processFiles} disabled={isLoading || isGenerating} />
           <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
-            {sourceFolders.map(folder => (
-              <div key={folder.id} className={`space-y-2 mt-2 ${folder.isEnabled === false ? 'opacity-50' : ''}`}>
-                <div className='bg-surface-pad px-3 py-2 rounded flex items-center justify-between group'>
-                  <div className='flex items-center gap-2 overflow-hidden flex-1'>
-                    <button
-                      onClick={() => toggleFolder(folder.id)}
-                      disabled={isGenerating}
-                      className='text-text-muted-dark hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed'
-                      title={folder.isEnabled === false ? 'Enable folder' : 'Disable folder'}
-                      aria-label={folder.isEnabled === false ? `Enable ${folder.name}` : `Disable ${folder.name}`}
-                    >
-                      {folder.isEnabled === false ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                    <span className='text-sm truncate text-text-bright flex-1'>{folder.name}</span>
-                    <span className='text-sm text-text-muted shrink-0 font-medium bg-surface-header px-2 py-0.5 rounded'>{folder.samples.length}</span>
-                  </div>
-                  <button
-                    onClick={() => removeFolder(folder.id)}
-                    disabled={isGenerating}
-                    className='text-sm font-bold text-text-muted-dark group-hover:text-danger-text ml-2 disabled:opacity-40 disabled:cursor-not-allowed'
-                    aria-label={`Remove ${folder.name}`}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            ))}
+            <SourceFolderRows folders={sourceFolders} disabled={isGenerating} onToggle={toggleFolders} onRemove={removeFolders} />
             {scanning.map(row => {
               const text = describeScanProgress(row.folder, row.files);
               return (
@@ -1445,6 +1427,7 @@ export default function App() {
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
+                  <li><strong className='text-text-bright'>Collections:</strong> A folder that holds several separate packs (Kit 1, Kit 2, ...) is listed as a parent with its sub-packs underneath. Tick the parent to use all of them, or tick only the sub-packs you want to mix. The parent's eye looks half-filled when only some are on; clicking it then turns all on. The cross on the parent removes the whole collection, on a sub-pack just that one. A folder made of Kicks, Snares, FX and similar folders is one pack and is not split.</li>
                   <li><strong className='text-text-bright'>Hide a Folder:</strong> The eye icon next to a loaded folder takes it out of the pool without unloading it. The kit re-rolls immediately without those samples, the folder dims in the list, and the eye brings it straight back — handy for auditioning one pack against another. Locked pads keep what they are holding even if its folder is hidden.</li>
                   <li><strong className='text-text-bright'>Remove a Folder:</strong> The cross unloads it for good. Hiding is the reversible one.</li>
                 </ul>

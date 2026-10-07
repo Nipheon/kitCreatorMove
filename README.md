@@ -7,6 +7,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 ## Features
 
 - 📁 **Folder Drag & Drop**: Drop sample folders directly into the browser, or use **Pick folders** / **Pick files** where dragging is not possible (a phone, say). Some mobile browsers only offer a file picker for folders; use Pick files there. Reads `.wav` and `.aiff` files recursively; Microsoft ADPCM WAVs are converted to 16-bit WAV, other compressed WAVs are skipped with a notice. Nothing is uploaded — everything runs in the page.
+- 🗂️ **Collections**: A dropped folder that holds several independent packs (`Kit 1` ... `Kit 7`, a set of named banks) is listed as a parent with its sub-packs as child rows. Tick the parent to use everything, or tick only some sub-packs to mix and match; the parent's eye shows a partial state when some are on. A folder of role folders (Kicks, Snares, FX ...) stays one pack.
 - 🎯 **Smart Classification**: Detects sample roles (*Kick*, *Snare*, *Closed Hat*, *Open Hat*, *Clap*, *Crash*, *Percussion*, *Other*) from filenames and folder names, tuned against real sample libraries. A hat with no open/closed qualifier is treated as closed, a crash is drawn from the percussion pool, and a bare `808` is a kick.
 - 🧹 **Loop & Non-Drum Filtering**: Leaves out loops (a bar count, a tempo like `128bpm`, or a filename saying "break" on a file it could not otherwise categorise) and uncategorised material that looks like effects, vocals, scratches or melody — including anything sitting in an `Extras`, `Imported` or `Misc` folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is untouched. Both filters are toggles.
 - 🎛️ **Derived 4×4 Pad Grid**: The grid is built from the categories your library actually holds rather than picked from a fixed list. Up to four categories take a full-height column each; a fifth and beyond share the top row. Mapped to hardware MIDI notes 36–51 (Pad 1 = bottom-left).
@@ -84,6 +85,7 @@ src/
   vite-env.d.ts         # Vite client type reference
   components/
     Pad.tsx             # Single pad: audio element, audition, lock/shuffle
+    SourceFolderRows.tsx # Source Folders rows, collections with tri-state parent
     Toast.tsx           # Warning notification
   utils/
     ablPresetTemplate.ts # Ableton Move preset JSON generator
@@ -91,12 +93,14 @@ src/
     audioTrimmer.ts      # OfflineAudioContext silence trimming
     exporter.ts          # JSZip bundle, separate-file and zip batch export
     fileReader.ts        # Sample classification & folder parsing
+    folderGroups.ts      # Collection grouping, tri-state and multi-folder toggle/remove plans
     folderMerge.ts       # Folder de-duplication across drops
     hatPartner.ts        # Closed/open hat pairs by file name
     kitGenerator.ts      # Kit selection & pad assignment
     kitNaming.ts         # Kit names, held layouts and batch building
     progressVisibility.ts # When the duplicate-check progress indicator may appear
     sampleSignature.ts   # Audio-content signature, read lazily at draw time to skip duplicates
+    packSplit.ts         # Splits a dropped collection into its sub-packs
     scanProgress.ts      # Throttle and wording for the inline scan progress under Source Folders
     wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
 test/

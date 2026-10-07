@@ -735,3 +735,16 @@ export function categorizeSample(name: string, directory = ''): Category {
   }
   return 'Other';
 }
+
+/**
+ * Whether a folder NAME reads as a role or category (Kicks, Closed Hats, 808s, FX, Vox,
+ * Loops, Extras, Toms, Cymbals ...) rather than as a pack of its own. Built from the same
+ * vocabulary the categoriser reads folders with, so the two cannot drift; used by
+ * `utils/packSplit.ts` to tell sub-packs from role folders.
+ */
+export function looksLikeRoleFolder(name: string): boolean {
+  if (classify(name) !== null) return true;
+  if (textLooksLikeLoop(name, false)) return true;
+  const tokens = tokenize(name);
+  return tokens.some(t => NON_DRUM_WORDS.includes(t) || NON_DRUM_FOLDERS.includes(t));
+}

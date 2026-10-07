@@ -14,9 +14,9 @@ Everything lives at the repository root, next to `package.json`:
 index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  README.md  LICENSE  AGENTS.md  .gitignore
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
-src/components/{Pad,PickSources,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderMerge,hatPartner,kitGenerator,kitNaming,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
-test/{kit,io}.test.ts
+src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
+src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
+test/{kit,io,packs}.test.ts
 ```
 
 `package-lock.json` is the only lockfile (npm only; the AI Studio leftovers `bun.lock`, `metadata.json`, `.env.example` and
@@ -76,8 +76,10 @@ path with more than three segments means you are in the wrong place.
   folder removed, a pad locked or a prefix typed during a long scan would be overwritten by the stale values. The drop does no
   hashing; its kit comes from the same async, lazily-deduping `generateRandomKit` (see Dedupe), and the same rule holds after that
   await.
-- **Duplicate folders are skipped by lowercased name** through `mergeScannedFolders` (`utils/folderMerge.ts`, pure, takes the
-  *current* list); a name repeated within one drop counts once, and a drop where everything was skipped reports "already loaded".
+- **Duplicate folders are skipped by lowercased key** through `mergeScannedFolders` (`utils/folderMerge.ts`, pure, takes the
+  *current* list). The key (`folderKey`) is the name, or `parent name + '/' + name` for a sub-pack (see Collections); a key repeated
+  within one drop counts once, and a drop where everything was skipped reports "already loaded" (counted per dropped entry, so a
+  collection dropped twice is one folder, not seven).
 - **Skip Loops / Skip Non-Drums do not re-roll the kit.** They change the pool the next kit draws from; the usable count and
   per-type figures beside them update at once. A kit generated earlier may hold a sample the filter would now exclude, by design:
   nothing is taken away mid-listen. Type toggles (`disabledTypes`) do regenerate, passing the new set explicitly because state still
@@ -511,6 +513,34 @@ rule exists because a simpler version broke on real packs.
   scrolls, which is acceptable.
 - **There is no drop zone box in the sidebar, only a line of text** (plus the Pick folders / Pick files buttons under it). `handleDrop` is on the app root so the whole window is the
   target; drag feedback comes from the full-window overlay.
+- **Collections: a dropped folder holding several independent packs is shown as a parent with child sub-packs
+  (`utils/packSplit.ts`, `utils/folderGroups.ts`, `components/SourceFolderRows.tsx`, tests in `test/packs.test.ts`).**
+  - *Detection* (`splitPacks`, pure, one level only): an immediate subfolder is a sub-pack when its name is not role-like
+    (`isRoleLikeName`: the classifier's own folder vocabulary via `looksLikeRoleFolder` exported from `fileReader.ts`, plus a short
+    supplement in `packSplit.ts` found by running over the 213-folder survey: layer, transient(s), instrument, other, hit(s),
+    organ(s)/pluck(s), short/long/hard/soft/dry/wet as tokens, "Drums"/"Samples"/"Kit" as the whole name, and letter-spaced titles like
+    `P E R C` collapsed first) AND holds at least `MIN_PACK_FILES` (8) audio files in its whole subtree (below that it is a bonus
+    folder; real packs have 16+). At least `MIN_SUB_PACKS` (2) are needed: one named pack beside role folders is one pack
+    (`Cardo ... Drumkit/Cardo ... Drumkit` + Kicks/Snares/FX), and the `Lunch77` / `All Encompassing Kit` / `Errorfound` / `!COLLECTION!`
+    style kits (role folders only) stay whole. Do not widen the role vocabulary inside `fileReader.ts` for this; add to the supplement.
+    Everything not in a sub-pack (role folders, small folders, loose files) stays together as one child
+    `"<parent> (other files)"`. `splitPacks` throws if the children are not exactly the input files. Files keep their original `path`, so
+    classification sees `/Parent/Sub/Kicks` exactly as before.
+  - *One place*: `expandCollections` is called once in `App.processFiles`, right after the scan, so the drop and Pick folders routes
+    behave alike and `mergeScannedFolders` sees children. Loose `Dropped Files` are never split. A collection already loaded lends
+    its `parent.id` (by name) so children re-added after a removal rejoin it. Notice: `Split "<parent>" into N sub-packs.`
+  - *Flat model*: `SourceFolder.parent?: { id, name }` (siblings share `id`); the list stays flat and every child is an ordinary
+    folder for toggling, removal, counts, breakdown and generation. `groupFolders` only groups for display.
+  - *Prefix*: `prefixForFolders` - if all enabled folders share one `parent.id` the prefix comes from the PARENT's name (`Kit 3` alone
+    would read `KIT`); otherwise one enabled folder = its name, more than one = `MKT`.
+  - *One toggle/remove path*: `planToggle` / `planRemove` (`folderGroups.ts`, pure) take any number of ids and hold the "survivors"
+    rule (pads whose sample survives stay, locked pads stay, layout held); `App.toggleFolders(ids, enable)` / `removeFolders(ids)`
+    regenerate ONCE for a folder or a whole collection. Never loop `toggleFolder` over children: each call would regenerate and
+    supersede the previous one.
+  - *Tri-state*: `triState(children)` is on/off/mixed. The parent eye is `role=checkbox` with `aria-checked` true/false/`mixed`; clicking
+    a mixed parent turns every child on (`enableOnToggle`). The chevron has `aria-expanded`/`aria-controls`, the child list is
+    `role=group`. Expanded by default for <= 10 children, collapsed above; the override lives in component state, not persisted.
+  - *Counter*: "N folder(s) used" counts enabled leaf folders (children count individually); the parent row shows `x/y sub-packs`.
 - **Scan progress is inline, not an overlay (`ScanProgress` in `fileReader.ts`, `utils/scanProgress.ts`).** `getFilesFromDataTransfer`
   takes an optional third `onProgress({ folder, files })`: once per top-level entry with `files: 0` before anything is read (loose
   files share "Dropped Files"), then once per accepted file, unthrottled. `collectAudioFiles` takes an optional `onFound(count)`.
@@ -603,7 +633,7 @@ driven over CDP: `Runtime.evaluate` dispatches a synthetic `drop` with stubbed `
 on `#root`'s first element child (not `window`: React listens at the root, below it), then `Page.captureScreenshot`. It is the only
 way to see a filled grid without a real sample folder, and the empty grid hides most of what the theme does.
 
-**Suite coverage:** `test/kit.test.ts` (Node-only, via `tsx`, no components) covers kit generation, bundle building, sample
+**Suite coverage:** `test/packs.test.ts` covers collection detection (fixtures from real pack structures), the parent-aware prefix and duplicate key, tri-state and the multi-id toggle/remove plans. `test/kit.test.ts` (Node-only, via `tsx`, no components) covers kit generation, bundle building, sample
 detection, preset shape, pad-to-note mapping, choke grouping, kit naming, batch building, WAV handling and the lazy dedupe (call counts, same-pool replacement, locked pads, progress, the visibility helper). The generation races in `App` (`isGenerating`, superseding) are not reachable from Node and are confirmed by reading only; `test/io.test.ts` covers
 drop handling and trimming with fakes for `FileSystemEntry` and `OfflineAudioContext`.
 
