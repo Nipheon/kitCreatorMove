@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { chokeGroupFor, PAD_COUNT } from '../padLayout';
+import { chokeGroupsFor, PAD_COUNT } from '../padLayout';
 import { Sample } from '../types';
 import { generateAblPreset } from './ablPresetTemplate';
 import { safeFileName } from './kitNaming';
@@ -107,13 +107,13 @@ export async function createPresetBundle(
 
   const sampleUris: (string | null)[] = new Array(PAD_COUNT).fill(null);
   const chokeGroups: (number | null)[] = new Array(PAD_COUNT).fill(null);
+  chokeGroupsFor(kit).forEach((group, index) => { chokeGroups[index] = group; });
   const categories: (string | null)[] = new Array(PAD_COUNT).fill(null);
   const names: (string | null)[] = new Array(PAD_COUNT).fill(null);
 
   // Sequential on purpose: decoding 16 samples at once holds 16 float32 copies in memory.
   for (let index = 0; index < kit.length; index++) {
     const sample = kit[index];
-    chokeGroups[index] = chokeGroupFor(sample);
     categories[index] = sample ? sample.category : null;
     names[index] = sample ? sample.name : null;
     if (!sample) continue;

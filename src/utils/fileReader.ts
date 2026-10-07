@@ -416,7 +416,7 @@ const SNARE = [
 const CLAP = ['clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap'];
 /**
  * Cymbals are one category, `Crash`: the owner decided rides and bare "cymbal" belong with
- * the crashes (they pool with percussion and share the crash choke group). `cymb` is the
+ * the crashes (they pool with percussion and never choke). `cymb` is the
  * truncated spelling ("RYTM Cymb"); `cy` and `rd` are the 808-style abbreviations.
  */
 const CRASH = [

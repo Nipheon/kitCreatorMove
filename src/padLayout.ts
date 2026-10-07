@@ -118,8 +118,8 @@ export const NO_SAMPLES_GRID_ID = 'none';
  * closed far more often than it is open — and a `Crash` counts as percussion. Neither
  * has a role of its own in any grid, so without this they would be unreachable.
  *
- * Choking is unaffected: `chokeGroupFor` reads the sample's real category, so crashes
- * still choke each other in their own group rather than joining the percussion pads.
+ * Choking is unaffected: `chokeGroupsFor` reads the sample's real category, and crashes
+ * never choke, whichever pad they sit on.
  */
 function pooledCategory(category: Category): Category {
   if (category === 'Hat') return 'CHH';
@@ -363,18 +363,22 @@ export const chooseLayout = deriveLayout;
 const HAT_CATEGORIES: Category[] = ['CHH', 'OHH', 'Hat'];
 
 export const CHOKE_HATS = 1;
-export const CHOKE_CRASHES = 2;
 
 /**
- * Hats all choke each other, and crashes choke each other in their own group so a
- * new crash cuts the previous one. Rides are deliberately excluded — letting a ride
- * ring through is the point of it.
+ * Choke groups for a whole kit, one entry per pad (null = no choke).
+ *
+ * The rule depends on the kit, not on a sample alone: a kit chokes only when it holds
+ * BOTH a closed hat (`CHH`, or an unqualified `Hat`) and an open hat (`OHH`). Then every
+ * hat pad, closed and open, shares group 1 and cuts the others. Otherwise nothing chokes:
+ * closed hats alone ring through, so do open hats alone, and crashes, rides and cymbals
+ * (category `Crash`) never choke. Empty pads never choke. The exported preset and the
+ * pad badges both read this one function over the same kit.
  */
-export function chokeGroupFor(sample: Sample | null): number | null {
-  if (!sample) return null;
-  if (HAT_CATEGORIES.includes(sample.category)) return CHOKE_HATS;
-  if (sample.category === 'Crash') return CHOKE_CRASHES;
-  return null;
+export function chokeGroupsFor(kit: (Sample | null)[]): (number | null)[] {
+  const hasClosed = kit.some(s => s !== null && (s.category === 'CHH' || s.category === 'Hat'));
+  const hasOpen = kit.some(s => s !== null && s.category === 'OHH');
+  const chokes = hasClosed && hasOpen;
+  return kit.map(s => (chokes && s !== null && HAT_CATEGORIES.includes(s.category) ? CHOKE_HATS : null));
 }
 
 /**

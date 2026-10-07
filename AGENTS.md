@@ -198,8 +198,7 @@ rule exists because a simpler version broke on real packs.
   timpani via glue.
 - **All cymbals are `Crash`** (owner decision, replacing the earlier "ride stays Perc"): `crash crashes crsh splash china cc csh`
   plus `ride rides rd cymbal cymbals cym cymb cy`. Moved 1,264 files from Perc in the owner's 120k-file dump. **Consequence:
-  rides now choke in group 2 with the crashes. That is NOT verified on hardware** (the verified note covers hats and crashes
-  cutting each other and, at the time, rides ringing through); `chokeGroupFor` is unchanged and reads `Crash`.
+  rides are `Crash`, and crashes never choke** (see the choke entry under Preset generation).
 - **`GLUE_FALSE_FRIENDS` never match glued**: `whats thats chats` (`whats` ends in `hats`, so every `TakeWhatsMine-*` file that
   was not a kick or snare filed as a hat) and `rider riders bride pride strider cymbalium` (`ride` is four characters and glues:
   `night_rider` melodies and `Horse Rider` patches read as cymbals, 67 files, and with rides now choking that would be a wrong
@@ -347,7 +346,7 @@ rule exists because a simpler version broke on real packs.
   so neither is a role of its own. Ranking `Hat` below `CHH` in the preference chain does nothing: `take` drains a pool completely
   before reading the next entry. Labelled and generic hats are equal citizens in one pool, so a library with 3 CHH and 25 generic hats will usually show generic
   hats on every closed pad (accepted); to change that, bias the draw, never put `Hat` back in the chain. Choking is unaffected:
-  `chokeGroupFor` reads the real category, so a crash on a percussion pad still chokes in group 2.
+  `chokeGroupsFor` reads the real category, so a crash on a percussion pad is still a crash (and never chokes).
 - **Filling runs in two passes:** every pad takes its own sound before any pad takes a substitute, and the top row is served first
   when substituting. One pass let bottom rows drain pools the top row was waiting for (top row ended with three snares); serving
   the top row first in pass two matters too, or a dry hat column takes the last spare percussion and the complaint returns. A role the
@@ -363,7 +362,7 @@ rule exists because a simpler version broke on real packs.
 - **`Perc` and `Other` are drawn from as one pool without being merged** (`DRAW_GROUPS`). Separate columns, grid letters and
   breakdown rows, but a pad asking for either draws from both, weighted by remaining size (`pickGroupPool`; pools are pre-shuffled).
   It cannot be done in the preference chain (same drain trap as `Hat`). Applied at both draw sites (full generate and single-pad
-  reroll). `Crash` pools into `Perc`, so a crash can land on an `Other` pad and still chokes as a crash. `satisfiesRole` accepts
+  reroll). `Crash` pools into `Perc`, so a crash can land on an `Other` pad and is still a crash. `satisfiesRole` accepts
   `Other` on a percussion pad, or the warning toast would fire on nearly every kit.
 - **`substituted` means the pad's category existed and the pad did not get it.** `satisfiesRole` excludes generic-hat-on-closed-pad
   and crash-on-percussion-pad. `unavailableRoles` reports a role the library cannot fill at all, once rather than per pad; it is
@@ -394,7 +393,12 @@ rule exists because a simpler version broke on real packs.
   pad. **Reroll:** rerolling a closed-hat pad re-applies the rule to the pad on its right unless that pad is locked (`lockedPads`
   travels in the last argument, `DrawHooks`); rerolling an open pad draws as before. `substituted`/`empty` are computed on the
   final kit. Enforced by tests in `test/kit.test.ts`.
-- **Hats choke in group 1, crashes in group 2.** Rides and cymbals are `Crash` (see Sample detection) so they choke in group 2; unverified on hardware.
+- **Choke is a kit-level rule, `chokeGroupsFor(kit)` in `padLayout.ts` (owner's decision, NOT verified on hardware).** A kit chokes only
+  when it holds both a closed hat (`CHH` or generic `Hat`) and an open hat (`OHH`): then every hat pad, closed and open, is group 1.
+  Otherwise nothing chokes (closed only, open only). `Crash` (rides, cymbals included) never chokes; group 2 is retired. Empty pads
+  never choke. The exporter's `chokeGroups` and the Pad badges (App passes each Pad its group) both come from this one function over the
+  same kit, so preset and badges cannot disagree; a test parses the exported preset and compares. Removing the only open hat (exclude,
+  reroll, shuffle) flips the closed hats to no choke. Hardware-verified earlier: hats cutting each other in group 1.
 - **Empty pads are deliberately not lockable**, asserted explicitly on the lock button.
 - **The pad is a plain `<div>` with a separate play `<button>` filling it, and lock/shuffle/exclude are sibling buttons**, so no
   interactive element nests in another (the old `<div role="button">` rule is obsolete). The visible content sits above the play
@@ -575,7 +579,7 @@ rule exists because a simpler version broke on real packs.
 **Verified on a real Move (settled, do not re-litigate):** `$schema` `song/1.7.0/devicePreset.json`; `Macro0` as an object beside
 plain-float `Macro1`-`Macro7`; `BundleInfo.json`; percent-encoded `sampleUri`; `STORE` bundles; pad order (UI pad 1 is the device's
 bottom-left, `DISPLAY_INDICES` bottom-left-origin with the `receivingNote`/`sendingNote` mapping, both pinned by a test because a
-wrong mapping still sounds on every pad, just not the one shown); choke groups (hats and crashes cut each other; this was verified when rides were still Perc and rang through, so rides now sharing the crash group is **not** verified); trimming at both
+wrong mapping still sounds on every pad, just not the one shown); choke groups (only hats cutting each other in group 1 was verified on hardware; the kit-dependent rule, hats choke only when the kit has both closed and open hats and crashes never choke, is the owner's decision and is **not** verified); trimming at both
 ends (`0.001` does not clip tails); drum cell `color` (see Preset generation). Do not "modernise" the `$schema` version, flatten
 `Macro0`, invert the grid or change the note mapping because they look wrong; they were guesses once and are not any more.
 

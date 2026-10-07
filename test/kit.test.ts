@@ -24,7 +24,7 @@ if (typeof (globalThis as any).FileReader === 'undefined') {
 }
 
 import {
-  CHOKE_CRASHES, CHOKE_HATS, chokeGroupFor, chooseLayout, DISPLAY_INDICES, DRUM_CELL_COLOR,
+  CHOKE_HATS, chokeGroupsFor, chooseLayout, DISPLAY_INDICES, DRUM_CELL_COLOR,
   NO_SAMPLES_GRID_ID, PAD_COUNT
 } from '../src/padLayout';
 import { Category, Sample, SourceFolder } from '../src/types';
@@ -1414,9 +1414,9 @@ await test('perc and other draw from one another without being merged', async ()
   assert.ok(sawOther, 'six others and one conga: others must reach the percussion pads');
 });
 
-await test('a crash reaches a percussion pad, and choking is still its own', async () => {
-  // Crash pools into Perc, so it fills percussion pads. It must still choke as a crash:
-  // pooling decides which pad a sample can reach, choking reads the real category.
+await test('a crash reaches a percussion pad, and it never chokes', async () => {
+  // Crash pools into Perc, so it fills percussion pads. It never chokes,
+  // even with closed hats present: pooling decides which pad a sample can reach.
   const library: Sample[] = [
     ...Array.from({ length: 8 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 8 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
@@ -1431,7 +1431,7 @@ await test('a crash reaches a percussion pad, and choking is still its own', asy
     assert.equal(kit[pad]?.category, 'Crash', `pad ${pad + 1} held ${kit[pad]?.category}`);
     assert.ok(!substituted.includes(pad), 'a crash on a perc pad is not a substitution');
   }
-  assert.equal(chokeGroupFor(kit[percPads[0]]), CHOKE_CRASHES);
+  assert.equal(chokeGroupsFor(kit)[percPads[0]], null);
 });
 
 await test('excluded hats do not influence the grid', async () => {
@@ -1447,7 +1447,7 @@ await test('excluded hats do not influence the grid', async () => {
   assert.equal(layout.id, 'ksch');
 });
 
-await test('all hats choke each other whatever the grid', async () => {
+await test('a kit of only generic hats has no choke whatever the grid', async () => {
   const genericPool: Sample[] = [
     ...Array.from({ length: 3 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
     ...Array.from({ length: 3 }, (_, i) => makeSample(`hihat${i}.wav`, 'Hat')),
@@ -1460,9 +1460,8 @@ await test('all hats choke each other whatever the grid', async () => {
   const preset = JSON.parse(await zip.file('Preset.ablpreset')!.async('string'));
   const groups = preset.chains[0].devices[0].chains.map((c: any) => c.drumZoneSettings.chokeGroup);
 
-  kit.forEach((sample, index) => {
-    const expected = sample?.category === 'Hat' ? 1 : null;
-    assert.equal(groups[index], expected, `pad ${index}`);
+  kit.forEach((_sample, index) => {
+    assert.equal(groups[index], null,`pad ${index} of a kit with no open hat`);
   });
 });
 
@@ -1549,42 +1548,69 @@ await test('pad-to-note mapping is the one confirmed on hardware', async () => {
   });
 });
 
-await test('hats choke in group 1, crashes in group 2, nothing else chokes', async () => {
-  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
-  kit[0] = makeSample('kick.wav', 'Kick');
-  kit[2] = makeSample('chh.wav', 'CHH');
-  kit[3] = makeSample('ohh.wav', 'OHH');
-  kit[6] = makeSample('hat.wav', 'Hat');
-  kit[12] = makeSample('clap.wav', 'Clap');
-  kit[14] = makeSample('crash.wav', 'Crash');
-  kit[15] = makeSample('conga.wav', 'Perc');
-
+const presetChokeGroups = async (kit: (Sample | null)[]): Promise<(number | null)[]> => {
   const blob = await createPresetBundle(kit, 'Choke_Test', NO_TRIM);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   const preset = JSON.parse(await zip.file('Preset.ablpreset')!.async('string'));
-  const groups = preset.chains[0].devices[0].chains.map((c: any) => c.drumZoneSettings.chokeGroup);
+  return preset.chains[0].devices[0].chains.map((c: any) => c.drumZoneSettings.chokeGroup);
+};
 
-  assert.equal(groups[2], 1, 'closed hat');
-  assert.equal(groups[3], 1, 'open hat');
-  assert.equal(groups[6], 1, 'generic hat');
-  assert.equal(groups[14], 2, 'crash');
-  assert.equal(groups[0], null, 'kick');
-  assert.equal(groups[12], null, 'clap');
-  assert.equal(groups[15], null, 'percussion rings out');
+const kitOf = (placed: Record<number, string>): (Sample | null)[] => {
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  for (const [pad, category] of Object.entries(placed)) kit[Number(pad)] = makeSample(`${category}${pad}.wav`, category as Category);
+  return kit;
+};
+
+const chokeCases: { name: string; placed: Record<number, string>; hats: number[] }[] = [
+  { name: 'only closed hats', placed: { 0: 'Kick', 2: 'CHH', 3: 'CHH', 6: 'CHH' }, hats: [] },
+  { name: 'only open hats', placed: { 0: 'Kick', 3: 'OHH', 7: 'OHH' }, hats: [] },
+  { name: 'only generic hats', placed: { 2: 'Hat', 6: 'Hat' }, hats: [] },
+  { name: 'closed and open', placed: { 0: 'Kick', 2: 'CHH', 3: 'OHH', 12: 'Clap' }, hats: [2, 3] },
+  { name: 'generic hat counts as closed', placed: { 2: 'Hat', 3: 'OHH' }, hats: [2, 3] },
+  { name: 'three closed and one open', placed: { 1: 'CHH', 2: 'CHH', 5: 'Hat', 3: 'OHH' }, hats: [1, 2, 5, 3] },
+  { name: 'crashes never choke, even with hats', placed: { 2: 'CHH', 3: 'OHH', 14: 'Crash', 15: 'Crash', 9: 'Perc' }, hats: [2, 3] },
+  { name: 'crashes alone', placed: { 14: 'Crash', 15: 'Crash' }, hats: [] },
+  { name: 'empty kit', placed: {}, hats: [] }
+];
+
+for (const { name, placed, hats } of chokeCases) {
+  await test(`choke: ${name}`, async () => {
+    const kit = kitOf(placed);
+    const groups = chokeGroupsFor(kit);
+    assert.equal(groups.length, kit.length);
+    groups.forEach((group, index) => {
+      assert.equal(group, hats.includes(index) ? CHOKE_HATS : null, `pad ${index}`);
+    });
+    assert.deepEqual(await presetChokeGroups(kit), groups, 'the exported preset must match chokeGroupsFor');
+  });
+}
+
+await test('removing the only open hat flips the closed hats to no choke', async () => {
+  const kit = kitOf({ 1: 'CHH', 2: 'CHH', 5: 'Hat', 3: 'OHH' });
+  assert.deepEqual(chokeGroupsFor(kit).filter(g => g === 1).length, 4);
+  kit[3] = null;
+  assert.ok(chokeGroupsFor(kit).every(g => g === null));
+  assert.deepEqual(await presetChokeGroups(kit), chokeGroupsFor(kit));
 });
 
-await test('a ride is a Crash and so shares the crash choke group (not verified on hardware)', async () => {
+await test('a generated kit exports exactly the choke groups the badges read', async () => {
+  const library: Sample[] = [
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`chh${i}.wav`, 'CHH')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`ohh${i}.wav`, 'OHH')),
+    ...Array.from({ length: 3 }, (_, i) => makeSample(`crash${i}.wav`, 'Crash'))
+  ];
+  const { kit } = await generateRandomKit(library);
+  assert.deepEqual(await presetChokeGroups(kit), chokeGroupsFor(kit));
+});
+
+await test('a ride is a Crash and never chokes', async () => {
   const ride = makeSample('Ride-04.wav', categorizeSample('Ride-04.wav', '/Spliced/Ride'));
   assert.equal(ride.category, 'Crash');
-  assert.equal(chokeGroupFor(ride), CHOKE_CRASHES);
-});
-
-await test('a crash still chokes as a crash, not as percussion', async () => {
-  // Pooling is about which pad a sample can reach; choking is about playback and reads
-  // the sample's real category, so a crash on a percussion pad still cuts the last one.
-  assert.equal(chokeGroupFor(makeSample('crash.wav', 'Crash')), CHOKE_CRASHES);
-  assert.equal(chokeGroupFor(makeSample('conga.wav', 'Perc')), null);
-  assert.equal(chokeGroupFor(makeSample('hihat.wav', 'Hat')), CHOKE_HATS);
+  const kit = kitOf({ 2: 'CHH', 3: 'OHH' });
+  kit[14] = ride;
+  assert.equal(chokeGroupsFor(kit)[14], null);
 });
 
 await test('effect type follows category, amounts stay at zero', async () => {

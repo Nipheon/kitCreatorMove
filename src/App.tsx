@@ -4,7 +4,7 @@ import { Pad } from './components/Pad';
 import { PickSources } from './components/PickSources';
 import { Toast } from './components/Toast';
 import {
-  categoryAccent, chokeGroupFor, chooseLayout, DISPLAY_INDICES,
+  categoryAccent, chokeGroupsFor, chooseLayout, DISPLAY_INDICES,
   PAD_COUNT, poolCategoryFor
 } from './padLayout';
 import { Category, Sample, SourceFolder } from './types';
@@ -320,6 +320,7 @@ export default function App() {
 
   const samples = useMemo(() => enabledSamples(sourceFolders), [sourceFolders]);
   const kit = kitResult.kit;
+  const chokeGroups = chokeGroupsFor(kit);
 
   /**
    * The only place the warning toast is timed. `Toast` is presentational: it ran a
@@ -1194,7 +1195,7 @@ export default function App() {
                   index={index}
                   sample={kit[index]}
                   expectedCategory={kitResult.layout.roles[index]}
-                  chokeGroup={chokeGroupFor(kit[index])}
+                  chokeGroup={chokeGroups[index] ?? null}
                   isLocked={lockedPads[index]}
                   isBusy={isGenerating}
                   onToggleLock={() => toggleLock(index)}
@@ -1462,7 +1463,7 @@ export default function App() {
                     </div>
                   </li>
                   <li><strong className='text-text-bright'>Space:</strong> Generates a new kit from anywhere on the page, except while you are typing in a field or the manual is open.</li>
-                  <li><strong className='text-text-bright'>Choke Groups:</strong> Closed & Open Hats automatically cut each other (Choke 1). Crashes cut each other (Choke 2).</li>
+                  <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
                   <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
                   <li><strong className='text-text-bright'>Preview Kit:</strong> Plays every pad in order, 750ms apart, so you can hear the whole kit without clicking sixteen times. Clicking anywhere, pressing any key, or hitting the button again stops it.</li>
