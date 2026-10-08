@@ -36,7 +36,7 @@ export const Toast: React.FC<ToastProps> = ({
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-[4.75rem] sm:top-3 inset-x-3 z-50 flex justify-center pointer-events-none"
+      className="fixed top-[7.75rem] sm:top-3 inset-x-3 z-50 flex justify-center pointer-events-none"
     >
       {show && (
         <div className="toast-enter pointer-events-auto max-w-xl bg-surface-modal/95 backdrop-blur-md border border-warning-border rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-3 text-sm text-text-bright">

@@ -721,7 +721,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   of truth and kept resetting because `onClose` was a new closure (now a `useCallback`). Entrance animation is local CSS
   (`.toast-enter`, honours `prefers-reduced-motion`), not `tailwindcss-animate` classes (bare Tailwind 4, no plugins, they compile
   to nothing). `role="status"` (polite), not `role="alert"` (assertive). The toast's live region is a permanently mounted fixed rail
-  (`inset-x-3`, centred; below the header under `sm`, so it does not cover the title and Help on a phone) and only its content comes and
+  (`inset-x-3`, centred; below the header (7.75rem: the title wraps to three lines at 360px) under `sm`, so it does not cover the title and Help on a phone) and only its content comes and
   goes. The same rule holds for every live region: the error box (`role=alert`), the notice box, "Checking samples" and the scan announcer
   (one `sr-only` status for all pending rows) are always mounted and filled, because a region inserted together with its text is not
   reliably announced. The animation is Y-only (the rail does the centring).
