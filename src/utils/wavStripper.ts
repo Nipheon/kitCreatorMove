@@ -79,11 +79,9 @@ export async function readWavFormat(blob: Blob): Promise<WavFormat | null> {
 }
 
 /**
- * Rebuilds the file with only `fmt ` and `data`, dropping ID3/LIST/bext/iXML/etc.
- *
- * Not used by the export: WAV metadata is kept so untrimmed samples are copied byte-for-byte, and
- * the Move accepts them. This is kept (and tested) on purpose because the owner has not decided
- * whether stripping should come back, for example as an option. Do not delete it as dead code.
+ * Rebuilds the file with only `fmt ` and `data`, dropping ID3/LIST/bext/iXML/etc. Used by the export for every
+ * WAV that is not re-encoded by the trimmer: the Move cannot use the metadata and the originals stay with the
+ * user. Anything that is not a RIFF/WAVE file with both chunks is returned unchanged.
  */
 export async function stripWavMetadata(blob: Blob): Promise<Blob> {
   try {

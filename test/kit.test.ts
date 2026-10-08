@@ -49,7 +49,7 @@ import { buildPartnerIndex, hatStem, partnerPads } from '../src/utils/hatPartner
 import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { FULL_HASH_MAX_BYTES, fileSignature, identityOf, sampleIdentity } from '../src/utils/sampleSignature';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from '../src/utils/progressVisibility';
-import { readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
+import { readChunks, readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
 
 const NO_TRIM = { trimSilence: false };
 
@@ -1675,7 +1675,7 @@ await test('identically named samples get distinct zip entries', async () => {
   }
 });
 
-await test('with trimming off a wav is copied byte-for-byte, metadata chunks included', async () => {
+await test('with trimming off a wav is exported without its metadata chunks, audio untouched', async () => {
   const bytes = makeWav({ extraChunk: { id: 'LIST', bytes: 40 }, frames: 16 });
   const sample: Sample = {
     id: 'keep', file: new File([bytes], 'Kick.wav'), name: 'Kick.wav', category: 'Kick' as Category,
@@ -1685,7 +1685,25 @@ await test('with trimming off a wav is copied byte-for-byte, metadata chunks inc
   kit[0] = sample;
   const zip = await JSZip.loadAsync(await (await createPresetBundle(kit, 'Keep', NO_TRIM)).arrayBuffer());
   const out = new Uint8Array(await zip.file('Samples/00_Kick.wav')!.async('uint8array'));
-  assert.deepEqual(Array.from(out), Array.from(new Uint8Array(bytes)));
+  const chunks = readChunks(out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer)!;
+  assert.deepEqual(chunks.map(c => c.id), ['fmt ', 'data'], 'only fmt and data remain');
+  const data = (b: Uint8Array) => {
+    const c = readChunks(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer)!.find(x => x.id === 'data')!;
+    return Array.from(b.subarray(c.offset, c.offset + c.size));
+  };
+  assert.deepEqual(data(out), data(new Uint8Array(bytes)), 'the audio bytes are identical');
+  assert.ok(out.length < new Uint8Array(bytes).length, 'the file shrank');
+});
+
+await test('a non-WAV or unparsable file is exported as it is, even with stripping', async () => {
+  const aiff = new Uint8Array([70, 79, 82, 77, 0, 0, 0, 4, 65, 73, 70, 70]);
+  const junk = new Uint8Array([1, 2, 3, 4, 5]);
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = { id: 'a', file: new File([aiff], 'A.aif'), name: 'A.aif', category: 'Kick' as Category, isLoop: false, isNonDrum: false, url: '' } as Sample;
+  kit[1] = { id: 'j', file: new File([junk], 'J.wav'), name: 'J.wav', category: 'Snare' as Category, isLoop: false, isNonDrum: false, url: '' } as Sample;
+  const zip = await JSZip.loadAsync(await (await createPresetBundle(kit, 'Keep', NO_TRIM)).arrayBuffer());
+  assert.deepEqual(Array.from(await zip.file('Samples/00_A.aif')!.async('uint8array')), Array.from(aiff));
+  assert.deepEqual(Array.from(await zip.file('Samples/01_J.wav')!.async('uint8array')), Array.from(junk));
 });
 
 await test('every sampleUri resolves to a real zip entry', async () => {

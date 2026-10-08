@@ -4,9 +4,10 @@ import { Sample } from '../types';
 import { generateAblPreset } from './ablPresetTemplate';
 import { safeFileName } from './kitNaming';
 import { createTrimmer } from './audioTrimmer';
+import { stripWavMetadata } from './wavStripper';
 
 export interface ExportOptions {
-  /** Strip leading and trailing silence. Off means samples are copied byte-for-byte. */
+  /** Strip leading and trailing silence. Off means samples are copied as they are (WAV metadata chunks are still removed). */
   trimSilence: boolean;
   onProgress?: (done: number, total: number) => void;
 }
@@ -143,6 +144,10 @@ export async function createPresetBundle(
       if (result.failed) report.trimFailures++;
       if (result.unsupported) report.trimSkipped++;
     }
+    // A file that was not re-encoded still carries its metadata chunks (LIST, bext, iXML, ID3 ...): the
+    // Move cannot use them and the originals stay with the user. Non-WAV files and anything the stripper
+    // cannot parse come back unchanged.
+    if (audio === sample.file) audio = await stripWavMetadata(sample.file);
 
     const filename = zipEntryName(sample, index);
     // Read here, not lazily inside JSZip, so a failure can name the sample. JSZip would

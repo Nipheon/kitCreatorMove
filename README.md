@@ -19,7 +19,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🔒 **Pad Locking & Single Reroll**: Lock pads to hold sounds while randomising the rest, or reroll individual pads on demand.
 - 🎹 **Keyboard Hotkeys**: Audition pads using grid row keys (`1 2 3 4`, `Q W E R`, `A S D F`, `Z X C V`); `Space` generates a new kit unless a field or another button has focus (it then activates that button) or the manual is open. Ticking **Auto Preview** previews the current kit at once.
 - 🔊 **Kit Preview & Auto-Preview**: Step through the whole kit in pad order, with playback timed from when each pad is actually audible rather than when playback was requested.
-- ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. With trimming off, every file is copied byte-for-byte, WAV metadata included. With trimming on, a 16- or 24-bit WAV that has silence to cut is re-encoded (same sample rate and bit depth, metadata chunks not carried over); every other file, including AIFF and files with more than two channels, is copied unchanged.
+- ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. Metadata chunks (LIST, bext, iXML, ID3 ...) are always removed from WAV files, because the Move cannot use them and your originals stay with you. With trimming off the audio is copied as it is; with trimming on, a 16- or 24-bit WAV that has silence to cut is re-encoded (same sample rate and bit depth); AIFF and files that cannot be trimmed keep their audio bytes.
 - 📦 **Batch Exporting**: Package 1 to 10 randomised kits at once. By default each kit downloads as its own `.ablpresetbundle` file, one after another; your browser may ask once to allow multiple downloads, so choose **Allow**. Tick **Download as one zip** for a single `<prefix>_Batch.zip` instead (unzip it before uploading the bundles to your Move).
 - 🔔 **Toast Warnings**: A top-centre notification for substituted categories, empty pads, or roles the library cannot fill.
 
@@ -103,7 +103,7 @@ src/
     sampleSignature.ts   # Audio-content signature, read lazily at draw time to skip duplicates
     packSplit.ts         # Splits a dropped collection into its sub-packs
     scanProgress.ts      # Throttle and wording for the inline scan progress under Source Folders
-    wavStripper.ts       # WAV chunk parsing (readWavFormat); stripWavMetadata is kept but unused by export
+    wavStripper.ts       # WAV chunk parsing (readWavFormat) and stripWavMetadata (used by export)
 test/
   kit.test.ts           # Kit, naming, export and detection tests
   io.test.ts            # Drop handling and trimming tests (fake OfflineAudioContext)

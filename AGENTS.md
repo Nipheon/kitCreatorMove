@@ -150,9 +150,11 @@ path with more than three segments means you are in the wrong place.
   when the whole file was read) or a `data` chunk whose header ends the file is rejected as empty; a declared size of 0 with bytes after
   it is accepted (streaming recorders write that placeholder), and a `data` chunk beyond the bytes read is not judged. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
   for extensible, `subFormat`.
-- **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
-  export (it remains in `wavStripper.ts` and is tested **on purpose**: the owner has not decided whether stripping should return, so
-  do not delete it as dead code); do not re-introduce stripping on the untrimmed path.
+- **WAV metadata is stripped on export (owner decision 2026-10-08: the Move cannot use it and the originals stay with the user).**
+  Every sample the trimmer did not re-encode (trim off, nothing to cut, unsupported or failed trim) goes through `stripWavMetadata`
+  (only `fmt ` and `data` kept, audio bytes identical, smaller file); a re-encoded one is already clean. AIFF, anything that is not
+  RIFF/WAVE and anything without both chunks comes back unchanged, and a strip failure falls back to the original file. This reverses
+  the 2026-10-07 'copy byte-for-byte' state (the Move also accepted unstripped files, hardware-verified then).
 - **Trimming only re-encodes a mono or stereo 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
   more than two channels (`encodeWav` writes a plain 16-byte `fmt `, which is only valid up to stereo), nothing to trim, decode failure) is passed through as the original file; AIFF is never forced through the WAV parser
   (`readWavFormat` returns `null` for `FORM`/`AIFF`). Failures and skips are counted in the export report and surfaced as notices.
