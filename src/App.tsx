@@ -77,6 +77,55 @@ const WARNING_TOAST_MS = 5000;
 const enabledSamples = (folders: SourceFolder[]) =>
   folders.filter(f => f.isEnabled !== false).flatMap(f => f.samples);
 
+/** Focus moves into a dialog on open and back to its opener on close; Escape closes (when `canClose`); Tab cycles inside. */
+const useDialogKeys = (
+  isOpen: boolean,
+  openerRef: React.RefObject<HTMLButtonElement | null>,
+  dialogRef: React.RefObject<HTMLDivElement | null>,
+  close: () => void,
+  canClose: () => boolean = () => true
+) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const opener = openerRef.current;
+    const dialog = dialogRef.current;
+    dialog?.focus();
+
+    const handleDialogKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (canClose()) close();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')
+      );
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active) || (e.shiftKey && (active === first || active === dialog))) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      opener?.focus();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+};
+
 export default function App() {
   const [sourceFolders, setSourceFolders] = useState<SourceFolder[]>([]);
   const [kitResult, setKitResult] = useState<KitResult>(emptyKit);
@@ -97,8 +146,12 @@ export default function App() {
   const [kitSuffix, setKitSuffix] = useState('KIT');
   /** True once the suffix was rolled (first drop) or touched by the user; from then on folder changes never reroll it. */
   const suffixSettled = useRef(false);
-  const [batchSize, setBatchSize] = useState(1);
+  /** Kits a batch download produces, the on-screen kit included. The modal slider runs from 2. */
+  const [batchSize, setBatchSize] = useState(3);
   const [batchAsZip, setBatchAsZip] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
+  const batchButtonRef = useRef<HTMLButtonElement>(null);
+  const batchDialogRef = useRef<HTMLDivElement>(null);
   const [trimSilence, setTrimSilence] = useState(true);
   const [skipLoops, setSkipLoops] = useState(true);
   const [skipNonDrums, setSkipNonDrums] = useState(true);
@@ -393,52 +446,18 @@ export default function App() {
     }
   }, [kitResult]);
 
-  // Help dialog: focus moves in on open and back to the Help button on close; Escape
-  // closes; Tab cycles inside the dialog.
-  useEffect(() => {
-    if (!isHelpOpen) return;
-    const opener = helpButtonRef.current;
-    const dialog = helpDialogRef.current;
-    dialog?.focus();
-
-    const handleDialogKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setIsHelpOpen(false);
-        return;
-      }
-      if (e.key !== 'Tab' || !dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')
-      );
-      if (focusable.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (!dialog.contains(active) || (e.shiftKey && (active === first || active === dialog))) {
-        e.preventDefault();
-        (e.shiftKey ? last : first).focus();
-      } else if (!e.shiftKey && active === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    document.addEventListener('keydown', handleDialogKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleDialogKeyDown);
-      opener?.focus();
-    };
-  }, [isHelpOpen]);
+  // Help and batch dialogs: focus moves in on open and back to the opener on close; Escape
+  // closes; Tab cycles inside the dialog. The batch dialog ignores Escape while exporting.
+  const isExportingRef = useRef(false);
+  isExportingRef.current = isExporting;
+  useDialogKeys(isHelpOpen, helpButtonRef, helpDialogRef, () => setIsHelpOpen(false));
+  useDialogKeys(isBatchOpen, batchButtonRef, batchDialogRef, () => setIsBatchOpen(false), () => !isExportingRef.current);
 
   // The key handler below is registered once, so it reaches the newest randomizeKit and
   // help state through these refs rather than closing over stale values.
   const randomizeRef = useRef<() => void>(() => {});
   const helpOpenRef = useRef(false);
-  helpOpenRef.current = isHelpOpen;
+  helpOpenRef.current = isHelpOpen || isBatchOpen;
   const spaceHandled = useRef(false);
 
   useEffect(() => {
@@ -950,24 +969,25 @@ export default function App() {
     });
   };
 
-  const buildBatch = () =>
+  const buildBatch = (batchSize: number) =>
     runGeneration(report => buildBatchFor({
       kit, layout: kitResult.layout, exportName, exportedNames: exportedNames.current,
       samples, kitOptions, batchSize, prefix: kitPrefix, lockedPads,
       onKit: (done, total) => report(done, total, 'kits')
     }));
 
-  const exportKit = async () => {
+  /** `count` kits: the on-screen one, then count - 1 new ones. 1 is the plain single download. */
+  const exportKit = async (count: number, asZip: boolean) => {
     if (generating.current || kit.every(s => s === null)) return;
 
     // Built before the confirm so the guard sums the real kits 2..n, not the on-screen kit
     // times the batch size. Trimming only shrinks, hence "at most".
-    const batch = batchSize > 1 ? await buildBatch() : null;
-    if (batchSize > 1 && !batch) return; // superseded by a newer generation
+    const batch = count > 1 ? await buildBatch(count) : null;
+    if (count > 1 && !batch) return; // superseded by a newer generation
     // Separate downloads hold one bundle at a time, so the largest kit is what matters;
     // the zip holds every bundle at once, so it stays the sum.
     const kitBytes = batch ? batch.map(entry => kitSizeBytes(entry.kit)) : [kitSizeBytes(kit)];
-    const bytes = batch && !batchAsZip
+    const bytes = batch && !asZip
       ? Math.max(...kitBytes)
       : kitBytes.reduce((total, size) => total + size, 0);
     if (bytes > SIZE_WARN_BYTES) {
@@ -988,7 +1008,7 @@ export default function App() {
       let emptyNote: string | null = null;
       if (batch) {
         emptyNote = emptyPadsNotice(batch);
-        if (batchAsZip) {
+        if (asZip) {
           report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
           names.push(...batch.map(entry => entry.name));
         } else {
@@ -998,7 +1018,7 @@ export default function App() {
           // Only the first separate batch of a session: the browser asks once per site, so repeating the hint is noise.
           if (!allowHintShown.current) {
             allowHintShown.current = true;
-            setNotice(prev => [prev, `Downloaded ${result.downloaded.length} files. If your browser asked to allow multiple downloads, choose Allow; if files are missing, use "Download as one zip".`].filter(Boolean).join(' '));
+            setNotice(prev => [prev, `Downloaded ${result.downloaded.length} files. If your browser asked to allow multiple downloads, choose Allow; if files are missing, choose "One zip" in Batch Download.`].filter(Boolean).join(' '));
           }
         }
       } else {
@@ -1395,42 +1415,6 @@ export default function App() {
               </div>
             </div>
 
-            <div className='space-y-2'>
-              <div className='flex justify-between items-center'>
-                <label htmlFor='batch-size' className='text-sm text-text-muted uppercase'>Batch Export Amount</label>
-                <span className='text-sm text-accent-yellow font-bold'>{batchSize} Kit{batchSize !== 1 ? 's' : ''}</span>
-              </div>
-              <input
-                id='batch-size'
-                type='range'
-                min='1'
-                max='10'
-                value={batchSize}
-                onChange={(e) => setBatchSize(parseInt(e.target.value))}
-                className='w-full accent-accent-yellow'
-              />
-              <p className='text-sm leading-snug text-text-subtle'>
-                Export multiple random kits at once. Locked pads remain the same across all.
-              </p>
-            </div>
-
-            {batchSize > 1 && (
-              <div>
-                <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
-                  <input
-                    type='checkbox'
-                    checked={batchAsZip}
-                    onChange={(e) => setBatchAsZip(e.target.checked)}
-                    className='accent-accent-yellow w-4 h-4'
-                  />
-                  Download as one zip
-                </label>
-                <p className='text-sm leading-snug text-text-subtle'>
-                  Off: each kit downloads as its own file. The browser may ask once to allow multiple downloads.
-                </p>
-              </div>
-            )}
-
             <div>
               <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
                 <input
@@ -1447,25 +1431,28 @@ export default function App() {
               </p>
             </div>
 
-            {/* Directly under the slider it belongs to: the batch size decides what this
-                button produces, and reading the count then hunting for the action at the
-                far end of the panel put them out of sight of each other. */}
-            <div>
-              {(checkProgress?.kind === 'kits' || (isExporting && exportProgress && exportProgress.total > 1)) && (() => {
-                const p = checkProgress?.kind === 'kits' ? checkProgress : exportProgress!;
-                return (
-                  <div className='text-sm text-text-muted uppercase tracking-wider mb-2 text-center'>
-                    Kit {Math.min(p.done + 1, p.total)} of {p.total}
-                  </div>
-                );
-              })()}
+            {/* Directly under Trim Silence, the export setting both buttons share. */}
+            <div className='space-y-2'>
+              {checkProgress?.kind === 'kits' && !isBatchOpen && (
+                <div className='text-sm text-text-muted uppercase tracking-wider text-center'>
+                  Kit {Math.min(checkProgress.done + 1, checkProgress.total)} of {checkProgress.total}
+                </div>
+              )}
               <button
-                onClick={exportKit}
+                onClick={() => exportKit(1, false)}
                 disabled={isEmpty || isExporting || isGenerating}
                 className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
               >
-                {isExporting && <Loader2 className='w-4 h-4 animate-spin' />}
-                {isExporting ? 'Building Bundle…' : 'Export To Move'}
+                {isExporting && !isBatchOpen && <Loader2 className='w-4 h-4 animate-spin' />}
+                {isExporting && !isBatchOpen ? 'Building Bundle…' : 'Download Kit'}
+              </button>
+              <button
+                ref={batchButtonRef}
+                onClick={() => setIsBatchOpen(true)}
+                disabled={isEmpty || isExporting || isGenerating}
+                className='w-full py-3 border border-border-main text-text-bright font-bold uppercase text-sm tracking-[0.2em] rounded hover:bg-surface-btn-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              >
+                Batch Download
               </button>
             </div>
 
@@ -1525,6 +1512,83 @@ export default function App() {
 
         </aside>
       </main>
+
+      {isBatchOpen && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-overlay-strong backdrop-blur-md p-4 overflow-y-auto'>
+          <div
+            ref={batchDialogRef}
+            role='dialog'
+            aria-modal='true'
+            aria-labelledby='batch-dialog-title'
+            tabIndex={-1}
+            className='bg-surface-modal border border-border-main rounded-2xl max-w-md w-full flex flex-col shadow-2xl overflow-hidden outline-none'
+          >
+            <div className='flex items-center justify-between px-6 py-5 border-b border-border-dark bg-surface-modal-header shrink-0'>
+              <h2 id='batch-dialog-title' className='text-base font-bold uppercase tracking-widest text-text-bright'>Batch Download</h2>
+              <button
+                type='button'
+                onClick={() => setIsBatchOpen(false)}
+                disabled={isExporting}
+                className='text-text-muted hover:text-text-bright p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+                aria-label='Close batch download'
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className='p-6 space-y-5'>
+              <div className='space-y-2'>
+                <div className='flex justify-between items-center'>
+                  <label htmlFor='batch-size' className='text-sm text-text-muted uppercase'>Amount of kits</label>
+                  <span className='text-sm text-accent-yellow font-bold'>{batchSize} Kits</span>
+                </div>
+                <input
+                  id='batch-size'
+                  type='range'
+                  min='2'
+                  max='10'
+                  value={batchSize}
+                  disabled={isExporting}
+                  onChange={(e) => setBatchSize(parseInt(e.target.value))}
+                  className='w-full accent-accent-yellow'
+                />
+                <p className='text-sm leading-snug text-text-subtle'>
+                  Downloads the kit on screen, then {batchSize - 1} new random kit{batchSize - 1 !== 1 ? 's' : ''}. Locked pads stay the same in all.
+                </p>
+              </div>
+              <fieldset className='space-y-2' disabled={isExporting}>
+                <legend className='text-sm text-text-muted uppercase mb-1'>Download as</legend>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                  <input type='radio' name='batch-format' checked={!batchAsZip} onChange={() => setBatchAsZip(false)} className='accent-accent-yellow w-4 h-4' />
+                  Individual files
+                </label>
+                <label className='flex items-center gap-2 text-sm text-text-muted uppercase cursor-pointer'>
+                  <input type='radio' name='batch-format' checked={batchAsZip} onChange={() => setBatchAsZip(true)} className='accent-accent-yellow w-4 h-4' />
+                  One zip
+                </label>
+                <p className='text-sm leading-snug text-text-subtle'>
+                  Individual files: one .ablpresetbundle per kit. The browser may ask once to allow multiple downloads.
+                </p>
+              </fieldset>
+              {(checkProgress?.kind === 'kits' || (isExporting && exportProgress && exportProgress.total > 1)) && (() => {
+                const p = checkProgress?.kind === 'kits' ? checkProgress : exportProgress!;
+                return (
+                  <div role='status' className='text-sm text-text-muted uppercase tracking-wider text-center'>
+                    Kit {Math.min(p.done + 1, p.total)} of {p.total}
+                  </div>
+                );
+              })()}
+              <button
+                onClick={async () => { await exportKit(batchSize, batchAsZip); setIsBatchOpen(false); }}
+                disabled={isEmpty || isExporting || isGenerating}
+                className='w-full py-3.5 bg-surface-solid text-text-inverse font-bold uppercase text-sm tracking-[0.2em] rounded flex items-center justify-center gap-2 hover:bg-surface-solid-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              >
+                {(isExporting || isGenerating) && <Loader2 className='w-4 h-4 animate-spin' />}
+                {isExporting || isGenerating ? 'Building Bundles…' : `Download ${batchSize} Kits`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isHelpOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-overlay-strong backdrop-blur-md p-4 overflow-y-auto'>
@@ -1602,8 +1666,8 @@ export default function App() {
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names are a folder prefix, the Grid ID, and a random suffix — <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKT-ksho-Vibe</code>. Custom typed prefixes and suffixes are preserved.</li>
                   <li><strong className='text-text-bright'>Grid ID:</strong> A short fingerprint of the pad layout, one letter per column: <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>k</code> kick, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>s</code> snare, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>c</code> clap, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>h</code> closed hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>o</code> open hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>p</code> percussion, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>x</code> other. Two kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device without relearning where anything sits. The panel shows the full ID, including the shared top row after an underscore; the exported name carries the column half, which is what fits on the Move's display.</li>
-                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 randomized kits at once. A library with few samples per role yields similar kits. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Tick Download as one zip to get a single zip archive instead.</li>
-                  <li><strong className='text-text-bright'>Device Transfer:</strong> Each exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> is a single file, not a folder: upload it to your Ableton Move. If you chose Download as one zip, unzip it first.</li>
+                  <li><strong className='text-text-bright'>Download Kit / Batch Download:</strong> Download Kit saves the kit on screen. Batch Download opens a dialog where you pick 2 to 10 kits: the kit on screen plus new randomized ones. A library with few samples per role yields similar kits. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Choose One zip to get a single zip archive instead.</li>
+                  <li><strong className='text-text-bright'>Device Transfer:</strong> Each exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> is a single file, not a folder: upload it to your Ableton Move. If you chose One zip, unzip it first.</li>
                 </ul>
               </section>
 

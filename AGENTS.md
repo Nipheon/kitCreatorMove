@@ -103,9 +103,10 @@ path with more than three segments means you are in the wrong place.
 
 - **Format of a bundle:** `Samples/`, `Preset.ablpreset`, `BundleInfo.json`, one file per kit named `<kit>.ablpresetbundle`.
   `compression: 'STORE'` everywhere: audio barely compresses and DEFLATE burns CPU.
+- **Download Kit vs Batch Download (owner decision 2026-10-08):** Download Kit exports the on-screen kit only (`exportKit(1, false)`). Batch Download opens a dialog (`isBatchOpen`, `useDialogKeys` shared with the help dialog; hotkeys are off while it is open; Escape and close are ignored while exporting) with an amount slider 2..10 (`batchSize`, default 3, the on-screen kit counts as one: it downloads that kit plus n-1 new ones) and Individual files / One zip; the confirm button runs `exportKit(batchSize, batchAsZip)` and closes the dialog. The batch is built when confirmed, never on slider moves.
 - **A batch downloads each kit as its own `.ablpresetbundle` by default** (`exportBatchSeparately`: bundles are built and handed to the browser one at a time, but `downloadBlob` keeps each object URL, and so its blob, alive for `REVOKE_DELAY_MS`, so up to about N bundles can be held at once in a long batch (60 s covers about 200 downloads at the 300 ms gap, i.e. practically all of them),
   `DOWNLOAD_GAP_MS` = 300 between downloads because browsers drop or prompt on back-to-back ones; the browser may ask once to allow
-  multiple downloads and the app says to choose Allow, in the notice shown only after the FIRST separate batch of a session: `allowHintShown` ref in `App.tsx`, not persisted, reset on reload). The "Download as one zip" checkbox (`batchAsZip`) switches to
+  multiple downloads and the app says to choose Allow, in the notice shown only after the FIRST separate batch of a session: `allowHintShown` ref in `App.tsx`, not persisted, reset on reload). The "One zip" radio in the Batch Download dialog (`batchAsZip`) switches to
   `exportBatchKits`, one `<prefix>_Batch.zip` wrapping the bundles. `downloadBlob` revokes its object URL after `REVOKE_DELAY_MS`
   (60 s); revoking sooner cancels large or queued downloads in Firefox and Safari. Do not shorten it.
 - **Export failures name where they failed.** `ExportError` carries `stage` (`read`, `trim`, `build`, `archive`, `download`), the
@@ -758,8 +759,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   line taller than the real row it becomes.
 - **Placement:** Skip Loops and Skip Non-Drums sit inside the Usable Samples card between the count and the Breakdown by Type list
   (cause and effect both visible), in the card's type (`text-sm`, uppercase, medium). Trim Silence sits directly above Export To
-  Move (an export setting). **Export To Move sits directly under the Batch Export Amount slider** (not pinned to the panel bottom),
-  with the progress line; error and notice banners trail the panel (they also report drops and folder loads). Folder status ("x
+  Move (an export setting). **Download Kit and Batch Download sit directly under Trim Silence** (not pinned to the panel bottom), with the progress line; error and notice banners trail the panel (they also report drops and folder loads). Folder status ("x
   folder(s) used" / "Waiting for samples", ignoring disabled folders) sits above the Usable Samples card; there is no footer.
 - **Settings toggles carry no explainer text** beyond one line; what Skip Loops, Skip Non-Drums and Trim Silence do lives in help
   section 5. Keep new options to one line.
@@ -794,7 +794,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   pad tint), 4 Presets & Batch (Grid IDs, `PREFIX-gridid-Suffix` naming, batch, device transfer), 5 Sample Filters (filters,
   fallbacks, Perc/Other draw, Trim Silence), 6 Privacy, 7 Source Code & Contact, 8 Thank You (drum-kit-generator, the drum icon)).
   Bundles are single files you upload to the Move, and the batch wording must match the code (separate files by default, optional
-  one zip). **A user-visible rule needs
+  one zip; Download Kit saves the on-screen kit, Batch Download opens the dialog). **A user-visible rule needs
   a help entry, not only an AGENTS.md entry** (Preview and Grid IDs shipped without one). **The contact address is a relay mask**
   (`uuemoswsq@mozmail.com`): it reaches an inbox without naming anyone, and the GitHub noreply address bounces silently
   (`users.noreply.github.com` rejects mail) so it belongs in commit authorship only. No other address may appear in shipped content.

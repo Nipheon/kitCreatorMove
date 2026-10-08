@@ -20,7 +20,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🎹 **Keyboard Hotkeys**: Audition pads using grid row keys (`1 2 3 4`, `Q W E R`, `A S D F`, `Z X C V`); `Space` generates a new kit unless a field or another button has focus (it then activates that button) or the manual is open. Ticking **Auto Preview** previews the current kit at once.
 - 🔊 **Kit Preview & Auto-Preview**: Step through the whole kit in pad order, with playback timed from when each pad is actually audible rather than when playback was requested.
 - ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. Metadata chunks (LIST, bext, iXML, ID3 ...) are always removed from WAV files, because the Move cannot use them and your originals stay with you. With trimming off the audio is copied as it is; with trimming on, a 16- or 24-bit WAV that has silence to cut is re-encoded (same sample rate and bit depth); AIFF files are converted to WAV on export; files that cannot be trimmed keep their audio.
-- 📦 **Batch Exporting**: Package 1 to 10 randomised kits at once. By default each kit downloads as its own `.ablpresetbundle` file, one after another; your browser may ask once to allow multiple downloads, so choose **Allow**. Tick **Download as one zip** for a single `<prefix>_Batch.zip` instead (unzip it before uploading the bundles to your Move).
+- 📦 **Batch Exporting**: Batch Download packages 2 to 10 kits at once: the kit on screen plus new randomised ones. By default each kit downloads as its own `.ablpresetbundle` file, one after another; your browser may ask once to allow multiple downloads, so choose **Allow**. Choose **One zip** for a single `<prefix>_Batch.zip` instead (unzip it before uploading the bundles to your Move).
 - 🔔 **Toast Warnings**: A top-centre notification for substituted categories, empty pads, or roles the library cannot fill.
 
 ## Quick Start
@@ -115,7 +115,7 @@ test/
 2. **Library Analysis**: Every file is classified from its name, falling back to the folder it sits in. Loops and non-drum material are filtered out, and the sidebar breaks the library down by category.
 3. **Grid Derivation**: The categories present decide the grid — four columns, four rows, with a shared top row when more than four categories are available. The result carries a Grid ID such as `ksho` or `ksho_ccpp`.
 4. **Generate & Audition**: Hit **Generate Random Kit**, or play pads with the mouse and hotkeys. Lock what you like, reroll what you don't, exclude samples you never want to see again.
-5. **Export to Hardware**: **Export To Move** downloads a single `.ablpresetbundle` file named `PREFIX-gridid-Suffix` (e.g. `MKT-ksho-Nova`). A batch downloads one such file per kit (or, with **Download as one zip**, a single `<prefix>_Batch.zip`). Each bundle is one file, not a folder: upload it to your Move.
+5. **Export to Hardware**: **Download Kit** downloads the kit on screen as a single `.ablpresetbundle` file named `PREFIX-gridid-Suffix` (e.g. `MKT-ksho-Nova`). A batch downloads one such file per kit (or, with **One zip**, a single `<prefix>_Batch.zip`). Each bundle is one file, not a folder: upload it to your Move.
 
 ## Contributing
 
