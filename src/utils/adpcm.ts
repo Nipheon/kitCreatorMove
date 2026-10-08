@@ -133,5 +133,13 @@ export function decodeMsAdpcm(buffer: ArrayBuffer): Blob {
   for (let b = 0; b < fullBlocks; b++) decodeBlock(b * blockAlign, blockAlign);
   if (tailFrames > 0) decodeBlock(fullBlocks * blockAlign, tail);
 
-  return writePcm16Wav(out.subarray(0, outFrame * ch), ch, format.sampleRate);
+  // The last block is padded to a whole block; `fact` says how many frames are real.
+  let frames = outFrame;
+  const fact = chunks.find(c => c.id === 'fact');
+  if (fact && fact.size >= 4) {
+    const declared = view.getUint32(fact.offset, true);
+    if (declared > 0 && declared < frames) frames = declared;
+  }
+
+  return writePcm16Wav(out.subarray(0, frames * ch), ch, format.sampleRate);
 }

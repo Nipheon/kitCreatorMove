@@ -130,7 +130,7 @@ path with more than three segments means you are in the wrong place.
   The 4 KB step was a small gain on a warm cache (about 70 ms per 4,000 files of 300 KB), more on a cold disk.
 - **WAV format is checked at import (`prepareWav` in `fileReader.ts`).** PCM (1), IEEE float (3) and extensible with a PCM/float
   sub-format pass through as the very same `File`, byte for byte; never re-encode them. MS ADPCM (2) is decoded by `adpcm.ts` to a
-  16-bit PCM WAV (same rate and channels, no resampling, exact samples) because browsers cannot play it and the Move does not
+  16-bit PCM WAV (same rate and channels, no resampling, exact samples; the output is cut to the `fact` frame count when that is smaller than the decoded blocks, which are padded) because browsers cannot play it and the Move does not
   either. Any other tag (IMA ADPCM, mu-law, A-law, MP3, GSM, unknown) or undecodable ADPCM is skipped and listed in the `DropReport`
   (`converted`/`rejected`); `processFiles` does not show `rejected` in the UI, it logs it with one `console.warn` per drop (a converted ADPCM file is silent too; the owner wants no notice for either); one bad file never discards the rest of the drop. A WAV
   with no readable `fmt ` chunk is left alone. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,

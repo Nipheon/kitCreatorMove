@@ -507,6 +507,24 @@ await test('MS ADPCM rejects an invalid predictor index and an empty data chunk'
   assert.throws(() => decodeMsAdpcm(buf));
 });
 
+await test('MS ADPCM output is cut to the fact sample count when it is smaller than the decoded blocks', async () => {
+  const buf = asBuffer(encodeAdpcm(wave(300, 1000), 1, 22050, 256));
+  const bytes = new Uint8Array(buf);
+  const at = (id: string) => {
+    let off = 12;
+    while (String.fromCharCode(...bytes.subarray(off, off + 4)) !== id) off += 8 + new DataView(buf).getUint32(off + 4, true) + (new DataView(buf).getUint32(off + 4, true) % 2);
+    return off;
+  };
+  assert.equal(pcmOf(await decodeMsAdpcm(buf).arrayBuffer()).length, 1000);
+  new DataView(buf).setUint32(at('fact') + 8, 900, true);
+  assert.equal(pcmOf(await decodeMsAdpcm(buf).arrayBuffer()).length, 900);
+  // A fact count above what was decoded, or zero, is ignored.
+  new DataView(buf).setUint32(at('fact') + 8, 5000, true);
+  assert.equal(pcmOf(await decodeMsAdpcm(buf).arrayBuffer()).length, 1000);
+  new DataView(buf).setUint32(at('fact') + 8, 0, true);
+  assert.equal(pcmOf(await decodeMsAdpcm(buf).arrayBuffer()).length, 1000);
+});
+
 const entryFor = (dir: string, name: string, bytes: Uint8Array): Fake => ({
   isFile: true, isDirectory: false, name, fullPath: `${dir}/${name}`,
   file: (ok: (f: File) => void) => ok(new File([bytes as BlobPart], name))
