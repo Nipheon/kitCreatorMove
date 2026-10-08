@@ -660,8 +660,9 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   (Lock/Shuffle `text-pad-action` 12px, hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
 - **Sidebar:** only the folder list shrinks (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`); heading, text line and count block
   are siblings of the `aside`. Failed: scrolling the whole `aside`; wrapping heading+list in `flex-1 min-h-0` (a shrinkable flex
-  child overlaps siblings, it does not clip); capping the list height. Below ~700px height with twenty folders the whole sidebar
-  scrolls, which is acceptable.
+  child overlaps siblings, it does not clip); capping the list height. The `aside` is `lg:overflow-y-auto` (it was `lg:overflow-hidden`, which clipped
+  the PERC + CRASH and OTHER eye toggles at ~640px height): when the list at its 3.25rem minimum plus the count block still do not fit, the
+  whole sidebar scrolls; otherwise the list takes the leftover and scrolls itself. Checked at 1366x768, 1280x720, 1440x900 and 1366x640.
 - **There is no drop zone box in the sidebar, only a line of text** (plus the Pick folders / Pick files buttons under it). `handleDrop` is on the app root so the whole window is the
   target; drag feedback comes from the full-window overlay.
 - **Collections: a dropped folder holding several independent packs is shown as a parent with child sub-packs

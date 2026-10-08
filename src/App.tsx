@@ -1098,7 +1098,7 @@ export default function App() {
       </header>
 
       <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden'>
-        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-hidden'>
+        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
           {/* Heading, drop zone, list and the count block are siblings of the sidebar on
               purpose, so the list is the only one that gives up room: it takes what is
               left and scrolls, and twenty folders can never push the sample count or the
