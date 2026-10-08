@@ -19,6 +19,7 @@ import { planRemove, planToggle } from './utils/folderGroups';
 import { expandCollections } from './utils/packSplit';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { SampleKind } from './utils/kinds';
+import { loadBatchSize, loadQuickPreview, saveBatchSize, saveQuickPreview } from './utils/storedSettings';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
 import { revokeSampleUrl } from './utils/sampleUrl';
@@ -70,6 +71,10 @@ const formatMb = (bytes: number) => `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
  * a deliberate, tuned-by-ear constant, not a measurement.
  */
 const PREVIEW_LEAD_IN_MS = 150;
+
+/** Gap between pads, measured from the previous pad's audible onset. Quick is tuned by ear, like the lead-in. */
+const PREVIEW_GAP_MS = 750;
+const PREVIEW_QUICK_GAP_MS = 350;
 
 /** How long the warning toast stays up before dismissing itself. */
 const WARNING_TOAST_MS = 5000;
@@ -147,7 +152,7 @@ export default function App() {
   /** True once the suffix was rolled (first drop) or touched by the user; from then on folder changes never reroll it. */
   const suffixSettled = useRef(false);
   /** Kits a batch download produces, the on-screen kit included. The modal slider runs from 2. */
-  const [batchSize, setBatchSize] = useState(3);
+  const [batchSize, setBatchSize] = useState(loadBatchSize);
   const [batchAsZip, setBatchAsZip] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const batchButtonRef = useRef<HTMLButtonElement>(null);
@@ -171,6 +176,11 @@ export default function App() {
   const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [autoPreview, setAutoPreview] = useState(false);
+  /** Shorter gap between pads. Applies to every preview, manual or auto; read live by the running preview through its ref. */
+  const [quickPreview, setQuickPreview] = useState(loadQuickPreview);
+  const quickPreviewRef = useRef(false);
+  const quickLabelRef = useRef<HTMLLabelElement>(null);
+  quickPreviewRef.current = quickPreview;
   const [spinningPads, setSpinningPads] = useState<boolean[]>(new Array(PAD_COUNT).fill(false));
   const generationId = useRef(0);
   const generating = useRef(false);
@@ -280,13 +290,14 @@ export default function App() {
         if (stepAdvanced) return;
         stepAdvanced = true;
 
+        const gapMs = quickPreviewRef.current ? PREVIEW_QUICK_GAP_MS : PREVIEW_GAP_MS;
         if (currentStep < padOrder.length) {
-          const timerId = window.setTimeout(playNextStep, 750);
+          const timerId = window.setTimeout(playNextStep, gapMs);
           previewTimerIds.current.push(timerId);
         } else {
           const endTimerId = window.setTimeout(() => {
             setIsPreviewing(false);
-          }, 750);
+          }, gapMs);
           previewTimerIds.current.push(endTimerId);
         }
       };
@@ -312,6 +323,8 @@ export default function App() {
       }, 1000);
       previewTimerIds.current.push(fallbackTimerId);
 
+      // Quick gaps are shorter than most samples: each pad cuts off the previous one instead of stacking on it.
+      if (quickPreviewRef.current) window.dispatchEvent(new CustomEvent('stop-all-audio'));
       window.dispatchEvent(new CustomEvent('play-pad', { detail: padIndex }));
     };
 
@@ -393,6 +406,8 @@ export default function App() {
     if (!isPreviewing) return;
 
     const handleGlobalInteraction = (e: Event) => {
+      // Quick changes the pace of the running preview; it must not stop it.
+      if (e.target instanceof Node && quickLabelRef.current?.contains(e.target)) return;
       if (e.type === 'pointerdown' && e.target instanceof Node && previewButtonRef.current?.contains(e.target)) {
         stoppedByPointerdown.current = true;
         // The click follows pointerup in the same task; whatever is left over (drag off the button, no click) is cleared right after.
@@ -468,8 +483,8 @@ export default function App() {
       // Custom toggles (the collection parent eye) expect Space to activate them.
       if (e.key === ' ' && e.target instanceof HTMLElement && e.target.matches('[role=checkbox],[role=switch],[role=radio],[role=menuitemcheckbox]')) return;
       // Buttons, links and summaries keep Space as their own activation key; only the generate
-      // button itself hands it to the shortcut.
-      if (e.key === ' ' && e.target instanceof HTMLElement && e.target.closest('button,a[href],summary') && !e.target.closest('[data-generate]')) return;
+      // button and a pad's play button (a pad was just clicked) hand it to the shortcut.
+      if (e.key === ' ' && e.target instanceof HTMLElement && e.target.closest('button,a[href],summary') && !e.target.closest('[data-generate],[data-space-generates]')) return;
       if (e.repeat) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // The dialog owns the keyboard while it is open: no pad hotkeys, no generating.
@@ -477,7 +492,7 @@ export default function App() {
 
       if (e.key === ' ') {
         // Space generates from anywhere except a focused button, link or summary (which it
-        // activates) and the fields above. Enter still activates a focused button.
+        // activates; a pad's play button does not count) and the fields above. Enter still activates a focused button.
         e.preventDefault();
         spaceHandled.current = true;
         randomizeRef.current();
@@ -1357,9 +1372,22 @@ export default function App() {
                   type='checkbox'
                   checked={autoPreview}
                   onChange={(e) => toggleAutoPreview(e.target.checked)}
+                  aria-label='Auto Preview'
+                  title='Preview each new kit automatically'
                   className='accent-accent-teal w-4 h-4 cursor-pointer'
                 />
-                Auto Preview
+                Auto
+              </label>
+              <label ref={quickLabelRef} className='flex items-center gap-2 text-sm text-text-muted hover:text-text-bright uppercase tracking-wider cursor-pointer select-none'>
+                <input
+                  type='checkbox'
+                  checked={quickPreview}
+                  onChange={(e) => { setQuickPreview(e.target.checked); saveQuickPreview(e.target.checked); }}
+                  aria-label='Quick preview'
+                  title='Shorter gap between pads; each pad cuts off the previous one'
+                  className='accent-accent-teal w-4 h-4 cursor-pointer'
+                />
+                Quick
               </label>
             </div>
           </div>
@@ -1548,7 +1576,7 @@ export default function App() {
                   max='10'
                   value={batchSize}
                   disabled={isExporting}
-                  onChange={(e) => setBatchSize(parseInt(e.target.value))}
+                  onChange={(e) => { const n = parseInt(e.target.value); setBatchSize(n); saveBatchSize(n); }}
                   className='w-full accent-accent-yellow'
                 />
                 <p className='text-sm leading-snug text-text-subtle'>
@@ -1655,8 +1683,8 @@ export default function App() {
                   <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
                   <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
-                  <li><strong className='text-text-bright'>Preview Kit:</strong> Plays every pad in order, 750ms apart, so you can hear the whole kit without clicking sixteen times. Clicking anywhere, pressing any key, or hitting the button again stops it.</li>
-                  <li><strong className='text-text-bright'>Auto Preview:</strong> Ticking this runs that preview automatically after each Generate Random Kit, so rolling through kits is a listening job rather than a clicking one.</li>
+                  <li><strong className='text-text-bright'>Preview Kit:</strong> Plays every pad in order, 750ms apart (350ms with the Quick switch, which also cuts each pad off at the next), so you can hear the whole kit without clicking sixteen times. Clicking anywhere, pressing any key, or hitting the button again stops it.</li>
+                  <li><strong className='text-text-bright'>Auto:</strong> Ticking this runs that preview automatically after each Generate Random Kit, so rolling through kits is a listening job rather than a clicking one.</li>
                   <li><strong className='text-text-bright'>Pad Colours:</strong> Each pad is tinted by the category it holds — one hue each for kick, snare, clap, closed hat, open hat, percussion and other. The Breakdown by Type rows use the same hues, so a grid can be read at a glance without reading a word.</li>
                 </ul>
               </section>
@@ -1694,7 +1722,7 @@ export default function App() {
                   server and no upload: the files are read, categorised, trimmed and packaged
                   into a zip by your browser, and the finished bundle is handed straight back to
                   your downloads folder. Closing the tab is all it takes to clear it — nothing
-                  was stored anywhere else.
+                  was stored anywhere else except two interface settings (the Quick preview tick and the batch amount), which your browser keeps in its local storage.
                 </p>
                 <p className='text-text-subtle'>
                   The one exception is ordinary web analytics: Cloudflare Web Analytics and Vercel

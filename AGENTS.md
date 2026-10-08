@@ -17,7 +17,7 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
+src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
 test/{kit,io,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
 ```
 
@@ -54,6 +54,7 @@ path with more than three segments means you are in the wrong place.
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
 - **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only (page views, referrer, country, browser, device type, load timings); never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
+- **Local storage holds exactly two UI settings** (`utils/storedSettings.ts`): the Quick preview tick (`kitCreator.quickPreview`) and the batch amount (`kitCreator.batchSize`, whole number 2..10, anything else falls back to 3). Written on change, read once at startup, every access in try/catch (blocked storage just means no persistence). Never store samples, kits, file names or anything else without the owner's say; the Privacy help, the `index.html` fallback text and the README must keep saying so. The Auto Preview tick, the zip choice and the trim/skip toggles deliberately reset on reload. Pinned by a test with fake stores.
 - **Security headers live in `vercel.json`** (CSP with `script-src 'self'` plus the Cloudflare beacon host, `connect-src` limited to `'self'` and `cloudflareinsights.com`, `media-src 'self' blob: data:`, `frame-ancestors 'none'`, nosniff, Referrer-Policy). Any new external script, font, image host or `fetch` target must be added there or it is blocked in production; check the browser console on a Vercel preview after changing it.
 
 ## React and lifecycle (`App.tsx`)
@@ -617,7 +618,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   that builds the audio element** (effects run in declaration order).
 - **Each pad pre-buffers** (`audio.preload = 'auto'`, `audio.load()` in `useEffect([sample])`). Generate shows a brief "Rolling"
   spinner (`Loader2`, up to 100ms per pad), skipped when Auto Preview is on.
-- **Preview Kit** (right of Generate Random Kit) plays pads in index order, 750ms apart, stopped by any click, key press, a second
+- **Preview Kit** (right of Generate Random Kit) plays pads in index order, 750ms apart (`PREVIEW_GAP_MS`; 350ms, `PREVIEW_QUICK_GAP_MS`, when the **Quick** checkbox is ticked: always shown next to **Auto** (the Auto Preview checkbox, shortened to "Auto" with `aria-label='Auto Preview'`; Quick has `aria-label='Quick preview'`), applies to manual Preview Kit and auto preview alike, and is read live through `quickPreviewRef` so toggling mid-preview takes effect on the next gap, and the Quick label is exempt from the stop-on-any-click/key handler (`quickLabelRef`) so it never stops the preview, and with Quick on each step dispatches `stop-all-audio` before `play-pad` so a pad cuts off the previous sound instead of stacking on it (normal 750ms preview still lets sounds ring out); 350ms is tuned by ear; an empty pad still waits its 1000ms fallback first), stopped by any click, key press, a second
   press of the button or a new generate. **Auto Preview** (checkbox) starts it on each generate. **Symptom that drove the timing
   work:** a manual preview, seconds after a generate, was fine, but auto preview starts at once on 16 brand-new blob URLs, and a
   cold `HTMLAudioElement` defers sound ~100-250ms, so pad 01 came late. Pad 01 was fired on a flat 100ms tick while pads 2-16 got
@@ -806,7 +807,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **Pad semantics are in the pad entry above** (play button, sibling controls, disabled `Pad N, empty`).
 - **Keyboard:** the global key handler is registered once, so it reaches `randomizeKit` and the help state through `randomizeRef`
   and `helpOpenRef`; never close over state in it. Space generates from anywhere except a focused button, link or `summary`
-  (they keep Space as their own activation; only the main Generate button, marked `data-generate`, hands it to the shortcut; Enter activates
+  (they keep Space as their own activation; only the main Generate button, marked `data-generate`, and a pad's full-cover play button, marked `data-space-generates`, hand it to the shortcut: click a pad, press Space, get a new kit instead of a retrigger; the pad's lock/shuffle/exclude buttons keep Space; Enter activates
   any button), is ignored in text inputs, selects, checkboxes, sliders, contenteditable, custom toggles (`role=checkbox|switch|radio|menuitemcheckbox`, e.g. the collection parent eye, which keeps the browser's own Space activation) and while the help dialog is open (pad hotkeys
   are also off then), ignores key repeat, and cancels the button click on keyup. It does nothing during a scan or export, or when no sample is usable (`usableCount === 0`, like the disabled Generate button).
   A pointerdown on the Preview button while a preview runs stops it (the global capture handler) and sets `stoppedByPointerdown`, so the click

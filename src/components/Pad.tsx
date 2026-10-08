@@ -257,6 +257,7 @@ export const Pad: React.FC<PadProps> = ({
     >
       <button
         type='button'
+        data-space-generates
         disabled={!sample}
         onClick={handlePlay}
         aria-label={sample ? `Play ${sample.name}${label.toLowerCase() !== sample.category.toLowerCase() ? `, ${label.toLowerCase()}` : ''}` : `Pad ${index + 1}, empty`}

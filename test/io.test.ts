@@ -13,6 +13,7 @@ import { collectAudioFiles, getFilesFromDataTransfer, getFilesFromFileList, HEAD
 import { auditionUrl, needsAuditionConversion, revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
 import type { Sample } from '../src/types';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
+import { BATCH_DEFAULT, BATCH_SIZE_KEY, loadBatchSize, loadQuickPreview, saveBatchSize, saveQuickPreview } from '../src/utils/storedSettings';
 import { readWavFormat } from '../src/utils/wavStripper';
 import { describeScanProgress, throttle } from '../src/utils/scanProgress';
 
@@ -1065,6 +1066,28 @@ await test('sampleUrl creates one URL per file on first use, shares it with copi
   } finally {
     URL.createObjectURL = realCreate; URL.revokeObjectURL = realRevoke;
   }
+});
+
+await test('stored settings round-trip, and bad or unavailable storage falls back to the defaults', () => {
+  const map = new Map<string, string>();
+  const store = { getItem: (k: string) => map.get(k) ?? null, setItem: (k: string, v: string) => { map.set(k, v); } };
+  assert.equal(loadQuickPreview(store), false);
+  assert.equal(loadBatchSize(store), BATCH_DEFAULT);
+  saveQuickPreview(true, store);
+  saveBatchSize(7, store);
+  assert.equal(loadQuickPreview(store), true);
+  assert.equal(loadBatchSize(store), 7);
+  for (const bad of ['1', '11', '3.5', 'abc', '', '-4', '1e1']) {
+    map.set(BATCH_SIZE_KEY, bad);
+    assert.equal(loadBatchSize(store), BATCH_DEFAULT, `"${bad}" is not a valid amount`);
+  }
+  const throwing = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('quota'); } };
+  assert.equal(loadQuickPreview(throwing), false);
+  assert.equal(loadBatchSize(throwing), BATCH_DEFAULT);
+  saveQuickPreview(true, throwing);
+  saveBatchSize(5, throwing);
+  assert.equal(loadBatchSize(null), BATCH_DEFAULT);
+  saveBatchSize(5, null);
 });
 
 if (failures > 0) {
