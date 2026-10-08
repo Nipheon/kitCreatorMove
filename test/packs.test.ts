@@ -32,28 +32,28 @@ const many = (dir: string, n: number, stem = 's') =>
 const folder = (name: string, files: DroppedFile[]): DroppedFolder => ({ name, files });
 const sizes = (children: DroppedFolder[] | null) => children?.map(c => [c.name, c.files.length]);
 
-// Structures taken from real packs in the owner's library.
-const gimme = folder('Gimme All Your Drums (Vol. 1)', [
-  ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => many(`/Gimme All Your Drums (Vol. 1)/Kit ${n}`, 16)),
+// Structures modelled on real-world pack layouts.
+const numberedKits = folder('Numbered Kits Pack (Vol. 1)', [
+  ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => many(`/Numbered Kits Pack (Vol. 1)/Kit ${n}`, 16)),
 ]);
 
-const signature = folder('Signature Drum Kit #1', [
-  ...many('/Signature Drum Kit #1/Pots And Pans Drum Kit', 20),
-  ...many('/Signature Drum Kit #1/Coca Cola Drum Kit', 12),
-  ...many('/Signature Drum Kit #1/Home Made Drum Kit #1/Kicks', 6),
-  ...many('/Signature Drum Kit #1/Home Made Drum Kit #1/Snares', 6),
-  ...many('/Signature Drum Kit #1/Vocals', 30),
-  ...many('/Signature Drum Kit #1/Odd Bits', 3),
-  file('/Signature Drum Kit #1', 'readme.wav')
+const signature = folder('Household Kit #1', [
+  ...many('/Household Kit #1/Pots And Pans Drum Kit', 20),
+  ...many('/Household Kit #1/Bottle Drum Kit', 12),
+  ...many('/Household Kit #1/Home Made Drum Kit #1/Kicks', 6),
+  ...many('/Household Kit #1/Home Made Drum Kit #1/Snares', 6),
+  ...many('/Household Kit #1/Vocals', 30),
+  ...many('/Household Kit #1/Odd Bits', 3),
+  file('/Household Kit #1', 'readme.wav')
 ]);
 
-const lunch = folder('The Lunch77 Dr. Dre Drumkit', [
+const boomBap = folder('The Boom-Bap Kit B Drumkit', [
   ...['808s', 'Claps', 'Closed Hats', 'Open Hats', 'Crashes & Cymbals', 'Extras', 'FX', 'Kicks', 'Misc', 'Percs', 'Snares', 'Vox']
-    .flatMap(role => many(`/The Lunch77 Dr. Dre Drumkit/${role}`, 20))
+    .flatMap(role => many(`/The Boom-Bap Kit B Drumkit/${role}`, 20))
 ]);
 
 test('a collection of numbered kits splits into one child per kit, with no remainder', () => {
-  const children = splitPacks(gimme)!;
+  const children = splitPacks(numberedKits)!;
   assert.deepEqual(sizes(children), [1, 2, 3, 4, 5, 6, 7].map(n => [`Kit ${n}`, 16]));
 });
 
@@ -65,23 +65,23 @@ test('children sort numerically, so Kit 10 follows Kit 9', () => {
 test('named packs split off; role folders, small folders and loose files stay as the (other files) child', () => {
   const children = splitPacks(signature)!;
   assert.deepEqual(sizes(children), [
-    ['Coca Cola Drum Kit', 12],
+    ['Bottle Drum Kit', 12],
     ['Home Made Drum Kit #1', 12],
     ['Pots And Pans Drum Kit', 20],
-    ['Signature Drum Kit #1' + OTHER_FILES_SUFFIX, 34]
+    ['Household Kit #1' + OTHER_FILES_SUFFIX, 34]
   ]);
 });
 
 test('files keep their original path, so classification context is unchanged', () => {
   const home = splitPacks(signature)!.find(c => c.name === 'Home Made Drum Kit #1')!;
   assert.deepEqual([...new Set(home.files.map(f => f.path))].sort(), [
-    '/Signature Drum Kit #1/Home Made Drum Kit #1/Kicks',
-    '/Signature Drum Kit #1/Home Made Drum Kit #1/Snares'
+    '/Household Kit #1/Home Made Drum Kit #1/Kicks',
+    '/Household Kit #1/Home Made Drum Kit #1/Snares'
   ]);
 });
 
 test('no file is lost or duplicated: the children are exactly the input', () => {
-  for (const f of [gimme, signature]) {
+  for (const f of [numberedKits, signature]) {
     const children = splitPacks(f)!;
     const all = children.flatMap(c => c.files);
     assert.equal(all.length, f.files.length);
@@ -91,13 +91,13 @@ test('no file is lost or duplicated: the children are exactly the input', () => 
 });
 
 test('a single pack with role-named subfolders stays whole', () => {
-  assert.equal(splitPacks(lunch), null);
+  assert.equal(splitPacks(boomBap), null);
 });
 
 test('one named pack beside role folders is one pack, not a collection', () => {
-  const f = folder('Cardo Drumkit', [
-    ...many('/Cardo Drumkit/Cardo Drumkit', 40),
-    ...many('/Cardo Drumkit/Kicks', 20), ...many('/Cardo Drumkit/Snares', 20), ...many('/Cardo Drumkit/FX', 20)
+  const f = folder('Pack A Drumkit', [
+    ...many('/Pack A Drumkit/Pack A Drumkit', 40),
+    ...many('/Pack A Drumkit/Kicks', 20), ...many('/Pack A Drumkit/Snares', 20), ...many('/Pack A Drumkit/FX', 20)
   ]);
   assert.equal(splitPacks(f), null);
 });
@@ -133,21 +133,21 @@ test('role vocabulary: role folder names are role-like, pack names are not', () 
     'P E R C [BOUNCE]', 'S N A R E S', 'Drums', 'Instrument one-shot', 'Other samples', 'Bells', 'Wind Chimes 2', 'Agogo', 'Bell Kicks'
   ]) assert.ok(isRoleLikeName(name), name);
   for (const name of [
-    'Kit 1', 'Pots And Pans Drum Kit', 'Coca Cola Drum Kit', 'Home Made Drum Kit #1', 'WAV MONO', 'WAV STEREO',
-    'Zampler Ultimate Drums', 'Best Of OZ', 'Friday Witchez', 'Kit_03_Amin_122', 'Bell Boy Beats', 'Bells of Atlantis'
+    'Kit 1', 'Pots And Pans Drum Kit', 'Bottle Drum Kit', 'Home Made Drum Kit #1', 'WAV MONO', 'WAV STEREO',
+    'Vendor Ultimate Drums', 'Best Of XY', 'Friday Wizards', 'Kit_03_Amin_122', 'Bell Hop Beats', 'Bells of Atlantis'
   ]) assert.ok(!isRoleLikeName(name), name);
 });
 
 test('expandCollections splits both routes the same way, never splits loose files, and shares one parent id', () => {
   let ids = 0;
   const loose = folder(LOOSE_FILES_FOLDER, [...many('/A', 20), ...many('/B', 20)]);
-  const { folders, splits } = expandCollections([gimme, lunch, loose], LOOSE_FILES_FOLDER, () => `p${++ids}`);
+  const { folders, splits } = expandCollections([numberedKits, boomBap, loose], LOOSE_FILES_FOLDER, () => `p${++ids}`);
   assert.equal(ids, 1);
-  assert.deepEqual(splits, [{ name: gimme.name, count: 7 }]);
+  assert.deepEqual(splits, [{ name: numberedKits.name, count: 7 }]);
   assert.deepEqual(folders.map(f => f.name), [
-    'Kit 1', 'Kit 2', 'Kit 3', 'Kit 4', 'Kit 5', 'Kit 6', 'Kit 7', lunch.name, LOOSE_FILES_FOLDER
+    'Kit 1', 'Kit 2', 'Kit 3', 'Kit 4', 'Kit 5', 'Kit 6', 'Kit 7', boomBap.name, LOOSE_FILES_FOLDER
   ]);
-  assert.ok(folders.slice(0, 7).every(f => f.parent?.id === 'p1' && f.parent.name === gimme.name));
+  assert.ok(folders.slice(0, 7).every(f => f.parent?.id === 'p1' && f.parent.name === numberedKits.name));
   assert.equal(folders[7].parent, undefined);
   assert.equal(folders[8].parent, undefined);
 });
@@ -156,12 +156,12 @@ test('expandCollections splits both routes the same way, never splits loose file
 
 test('duplicate detection keys sub-packs on parent name + name', () => {
   const kit1 = (parent: string) => ({ name: 'Kit 1', parent: { id: parent, name: parent } });
-  assert.equal(folderKey(kit1('Gimme')), 'gimme/kit 1');
-  const current = [kit1('Gimme')];
+  assert.equal(folderKey(kit1('Numbered')), 'numbered/kit 1');
+  const current = [kit1('Numbered')];
   // Another collection with its own Kit 1 does not collide.
   assert.equal(mergeScannedFolders(current, [kit1('Other')]).accepted.length, 1);
   // The same collection dropped again is all skipped, case-insensitively.
-  const again = mergeScannedFolders(current, [{ name: 'KIT 1', parent: { id: 'x', name: 'GIMME' } }]);
+  const again = mergeScannedFolders(current, [{ name: 'KIT 1', parent: { id: 'x', name: 'NUMBERED' } }]);
   assert.equal(again.accepted.length, 0);
   assert.equal(again.skippedDuplicates, 1);
   // A plain folder called "Kit 1" is a different thing from a sub-pack called "Kit 1".
@@ -175,16 +175,16 @@ const sub = (name: string, parentId: string, parentName: string, isEnabled = tru
 const plain = (name: string, isEnabled = true): SourceFolder => ({ id: name, name, samples: [], isEnabled });
 
 test('prefix of sub-packs of one collection comes from the collection name', () => {
-  const kits = [sub('Kit 1', 'g', 'Gimme All Your Drums'), sub('Kit 2', 'g', 'Gimme All Your Drums')];
-  assert.equal(prefixForFolders(kits), 'GAY');
-  assert.equal(prefixForFolders([kits[0], { ...kits[1], isEnabled: false }]), 'GAY');
+  const kits = [sub('Kit 1', 'g', 'Numbered Kits Pack'), sub('Kit 2', 'g', 'Numbered Kits Pack')];
+  assert.equal(prefixForFolders(kits), 'NKP');
+  assert.equal(prefixForFolders([kits[0], { ...kits[1], isEnabled: false }]), 'NKP');
   assert.equal(prefixForFolders([{ ...kits[0], isEnabled: false }, { ...kits[1], isEnabled: false }]), DEFAULT_PREFIX);
 });
 
 test('prefix across collections, or a collection plus a plain folder, is the multi-folder prefix', () => {
-  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Gimme'), sub('Kit 1', 'h', 'Other')]), MULTI_FOLDER_PREFIX);
-  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Gimme'), plain('Solo')]), MULTI_FOLDER_PREFIX);
-  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Gimme', false), plain('Solo')]), 'SOL');
+  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Numbered'), sub('Kit 1', 'h', 'Other')]), MULTI_FOLDER_PREFIX);
+  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Numbered'), plain('Solo')]), MULTI_FOLDER_PREFIX);
+  assert.equal(prefixForFolders([sub('Kit 1', 'g', 'Numbered', false), plain('Solo')]), 'SOL');
 });
 
 // --- grouping, tri-state, multi-id plans -----------------------------------------------------

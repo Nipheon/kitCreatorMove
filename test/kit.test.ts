@@ -205,20 +205,20 @@ await test('a pad that loses a draw against a pool that exists still counts as s
 });
 
 await test('camelCase names are split into words', async () => {
-  // Found by running 58 real packs through the pipeline. A whole collection named this
+  // Found by running 58 packs through the pipeline. A whole collection named this
   // way read as Other: the name is one token, and `hat` is three characters so it only
   // matches a token outright. The pack looked fine because a sibling "OpenHats" folder
   // covered for it — until the same files appeared under "DrumKits" too, the dedupe kept
   // that copy, and all 87 open hats vanished from the pool.
-  assert.equal(categorizeSample('BohmSlappAltOpenHat.wav'), 'OHH');
-  assert.equal(categorizeSample('BohmSlappOpenHat.wav'), 'OHH');
+  assert.equal(categorizeSample('BoomSlamAltOpenHat.wav'), 'OHH');
+  assert.equal(categorizeSample('BoomSlamOpenHat.wav'), 'OHH');
   assert.equal(categorizeSample('TightSnare.wav'), 'Snare');
   assert.equal(categorizeSample('BigKick.wav'), 'Kick');
   assert.equal(categorizeSample('ClosedHat3.wav'), 'CHH');
 
   // The same file must read the same wherever it sits, which is what the bug broke.
   for (const dir of ['/Pack/DrumKits', '/Pack/OpenHats', '/Pack/Misc']) {
-    assert.equal(categorizeSample('BohmSlappOpenHat.wav', dir), 'OHH', dir);
+    assert.equal(categorizeSample('BoomSlamOpenHat.wav', dir), 'OHH', dir);
   }
 
   // And the split must not invent words: these still resolve as before.
@@ -284,28 +284,28 @@ await test('sn and snr are recognised as snares', async () => {
   }
 });
 
-await test('Music Weapons names: Crsh is a crash, a ride is a crash too, FxRev is an effect, "Whats" is not a hat', async () => {
-  const packDirs = ['/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS', '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV SORTED/Extras'];
+await test('Boom-Bap pack names: Crsh is a crash, a ride is a crash too, FxRev is an effect, "Whats" is not a hat', async () => {
+  const packDirs = ['/Free Boom-Bap Kits Pack (WAV)/WAV KITS', '/Free Boom-Bap Kits Pack (WAV)/WAV SORTED/Extras'];
   for (const dir of packDirs) {
-    for (const name of ['TakeWhatsMine-Crsh1.wav', 'TakeWhatsMine-Crsh2.wav', 'Watchmen-Crsh1.wav', 'Watchmen-Crsh2.wav']) {
+    for (const name of ['GetWhatsHere-Crsh1.wav', 'GetWhatsHere-Crsh2.wav', 'Lookouts-Crsh1.wav', 'Lookouts-Crsh2.wav']) {
       assert.equal(categorizeSample(name, dir), 'Crash', name);
     }
-    for (const name of ['TakeWhatsMine-Ride1.wav', 'TakeWhatsMine-Ride2.wav', 'TakeWhatsMine-Ride3.wav', 'BlockWatch-Ride1.wav']) {
+    for (const name of ['GetWhatsHere-Ride1.wav', 'GetWhatsHere-Ride2.wav', 'GetWhatsHere-Ride3.wav', 'BlockPatrol-Ride1.wav']) {
       assert.equal(categorizeSample(name, dir), 'Crash', name);
     }
-    const fx = categorizeSample('TakeWhatsMine-FxRev.wav', dir);
+    const fx = categorizeSample('GetWhatsHere-FxRev.wav', dir);
     assert.equal(fx, 'Other');
-    assert.equal(looksNonDrum(fx, 'TakeWhatsMine-FxRev.wav', dir), true);
-    for (const name of ['SpacedOut-VoxFx1.wav', 'SpacedOut-VoxFx2.wav']) {
+    assert.equal(looksNonDrum(fx, 'GetWhatsHere-FxRev.wav', dir), true);
+    for (const name of ['ZonedOut-VoxFx1.wav', 'ZonedOut-VoxFx2.wav']) {
       assert.equal(looksNonDrum(categorizeSample(name, dir), name, dir), true, name);
     }
   }
   // The rest of the same pack was already right and must stay so.
   const dir = packDirs[0];
   for (const [name, want] of [
-    ['TakeWhatsMine-Kik1.wav', 'Kick'], ['TakeWhatsMine-Snr1.wav', 'Snare'], ['TakeWhatsMine-SnrVrb.wav', 'Snare'],
-    ['LettingGo-SnrRol.wav', 'Snare'], ['TakeWhatsMine-Hat.wav', 'Hat'], ['TakeWhatsMine-HatOpn.wav', 'OHH'],
-    ['BlockWatch-Crash.wav', 'Crash']
+    ['GetWhatsHere-Kik1.wav', 'Kick'], ['GetWhatsHere-Snr1.wav', 'Snare'], ['GetWhatsHere-SnrVrb.wav', 'Snare'],
+    ['HoldingOn-SnrRol.wav', 'Snare'], ['GetWhatsHere-Hat.wav', 'Hat'], ['GetWhatsHere-HatOpn.wav', 'OHH'],
+    ['BlockPatrol-Crash.wav', 'Crash']
   ] as const) {
     assert.equal(categorizeSample(name, dir), want, name);
   }
@@ -315,21 +315,21 @@ await test('Music Weapons names: Crsh is a crash, a ride is a crash too, FxRev i
 });
 
 await test('"Lp" is a loop marker only as the last token of the name', async () => {
-  const dir = '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS';
+  const dir = '/Free Boom-Bap Kits Pack (WAV)/WAV KITS';
   assert.equal(looksLikeLoop('Perc_Lp.wav', dir, 'Perc'), true);
   assert.equal(looksLikeLoop('Perc Lp 2.wav', dir, 'Perc'), true);
   // Not at the end: the Lp is a prefix or a low-pass remark, and the name is a drum.
   assert.equal(looksLikeLoop('Lp Kick.wav', '', categorizeSample('Lp Kick.wav')), false);
-  assert.equal(looksLikeLoop('LP Thick.wav', '/All Encompassing Kit/Low_Mid', 'Perc'), false);
-  assert.equal(looksLikeLoop('LP Cardiak String Drop.wav', '/The Lunch77 Cardiak Drumkit/Extras', 'Other'), false);
+  assert.equal(looksLikeLoop('LP Thick.wav', '/Complete Kit/Low_Mid', 'Perc'), false);
+  assert.equal(looksLikeLoop('LP Marko String Drop.wav', '/The Boom-Bap Kit I Drumkit/Extras', 'Other'), false);
   // Still a low-pass 808 at the end, and a kick stays a kick.
-  assert.equal(looksLikeLoop('Kryptic Samples-808 Son LP.wav', '/KRYPTIC SAMPLES TRAP/808s', 'Kick'), false);
+  assert.equal(looksLikeLoop('Karnic Samples-808 Son LP.wav', '/KARNIC SAMPLES TRAP/808s', 'Kick'), false);
 });
 
 await test('"Lp" marks an unplaced or percussion file as a loop, never a kick', async () => {
-  const dir = '/Music Weapons FREE Boom-Bap Kits (WAV)/WAV KITS';
-  assert.equal(categorizeSample('Watchmen-PercLp.wav', dir), 'Perc');
-  assert.equal(looksLikeLoop('Watchmen-PercLp.wav', dir, 'Perc'), true);
+  const dir = '/Free Boom-Bap Kits Pack (WAV)/WAV KITS';
+  assert.equal(categorizeSample('Lookouts-PercLp.wav', dir), 'Perc');
+  assert.equal(looksLikeLoop('Lookouts-PercLp.wav', dir, 'Perc'), true);
   assert.equal(looksLikeLoop('Kick LP.wav', '', 'Kick'), false);
   assert.equal(looksLikeLoop('Perc.wav', '/Pack/LP Sounds', 'Perc'), false);
   assert.equal(looksLikeLoop('Clap.wav', '', 'Perc'), false);
@@ -354,16 +354,16 @@ await test('crashes, rides and cymbals are all the Crash category', async () => 
   }
 });
 
-await test('cymbal names from the owner dump: rides, cymbals and the Cymb abbreviation are Crash', async () => {
+await test('cymbal names from a large private corpus: rides, cymbals and the Cymb abbreviation are Crash', async () => {
   for (const [name, dir] of [
-    ['Ride-04.wav', '/Spliced/Ride'],
-    ['Ride_04.wav', '/The Lunch77 Dr. Dre Drumkit/Crashes & Cymbals'],
-    ['TBRide06.wav', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
-    ['CHEAPRIDE.WAV', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
-    ['KEEF CYMBAL 3.wav', '/Chief Keef (Shows the Screen) Drumkit/Crashes & Cymbals'],
-    ['CY_FDHC_25.wav', '/The Lunch77 Crash Dummy Records Drumkit/Crashes & Cymbals'],
-    ['Bobeats RYTM Cymb.wav', '/COFFEE & BEATS VOL/6. SAMPLES/Sonic Treats'],
-    ['808CymbRev.wav', '/T-Minus (Shows the Screen) Drumkit/Crashes & Cymbals']
+    ['Ride-04.wav', '/SampleSite/Ride'],
+    ['Ride_04.wav', '/The Boom-Bap Kit B Drumkit/Crashes & Cymbals'],
+    ['TBRide06.wav', '/The Boom-Bap Kit C Drumkit/Crashes & Cymbals'],
+    ['CHEAPRIDE.WAV', '/The Boom-Bap Kit C Drumkit/Crashes & Cymbals'],
+    ['KEEN CYMBAL 3.wav', '/Trap Kit A Drumkit/Crashes & Cymbals'],
+    ['CY_FDHC_25.wav', '/The Boom-Bap Kit C Drumkit/Crashes & Cymbals'],
+    ['Nobeats RYTM Cymb.wav', '/Beat Pack Vol/6. SAMPLES/Treats'],
+    ['808CymbRev.wav', '/Trap Kit B Drumkit/Crashes & Cymbals']
   ]) {
     assert.equal(categorizeSample(name, dir), 'Crash', `${dir}/${name}`);
   }
@@ -371,11 +371,11 @@ await test('cymbal names from the owner dump: rides, cymbals and the Cymb abbrev
 
 await test('"rider", "pride" and "bride" are not rides, "cymbalium" is not a cymbal', async () => {
   for (const [name, dir] of [
-    ['SUPAH_MARIO_melody_night_rider_dark_demons_Cmin.wav', '/Supah Mario (Shows the Screen) Drumkit/Extras'],
-    ['BS Horse Rider-000-076-e4.wav', '/Zampler Soundbanks - Part 2/Zampler Peaktime'],
-    ['pride 160.wav', '/CashmoneyAP (Shows the Screen) Drumkit/Extras'],
-    ['PRINCESS BRIDE.wav', '/The Lunch77 F1lthy Drumkit/Extras'],
-    ['LD Cymbalium-000-044-g#1.wav', '/Zampler Soundbanks - Part 2/Zampler Ethnic Symphony']
+    ['SUPER_ZED_melody_night_rider_dark_demons_Cmin.wav', '/Trap Kit C Drumkit/Extras'],
+    ['BS Horse Rider-000-076-e4.wav', '/Vendor Soundbanks - Part 2/Vendor Peaktime'],
+    ['pride 160.wav', '/Trap Kit D Drumkit/Extras'],
+    ['PRINCESS BRIDE.wav', '/The Boom-Bap Kit H Drumkit/Extras'],
+    ['LD Cymbalium-000-044-g#1.wav', '/Vendor Soundbanks - Part 2/Vendor Ethnic Symphony']
   ]) {
     assert.notEqual(categorizeSample(name, dir), 'Crash', name);
     assert.equal(categorizeSample(name, dir), 'Other', name);
@@ -387,13 +387,13 @@ await test('"rider", "pride" and "bride" are not rides, "cymbalium" is not a cym
 
 await test('"shaking" is a shaker sound', async () => {
   for (const name of [
-    'Shaking A Full Unopened Coca Cola Can-24.wav',
-    'Shaking Opening Cap Inside Empty coca Cola Can Can.wav-5.wav'
+    'Shaking A Full Unopened Soda Can-24.wav',
+    'Shaking Opening Cap Inside Empty soda Can Can.wav-5.wav'
   ]) {
-    assert.equal(categorizeSample(name, '/Signature Drum Kit #1 (SignatureSamples.Co.Uk)/Coca Cola Drum Kit (SignatureSamples.Co.Uk)/Shaking A Full Unopened Coca Cola Can'), 'Perc', name);
+    assert.equal(categorizeSample(name, '/Household Kit #1 (VendorX.Co.Uk)/Bottle Drum Kit (VendorX.Co.Uk)/Shaking A Full Unopened Soda Can'), 'Perc', name);
   }
   // A weak word: an 808 that happens to be called Shaking is still the kick voice.
-  assert.equal(categorizeSample('808 Shaking.wav', '/Cardo Got Wingz (Shows the Screen) Drumkit/808s'), 'Kick');
+  assert.equal(categorizeSample('808 Shaking.wav', '/Trap Kit E Drumkit/808s'), 'Kick');
 });
 
 await test('multi-word names are read as phrases', async () => {
@@ -517,7 +517,7 @@ await test('macOS AppleDouble files are not audio', async () => {
 await test('loops are recognised from the filename or folder', async () => {
   for (const [name, dir] of [
     ['perc_loop_fake12.wav', ''], ['hat_loop.wav', ''], ['loop_amen.flac', ''],
-    ['percloop.wav', ''], ['prodigyloop.wav', ''],
+    ['percloop.wav', ''], ['wonderloop.wav', ''],
     ['drums_120bpm.wav', ''], ['perc [130bpm].wav', ''],
     ['4 bars perc.wav', ''],
     ['01.wav', '/Pack/Drum Loops'], ['kick.wav', '/Pack/Loops'], ['01.wav', '/Loops']
@@ -527,10 +527,10 @@ await test('loops are recognised from the filename or folder', async () => {
 });
 
 await test('one-shots are not mistaken for loops', async () => {
-  // "Loopmasters" is a sample-pack vendor; its name shows up in ordinary one-shots.
+  // "Loopworks" is a sample-pack vendor; its name shows up in ordinary one-shots.
   // "bloop" is a real one-shot name, so a glued "loop" needs a longer prefix.
   for (const [name, dir] of [
-    ['Loopmasters_kick.wav', ''], ['loopmasters snare.wav', ''], ['bloop.wav', ''],
+    ['Loopworks_kick.wav', ''], ['loopworks snare.wav', ''], ['bloop.wav', ''],
     ['Kick 01.wav', ''], ['hihat_short.wav', ''], ['Crash Cymbal.wav', ''],
     ['808 Bass.wav', ''], ['01.wav', '/Pack/Kicks'],
     // A bare number is not a tempo — it is just as likely an index or catalogue number.
@@ -643,7 +643,7 @@ await test('folder markers catch anonymously named junk', async () => {
   // 120k-file survey.
   assert.equal(looksNonDrum('Other', 'Fill 1.wav', '/Pack/Drumkit/Extras'), true);
   assert.equal(looksNonDrum('Other', 'AKWF_0001.wav', '/Pack/AKWF/Imported'), true);
-  assert.equal(looksNonDrum('Other', '0032.wav', '/Pack/Zampler Soundbanks/Analogon'), true);
+  assert.equal(looksNonDrum('Other', '0032.wav', '/Pack/Vendor Soundbanks/Bank 1'), true);
   assert.equal(looksNonDrum('Other', 'ms20c 100.wav', '/Pack/MS20 Misc'), true);
   // The name is never checked against the folder list — "Extras.wav" is not evidence.
   assert.equal(looksNonDrum('Other', 'Extras.wav', '/Pack/Drumkit'), false);
@@ -701,26 +701,26 @@ await test('skipNonDrums keeps non-drums out of the pools, and can be turned off
 
 await test('a pack name does not decide what its samples are', async () => {
   // The outermost folder is the pack's marketing name. Reading it made every file in
-  // "70s Breakbeat" a loop, and a perc hit in "Kick Ass Drums" a kick.
+  // "70s Breakbeat" a loop, and a perc hit in "Kick Punch Drums" a kick.
   assert.equal(looksLikeLoop('hh 01.wav', '/70s breakbeat/hats'), false);
   assert.equal(looksLikeLoop('kick 01.wav', '/70s breakbeat/kicks'), false);
   assert.equal(looksLikeLoop('snare.wav', '/Breaks Vol 2/snares'), false);
 
   assert.equal(categorizeSample('hh 01.wav', '/70s breakbeat/hats'), 'Hat');
-  assert.equal(categorizeSample('01.wav', '/Kick Ass Drums/perc'), 'Perc');
-  assert.equal(categorizeSample('02.wav', '/Snare Attack/hats'), 'Hat');
+  assert.equal(categorizeSample('01.wav', '/Kick Punch Drums/perc'), 'Perc');
+  assert.equal(categorizeSample('02.wav', '/Snare Strike/hats'), 'Hat');
 
   // The cases above are also satisfied by reading folders deepest-first, so they do
   // not prove the pack folder is skipped. These do: the deeper folder says nothing,
   // leaving the pack name as the only thing left to read.
-  assert.equal(categorizeSample('01.wav', '/Kick Ass Drums/misc'), 'Other');
-  assert.equal(categorizeSample('02.wav', '/Snare Attack/bits'), 'Other');
+  assert.equal(categorizeSample('01.wav', '/Kick Punch Drums/misc'), 'Other');
+  assert.equal(categorizeSample('02.wav', '/Snare Strike/bits'), 'Other');
   assert.equal(looksLikeLoop('03.wav', '/Drum Loops Pack/hats'), false);
   assert.equal(looksLikeLoop('04.wav', '/128bpm Pack/hats'), false);
 });
 
 await test('a tempo in a folder name does not make its contents loops', async () => {
-  // Found by running 214 real packs: three of them came out with zero usable samples,
+  // Found by running 214 packs: three of them came out with zero usable samples,
   // an empty grid and nothing said, because their one-shots sit under a folder called
   // "Construction Kit (135 bpm)" — the tempo the kit was written at, not a claim about
   // the files inside it.
@@ -738,7 +738,7 @@ await test('a tempo in a folder name does not make its contents loops', async ()
 });
 
 await test('every pad gets its own sound before any pad gets a substitute', async () => {
-  // Reported by a real pack: 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash,
+  // Reported by a pack: 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash,
   // 1 open hat. Filling in pad order let the hat columns run dry, take the percussion as
   // their nearest sound, and leave the top row holding three snares.
   const library: Sample[] = [
@@ -766,8 +766,8 @@ await test('a break is a loop by its own name, never by its folder', async () =>
   // that list is matched against folders too, and it emptied whole one-shot packs.
   // Readmitted filename-only and Other-only, which is what those packs needed.
   const breaks: [string, string][] = [
-    ['03 BBL BREAKS.wav', '/BBL/BONUS - Breaks'],
-    ['Break 04.wav', '/BBL/BONUS - Breaks'],
+    ['03 XYZ BREAKS.wav', '/XYZ/BONUS - Breaks'],
+    ['Break 04.wav', '/XYZ/BONUS - Breaks'],
     ['Amen Breakbeat.wav', '/Pack/Drums']
   ];
   for (const [name, dir] of breaks) {
@@ -778,7 +778,7 @@ await test('a break is a loop by its own name, never by its folder', async () =>
   const keep: [string, string][] = [
     ['snare 3.wav', '/Breaks Vol 2/one shots'],
     ['kick 01.wav', '/70s Breakbeats/kicks'],
-    ['chh 02.wav', '/BBL/BONUS - Breaks']
+    ['chh 02.wav', '/XYZ/BONUS - Breaks']
   ];
   for (const [name, dir] of keep) {
     assert.equal(looksLikeLoop(name, dir, categorizeSample(name, dir)), false, `${dir}/${name}`);
@@ -803,28 +803,27 @@ await test('a sole folder is still read, and deeper folders still win', async ()
 
 await test('glued hat qualifiers do not swallow ordinary words', async () => {
   // "chat" and "ohat" are matched as whole tokens only.
-  assert.equal(categorizeSample('BBT_Bossa_CHat.wav'), 'CHH');
-  assert.equal(categorizeSample('BBT_Bossa_OHat.wav'), 'OHH');
-  assert.equal(categorizeSample('BBT_Bossa_C_Hat.wav'), 'CHH');
-  assert.equal(categorizeSample('BBT_Bossa_O_Hat.wav'), 'OHH');
+  assert.equal(categorizeSample('ABC_Samba_CHat.wav'), 'CHH');
+  assert.equal(categorizeSample('ABC_Samba_OHat.wav'), 'OHH');
+  assert.equal(categorizeSample('ABC_Samba_C_Hat.wav'), 'CHH');
+  assert.equal(categorizeSample('ABC_Samba_O_Hat.wav'), 'OHH');
   for (const name of ['chatter.wav', 'chatty loop.wav', 'ohateful.wav']) {
     assert.equal(categorizeSample(name), 'Other', name);
   }
 });
 
-// Vocabulary found in two owner dumps (120k files in 220 packs; 108k files in a hand-sorted
-// library). Each rule below was seen in at least three packs or libraries, named exactly as
-// they appear there. The name is checked on its own (no folder) and, where the real folder
-// does not name the category itself, with it.
+// Vocabulary found in two large private test corpora. Each rule below was seen in at least three
+// packs or libraries, with names of the same shape (the real names are not kept here). The name is
+// checked on its own (no folder) and, where the folder does not name the category itself, with it.
 await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as a last resort', async () => {
   const cases: [string, string, string][] = [
-    ['bdeHOE36024hard1.wav', '/uberschall house essentials/hard', 'Kick'],
+    ['bdeHOE36024hard1.wav', '/house essentials pack/hard', 'Kick'],
     ['BDaEXT.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Kick'],
-    ['28-bde03.wav', '/basehouse', 'Kick'],
-    ['Cea_BDc02_S_V1.wav', '/Ceave Samples', 'Kick'],
-    ['bda-disco27.wav', '/basehouse', 'Kick'],
+    ['28-bde03.wav', '/stonehouse', 'Kick'],
+    ['Qua_BDc02_S_V1.wav', '/Vendor A samples', 'Kick'],
+    ['bda-disco27.wav', '/stonehouse', 'Kick'],
     ['SDbPZM.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
-    ['Arc_SDe07_S_V1.wav', '/Arcocen samples', 'Snare'],
+    ['Zrc_SDe07_S_V1.wav', '/Vendor B samples', 'Snare'],
     // The "oh" is the overhead mic of the snare, not an open hat.
     ['SDbOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Snare'],
     ['BDaOH.wav', '/1 - Acoustic Kits/Acoustic Kit - multi mic/Acoustic Kit_multi mic Samples', 'Kick']
@@ -834,12 +833,12 @@ await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as
     assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
   }
   // A last resort: the word that names the sound still wins, and so does the folder's 808.
-  assert.equal(categorizeSample('Crisp Bdk Snare.wav', '/Lex Luger (Shows the Screen) Drumkit/Snares'), 'Snare');
+  assert.equal(categorizeSample('Crisp Bdk Snare.wav', '/Trap Kit F Drumkit/Snares'), 'Snare');
   assert.equal(categorizeSample('clap [sdyn].wav', '/Artist Drumkits/Claps-A'), 'Clap');
-  assert.equal(categorizeSample('SDF_HAT.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'CHH');
-  assert.equal(categorizeSample('808 (sdp interlude).wav', '/The Lunch77 Travis Scott Drumkit/808s'), 'Kick');
-  // `sda` is not a snare code: the owner's `sda-disco` files in `claps` are claps again, and the
-  // Battery `SDaPZM` files are no longer guessed.
+  assert.equal(categorizeSample('SDF_HAT.wav', '/The Boom-Bap Kit A Drumkit/Closed Hats'), 'CHH');
+  assert.equal(categorizeSample('808 (sdp interlude).wav', '/The Boom-Bap Kit E Drumkit/808s'), 'Kick');
+  // `sda` is not a snare code: the `sda-disco` files in `claps` are claps again, and the
+  // multi-mic `SDaPZM` files are no longer guessed.
   assert.equal(categorizeSample('sda-disco25.wav', '/house'), 'Other');
   assert.equal(categorizeSample('sda-disco06.wav', '/drums/claps'), 'Clap');
   assert.equal(categorizeSample('sda-disco07.wav'), 'Other');
@@ -851,33 +850,33 @@ await test('drum codes with a variant letter (BDe, SDb) are kicks and snares, as
 
 await test('kck, bdrum, snar, crs, prc and shk are read as whole tokens', async () => {
   const cases: [string, string, string][] = [
-    ['Grt_Kck.wav', '/9th Wonder Kit/Misc', 'Kick'],
-    ['SW KCK5.wav', '/The Lunch77 Wheezy Drumkit', 'Kick'],
-    ['BDRUM4.wav', '/KLAUS_DIETER_POLACK', 'Kick'],
-    ['MRIsyn_OffBdrum_ST_v02.wav', '/Synthetik samples', 'Kick'],
+    ['Grt_Kck.wav', '/Boom-Bap Kit J/Misc', 'Kick'],
+    ['SW KCK5.wav', '/The Boom-Bap Kit F Drumkit', 'Kick'],
+    ['BDRUM4.wav', '/SOME_PRODUCER_NAME', 'Kick'],
+    ['MRIsyn_OffBdrum_ST_v02.wav', '/Synth-tek samples', 'Kick'],
     ['snar_07i.wav', '/hiphop', 'Snare'],
     ['snar_22j.wav', '/', 'Snare'],
-    ['Bld_Crs.wav', '/deadly drums/misc', 'Crash'],
+    ['Bld_Crs.wav', '/grim drums/misc', 'Crash'],
     ['jkbcym_crs_15.wav', '/Acoustic Kits/Jazz Kit', 'Crash'],
-    ['ed1crs01.wav', '/martian/Vintage', 'Crash'],
-    ['Lst_Prc9.wav', '/deadly drums/misc', 'Perc'],
-    ['PRC-CASW.wav', '/megadrums 6/misc', 'Perc'],
-    ['Hi_Shk3.wav', '/9th Wonder Kit/misc', 'Perc'],
-    ['Ral_Shk2.wav', '/deadly drums/misc', 'Perc'],
+    ['ed1crs01.wav', '/venusian/Vintage', 'Crash'],
+    ['Lst_Prc9.wav', '/grim drums/misc', 'Perc'],
+    ['PRC-CASW.wav', '/bigdrums 6/misc', 'Perc'],
+    ['Hi_Shk3.wav', '/Boom-Bap Kit J/misc', 'Perc'],
+    ['Ral_Shk2.wav', '/grim drums/misc', 'Perc'],
     // "HHD1KCK05" (hip-hop drums, kick) used to read as a hat because it starts with hh.
-    ['hhd1kck05.wav', '/martian/HiphopLoops', 'Kick']
+    ['hhd1kck05.wav', '/venusian/HiphopLoops', 'Kick']
   ];
   for (const [name, dir, expected] of cases) assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
   // "snar" never glues: these are not snares.
-  for (const name of ['Boi1da Snarlp.wav', 'Forgive Me Snaroll.wav', 'snarl.wav']) {
-    assert.equal(categorizeSample(name, '/Official_Boi-1Da'), 'Other', name);
+  for (const name of ['Zed1 Snarlp.wav', 'Pardon Me Snaroll.wav', 'snarl.wav']) {
+    assert.equal(categorizeSample(name, '/Official_Prod-A'), 'Other', name);
   }
 });
 
 await test('openhat, ophh and clhh are whole-token hat qualifiers', async () => {
   const cases: [string, string, string][] = [
-    ['openhat (6ix).wav', '/misc', 'OHH'],
-    ['jaz - bobby openhat.wav', '/ATLJacob (Shows the Screen) Drumkit', 'OHH'],
+    ['openhat (7ab).wav', '/misc', 'OHH'],
+    ['abc - sam openhat.wav', '/Trap Kit G Drumkit', 'OHH'],
     ['openhat-tight.wav', '/99 drumsounds', 'OHH'],
     ['ophh1.wav', '/drummachines/cr78', 'OHH'],
     ['SP OPHH1.wav', '/Emu SP12 Kit 02', 'OHH'],
@@ -886,34 +885,34 @@ await test('openhat, ophh and clhh are whole-token hat qualifiers', async () => 
   ];
   for (const [name, dir, expected] of cases) assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
   // The file name wins over a folder that disagrees (existing rule), also for the new tokens.
-  assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
+  assert.equal(categorizeSample('OPENHAT_HARRY.wav', '/The Boom-Bap Kit A Drumkit/Closed Hats'), 'OHH');
   // Whole tokens only, like chat and ohat.
   for (const name of ['openhatch.wav', 'ophhx.wav', 'clhhh.wav']) assert.equal(categorizeSample(name), 'Other', name);
 });
 
 await test('klp, klap and klapz are claps, whole token for klap', async () => {
   const cases: [string, string, string][] = [
-    ['klp01mno.wav', '/drums/claps/Klub Klapz 2/Mono Klapz', 'Clap'],
-    ['klp24fx1.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1', 'Clap'],
-    ['klp25fx1.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1', 'Clap'],
-    ['klp27kl2.wav', '/drums/_battery/_own/hiphop3 Samples', 'Clap'],
-    ['Klap [Lou].wav', '/The Lunch77 Mexikodro Drumkit/Claps', 'Clap'],
-    ['Dre KLP (14).wav', '/The Lunch77 Dr. Dre Drumkit/Claps', 'Clap'],
-    ['PLUGG KLAP (MEXIKODRO).wav', '/The Lunch77 Mexikodro Drumkit/Claps', 'Clap']
+    ['klp01mno.wav', '/drums/claps/Mega Klapz 2/Mono Klapz', 'Clap'],
+    ['klp24fx1.wav', '/drums/claps/Mega Klapz 2/FX Klapz 1', 'Clap'],
+    ['klp25fx1.wav', '/drums/claps/Mega Klapz 2/FX Klapz 1', 'Clap'],
+    ['klp27kl2.wav', '/drums/_pack/_own/hiphop3 Samples', 'Clap'],
+    ['Klap [Sam].wav', '/The Boom-Bap Kit D Drumkit/Claps', 'Clap'],
+    ['Ace KLP (14).wav', '/The Boom-Bap Kit B Drumkit/Claps', 'Clap'],
+    ['ZIPP KLAP (PACKB).wav', '/The Boom-Bap Kit D Drumkit/Claps', 'Clap']
   ];
   for (const [name, dir, expected] of cases) {
     assert.equal(categorizeSample(name), expected, name);
     assert.equal(categorizeSample(name, dir), expected, `${dir}/${name}`);
   }
   // The folder alone (Klapz, with the FX word beside it) is a clap folder too.
-  assert.equal(categorizeSample('01.wav', '/drums/claps/Klub Klapz 2/FX Klapz 1'), 'Clap');
+  assert.equal(categorizeSample('01.wav', '/drums/claps/Mega Klapz 2/FX Klapz 1'), 'Clap');
   // `klap` never glues (German "Klappe"), and `klaps` (a slap) is not listed.
   for (const name of ['klappe.wav', 'klapper.wav', 'klaps.wav']) assert.equal(categorizeSample(name), 'Other', name);
 });
 
 await test('tmb is a tambourine, but a hat word in the name still wins', async () => {
   assert.equal(categorizeSample('DJPR_TMB_002.wav'), 'Perc');
-  assert.equal(categorizeSample('Tmb_3.wav', '/drums/kits/9th Wonder Kit/Percussions'), 'Perc');
+  assert.equal(categorizeSample('Tmb_3.wav', '/drums/kits/Boom-Bap Kit J/Percussions'), 'Perc');
   // The owner filed these in `hat open` / `hat closed`; the name now says Perc.
   assert.equal(categorizeSample('FA2314_tmb.wav'), 'Perc');
   assert.equal(categorizeSample('FA2314_tmb.wav', '/drums/hat open'), 'Perc');
@@ -926,17 +925,17 @@ await test('tmb is a tambourine, but a hat word in the name still wins', async (
 await test('op next to a hat word is an open hat, even in a closed-hat folder', async () => {
   // "op" is hip-hop shorthand for "overpowered"; the owner confirmed these three sets by ear.
   for (const n of ['100 OP HAT.wav', '101 OP HAT 2.wav', '135 OP HAT.wav']) {
-    assert.equal(categorizeSample(n, 'e:/music/samples/drums/hat closed'), 'OHH', n);
+    assert.equal(categorizeSample(n, '/drums/hat closed'), 'OHH', n);
     assert.equal(categorizeSample(n), 'OHH', n);
   }
   for (const n of ['Boom-Bap Hat OP 100.wav', 'Boom-Bap Hat OP 104.wav', 'Boom-Bap Hat OP 54.wav', 'Boom-Bap Hat OP 78.wav', 'Boom-Bap Hat OP 83.wav', 'Boom-Bap Hat OP 85.wav', 'Boom-Bap Hat OP 89.wav']) {
-    assert.equal(categorizeSample(n, '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH', n);
+    assert.equal(categorizeSample(n, '/The Boom-Bap Kit A Drumkit/Closed Hats'), 'OHH', n);
   }
-  for (const n of ['OpHat (Atl).wav', 'OpHat (Coop).wav', 'OpHat (Mafia).wav']) {
-    assert.equal(categorizeSample(n, '/Southside (Periscope & Instagram Live) Drumkit/Closed Hats'), 'OHH', n);
+  for (const n of ['OpHat (Alp).wav', 'OpHat (Cob).wav', 'OpHat (Bay).wav']) {
+    assert.equal(categorizeSample(n, '/Trap Kit H Drumkit/Closed Hats'), 'OHH', n);
   }
   // Either order and every separator or glue.
-  for (const n of ['OpHat (Deezy).wav', 'wadrm_ophat_acc0_r5.wav', 'RockOpHat.wav', 'XR10ophat.wav', 'op-hat.wav', 'op_hh_1.wav',
+  for (const n of ['OpHat (Rex).wav', 'wadrm_ophat_acc0_r5.wav', 'RockOpHat.wav', 'XR10ophat.wav', 'op-hat.wav', 'op_hh_1.wav',
     'Hi Hat Op.wav', 'hihat_op_2.wav', 'Hat-OP.wav', 'op hi hat.wav', 'OPHAT.wav']) {
     assert.equal(categorizeSample(n), 'OHH', n);
     assert.equal(categorizeSample(n, '/drums/hats'), 'OHH', n);
@@ -944,8 +943,8 @@ await test('op next to a hat word is an open hat, even in a closed-hat folder', 
     assert.equal(categorizeSample(n, '/drums/Open Hats'), 'OHH', n);
   }
   // A stray `c` is not a closed word here; a real one is.
-  assert.equal(categorizeSample('Op Hat [C4RT1].wav', '/The Lunch77 Mexikodro Drumkit/Open Hats'), 'OHH');
-  assert.equal(categorizeSample('pbs - power-c [ OpHat ].wav', '/The Lunch77 Shawty Redd Drumkit/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('Op Hat [C4XY1].wav', '/The Boom-Bap Kit D Drumkit/Open Hats'), 'OHH');
+  assert.equal(categorizeSample('qrs - power-c [ OpHat ].wav', '/The Boom-Bap Kit G Drumkit/Open Hats'), 'OHH');
   assert.equal(categorizeSample('Op Hat closed.wav'), 'CHH');
   // `op` inside another word is not `op`.
   assert.equal(categorizeSample('skophat.wav'), 'Other');
@@ -960,7 +959,7 @@ await test('op next to a hat word is an open hat, even in a closed-hat folder', 
   assert.equal(categorizeSample('ophat kick.wav'), 'Kick');
   assert.equal(categorizeSample('OP 3 hat.wav', '/drums/hat closed'), 'CHH');
   // Strong words keep today's behaviour: the filename beats the folder.
-  assert.equal(categorizeSample('OPENHAT_CHARLES.wav', '/The Lunch77 MF DOOM Drumkit/Closed Hats'), 'OHH');
+  assert.equal(categorizeSample('OPENHAT_HARRY.wav', '/The Boom-Bap Kit A Drumkit/Closed Hats'), 'OHH');
   assert.equal(categorizeSample('closed hat.wav', '/Open Hats'), 'CHH');
 });
 
@@ -1760,7 +1759,7 @@ await test('a generated kit exports exactly the choke groups the badges read', a
 });
 
 await test('a ride is a Crash and never chokes', async () => {
-  const ride = makeSample('Ride-04.wav', categorizeSample('Ride-04.wav', '/Spliced/Ride'));
+  const ride = makeSample('Ride-04.wav', categorizeSample('Ride-04.wav', '/SampleSite/Ride'));
   assert.equal(ride.category, 'Crash');
   const kit = kitOf({ 2: 'CHH', 3: 'OHH' });
   kit[14] = ride;
@@ -2141,8 +2140,8 @@ await test('content identity: same audio, different metadata chunks, names and s
     s.signature = await fileSignature(s.file);
     return s;
   };
-  const a = await mk('BlockWatch-HatOpn.wav', plain);
-  const b = await mk('BlockWatch-HatOpn.wav', withList);
+  const a = await mk('BlockPatrol-HatOpn.wav', plain);
+  const b = await mk('BlockPatrol-HatOpn.wav', withList);
   const c = await mk('DPHAT03.wav', withBext);
   assert.equal(a.signature, b.signature);
   assert.equal(sampleIdentity(a), sampleIdentity(b));
@@ -2668,17 +2667,17 @@ await test('progress indicator: hidden until the check has run past the delay', 
 // ---- Closed/open hat partners ----
 
 await test('hatStem: names the song, not the numbering or the hat words', () => {
-  assert.equal(hatStem('BlockWatch-Hat.wav'), 'blockwatch');
-  assert.equal(hatStem('BlockWatch-HatOpn.wav'), 'blockwatch');
-  assert.equal(hatStem('LettingGo-Hat.wav'), hatStem('LettingGo-HatOpn.wav'));
-  assert.equal(hatStem('SpacedOut-Hat2.wav'), 'spacedout');
-  assert.equal(hatStem('SpacedOut-Hat.wav'), hatStem('SpacedOut-HatOpn.wav'));
-  assert.equal(hatStem('TakeWhatsMine-Hat.wav'), hatStem('TakeWhatsMine-HatOpn.wav'));
-  assert.equal(hatStem('Watchmen-Hat.wav'), hatStem('Watchmen-HatOpn.wav'));
+  assert.equal(hatStem('BlockPatrol-Hat.wav'), 'blockpatrol');
+  assert.equal(hatStem('BlockPatrol-HatOpn.wav'), 'blockpatrol');
+  assert.equal(hatStem('HoldingOn-Hat.wav'), hatStem('HoldingOn-HatOpn.wav'));
+  assert.equal(hatStem('ZonedOut-Hat2.wav'), 'zonedout');
+  assert.equal(hatStem('ZonedOut-Hat.wav'), hatStem('ZonedOut-HatOpn.wav'));
+  assert.equal(hatStem('GetWhatsHere-Hat.wav'), hatStem('GetWhatsHere-HatOpn.wav'));
+  assert.equal(hatStem('Lookouts-Hat.wav'), hatStem('Lookouts-HatOpn.wav'));
   assert.equal(hatStem('Dj_Premier hat 02.wav'), 'djpremier');
   assert.equal(hatStem('Dj_Premier open hi-hat 3.wav'), 'djpremier');
   assert.equal(hatStem('Dj_Premier closed hihat.aif'), 'djpremier');
-  assert.equal(hatStem('blockwatchhatopn.wav'), 'blockwatch');
+  assert.equal(hatStem('blockpatrolhatopn.wav'), 'blockpatrol');
   assert.equal(hatStem('DJP_HAT_ (19).wav'), 'djp', 'a stem, but one the index rejects as shared');
 });
 
@@ -2689,11 +2688,11 @@ await test('hatStem: numbering and hat words alone never give a stem', () => {
 });
 
 await test('buildPartnerIndex: pairs closed and open hats on a distinctive stem', () => {
-  const closed = makeSample('BlockWatch-Hat.wav', 'Hat');
-  const closed2 = makeSample('SpacedOut-Hat.wav', 'CHH');
-  const closed3 = makeSample('SpacedOut-Hat2.wav', 'Hat');
-  const open = makeSample('BlockWatch-HatOpn.wav', 'OHH');
-  const open2 = makeSample('SpacedOut-HatOpn.wav', 'OHH');
+  const closed = makeSample('BlockPatrol-Hat.wav', 'Hat');
+  const closed2 = makeSample('ZonedOut-Hat.wav', 'CHH');
+  const closed3 = makeSample('ZonedOut-Hat2.wav', 'Hat');
+  const open = makeSample('BlockPatrol-HatOpn.wav', 'OHH');
+  const open2 = makeSample('ZonedOut-HatOpn.wav', 'OHH');
   const lonely = makeSample('Lonely-Hat.wav', 'Hat');
   const index = buildPartnerIndex([closed, closed2, closed3, open, open2, lonely, makeSample('kick.wav', 'Kick')]);
   assert.deepEqual(index.get(closed.id), [open]);
@@ -2733,11 +2732,11 @@ await test('partnerPads: closed hat pad directly left of an open hat pad in the 
   assert.deepEqual(partnerPads(alternating).map(([l]) => l), [0, 2, 4, 6, 8, 10, 12, 14].filter(l => l % 4 !== 3));
 });
 
-const MW_STEMS = ['BlockWatch', 'LettingGo', 'SpacedOut', 'TakeWhatsMine', 'Watchmen'];
+const HAT_PACK_STEMS = ['BlockPatrol', 'HoldingOn', 'ZonedOut', 'GetWhatsHere', 'Lookouts'];
 function musicWeaponsPool(): { samples: Sample[]; closed: Sample[]; open: Sample[] } {
-  const closed = MW_STEMS.map(s => makeSample(`${s}-Hat.wav`, 'Hat'));
-  closed.push(makeSample('SpacedOut-Hat2.wav', 'Hat'));
-  const open = MW_STEMS.map(s => makeSample(`${s}-HatOpn.wav`, 'OHH'));
+  const closed = HAT_PACK_STEMS.map(s => makeSample(`${s}-Hat.wav`, 'Hat'));
+  closed.push(makeSample('ZonedOut-Hat2.wav', 'Hat'));
+  const open = HAT_PACK_STEMS.map(s => makeSample(`${s}-HatOpn.wav`, 'OHH'));
   const samples = [
     ...closed, ...open,
     ...Array.from({ length: 6 }, (_, i) => makeSample(`Kick${i}.wav`, 'Kick')),
@@ -2797,7 +2796,7 @@ await test('hat partners: a locked open pad is never overwritten', async () => {
 await test('hat partners: a locked closed hat pulls its partner onto the open pad', async () => {
   const { samples, closed, open } = musicWeaponsPool();
   const locks: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
-  locks[2] = closed[1]; // LettingGo-Hat
+  locks[2] = closed[1]; // HoldingOn-Hat
   for (let n = 0; n < 60; n++) {
     const result = await generateRandomKit(samples, locks, {}, undefined, { identityOf: fastIdentity });
     assert.equal(result.kit[2], closed[1]);
@@ -2809,8 +2808,8 @@ await test('hat partners: a locked closed hat pulls its partner onto the open pa
 
 await test('hat partners: no audio sits on two pads when partners are byte-identical copies', async () => {
   const { samples, open } = musicWeaponsPool();
-  const copy = makeSample('BlockWatch-HatOpn.wav', 'OHH', 'same bytes');
-  const twin = makeSample('LettingGo-HatOpn.wav', 'OHH', 'same bytes');
+  const copy = makeSample('BlockPatrol-HatOpn.wav', 'OHH', 'same bytes');
+  const twin = makeSample('HoldingOn-HatOpn.wav', 'OHH', 'same bytes');
   const withTwins = [...samples.filter(s => s !== open[0] && s !== open[1]), copy, twin];
   for (let n = 0; n < 80; n++) {
     const result = await generateRandomKit(withTwins);
@@ -2885,14 +2884,14 @@ await test('kinds: taxonomy is well formed', () => {
   for (const [kind, label] of Object.entries(KIND_LABELS)) assert.ok(label.length > 0 && label.length <= 9, `${kind} label "${label}" fits a pad header`);
 });
 
-await test('kinds: exact real names from the owner libraries', () => {
+await test('kinds: names of the same shapes as real library files', () => {
   const cases: [string, Category, SampleKind][] = [
-    ['Kick_46.wav', 'Kick', 'kick'], ['BA9614m_Bd.wav', 'Kick', 'kick'], ['808_10.wav', 'Kick', '808'], ['Uzi 808.wav', 'Kick', '808'],
+    ['Kick_46.wav', 'Kick', 'kick'], ['BA9614m_Bd.wav', 'Kick', 'kick'], ['808_10.wav', 'Kick', '808'], ['Zig 808.wav', 'Kick', '808'],
     ['SNARE_07_20.wav', 'Snare', 'snare'], ['909Rim01-1.wav', 'Snare', 'rimshot'], ['RIM127.WAV', 'Snare', 'rimshot'],
     ['VEH1 House Rimshot - 17.wav', 'Snare', 'rimshot'], ['sidestick_F#3.wav', 'Snare', 'sidestick'], ['DHitB-Sidestick02.wav', 'Snare', 'sidestick'],
-    ['Shawty Redd Clap 3.wav', 'Clap', 'clap'], ['klp02tt1.wav', 'Clap', 'clap'], ['Snap 3.wav', 'Clap', 'snap'], ['D2 SNAP-13.wav', 'Clap', 'snap'],
+    ['Zed Clap 3.wav', 'Clap', 'clap'], ['klp02tt1.wav', 'Clap', 'clap'], ['Snap 3.wav', 'Clap', 'snap'], ['D2 SNAP-13.wav', 'Clap', 'snap'],
     ['Closed HiHat-313.wav', 'CHH', 'closed'], ['808CHH02-1.wav', 'CHH', 'closed'], ['Open HiHat-072.wav', 'OHH', 'open'],
-    ['KENNY BEATS HI HAT 44.wav', 'Hat', 'hat'], ['DrHH44.wav', 'Hat', 'hat'],
+    ['JOE BEATS HI HAT 44.wav', 'Hat', 'hat'], ['DrHH44.wav', 'Hat', 'hat'],
     ['SYNTHWAVE CRASH (1).WAV', 'Crash', 'crash'], ['Bld_Crs.wav', 'Crash', 'crash'], ['CYMRIDE33.wav', 'Crash', 'ride'],
     ['ride or wrong_19.wav', 'Crash', 'ride'], ['Cymbals_01_V15.wav', 'Crash', 'cymbal'], ['JJ - SplashRev.wav', 'Crash', 'cymbal'],
     ['Tom_05.wav', 'Perc', 'tom'], ['JMX_Toms_72.wav', 'Perc', 'tom'], ['CONGA 6.wav', 'Perc', 'conga'], ['808MC2_Orig.wav', 'Perc', 'conga'],
@@ -2919,7 +2918,7 @@ await test('kinds: phrases, glued spellings and the weak words', () => {
   assert.deepEqual(classifySample('Bass Drum 3.wav'), { category: 'Kick', kind: 'kick' });
   assert.deepEqual(classifySample('808 Clap.wav'), { category: 'Clap', kind: 'clap' }, '808 only decides when nothing else does');
   assert.deepEqual(classifySample('808 Kick.wav'), { category: 'Kick', kind: 'kick' });
-  assert.deepEqual(classifySample('Shaking A Full Unopened Coca Cola Can.wav'), { category: 'Perc', kind: 'shaker' });
+  assert.deepEqual(classifySample('Shaking A Full Unopened Soda Can.wav'), { category: 'Perc', kind: 'shaker' });
   assert.deepEqual(classifySample('OHat.wav'), { category: 'OHH', kind: 'open' });
   assert.deepEqual(classifySample('100 OP HAT.wav'), { category: 'OHH', kind: 'open' }, 'op hat');
   assert.deepEqual(classifySample('Crash Cymbal.wav'), { category: 'Crash', kind: 'crash' }, 'the specific word beats cymbal');
@@ -3026,7 +3025,7 @@ await test('kinds: bell and chime yield to the folder around them as well as to 
   const bell = { category: 'Perc', kind: 'bell' };
   // melodic folders: the nearest folder says tones, FX and Extras stay usable, outer pack names do not count
   for (const dir of ['/Pack/Synth Pads', '/Pack/Melodic', '/Pack/Vox']) assert.deepEqual(classifySample('Bell 01.wav', dir), { category: 'Other', kind: 'other' }, dir);
-  assert.deepEqual(classifySample('Bell 01.wav', '/Chop Shop Drumkit/FX'), bell);
+  assert.deepEqual(classifySample('Bell 01.wav', '/Chop House Drumkit/FX'), bell);
   assert.deepEqual(classifySample('Bell 01.wav', '/Pack/Extras'), bell);
   // a name that dropped its own bell word does not get it back from a folder of bells
   assert.deepEqual(classifySample('Bell Pad.wav', '/Pack/Bells'), { category: 'Other', kind: 'other' });
@@ -3079,7 +3078,7 @@ await test('kinds: every kind-group word is in its category word list', () => {
   for (const [kind] of [...V.SNARE_KINDS, ...V.CLAP_KINDS, ...V.CRASH_KINDS, ...V.PERC_KINDS]) assert.ok(Object.keys(KIND_LABELS).includes(kind));
 });
 
-await test('kinds: the kind always belongs to the category (word lists, pairs, folders, real names)', () => {
+await test('kinds: the kind always belongs to the category (word lists, pairs, folders, library-style names)', () => {
   const V = VOCABULARY;
   const words = [...new Set([...V.KICK, ...V.SNARE, ...V.CLAP, ...V.CRASH, ...V.PERC, ...V.HAT, ...V.CLOSED, ...V.OPEN,
     '808', 'shaking', 'chat', 'ohat', 'openhat', 'ophh', 'clhh', 'bda', 'sdb', 'op', 'hi', 'side', 'stick', 'cross', 'wood', 'block', 'finger', 'hand',
@@ -3095,7 +3094,7 @@ await test('kinds: the kind always belongs to the category (word lists, pairs, f
     for (const form of [w, `${w}_01`, `Pre ${w}`, `pre${w}`, `${w}suf`, w.toUpperCase(), `X-${w}-2`]) { check(`${form}.wav`); check('hit.wav', `/Pack/${form}`); check('perc 1.wav', `/Pack/${form}`); check('hihat 1.wav', `/Pack/${form}`); }
     for (const v of words) if ((w.length + v.length) % 3 === 0) { check(`${w} ${v}.wav`); check(`${w}_${v}.wav`, `/Pack/${v}`); }
   }
-  // Characters of the real names above, plus a seeded shuffle of word pairs.
+  // Characters of the library-style names above, plus a seeded shuffle of word pairs.
   let seed = 12345;
   const rnd = (m: number) => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) % m;
   for (let i = 0; i < 6000; i++) check(`${words[rnd(words.length)]} ${rnd(99)} ${words[rnd(words.length)]}.wav`, `/Pack/${words[rnd(words.length)]}/${words[rnd(words.length)]}`);
@@ -3103,9 +3102,9 @@ await test('kinds: the kind always belongs to the category (word lists, pairs, f
 });
 
 await test('kinds: the category is unchanged by the kind on the existing test names', () => {
-  const names = ['BohmSlappAltOpenHat.wav', 'TightSnare.wav', 'BigKick.wav', 'ClosedHat3.wav', 'WhatEver.wav', 'CHat.wav', 'OHat.wav',
+  const names = ['BoomSlamAltOpenHat.wav', 'TightSnare.wav', 'BigKick.wav', 'ClosedHat3.wav', 'WhatEver.wav', 'CHat.wav', 'OHat.wav',
     'Subdrop.wav', 'Bassdrop.wav', 'Custom Loop.wav', 'Bottom End.wav', 'Atomic Blast.wav', 'Primary Tone.wav', 'BD 01.wav', 'Kit1 BD.wav', 'SD-05.wav',
-    'BBT_Bossa_C_Hat.wav', 'BBT_Bossa_O_Hat.wav', 'Op Hat [C4RT1].wav', 'power-c [ OpHat ].wav', 'Skophat.wav', 'Chop Hat.wav'];
+    'ABC_Samba_C_Hat.wav', 'ABC_Samba_O_Hat.wav', 'Op Hat [C4XY1].wav', 'power-c [ OpHat ].wav', 'Skophat.wav', 'Chop Hat.wav'];
   for (const dir of ['', '/Pack/Open Hats', '/Pack/Closed Hats', '/Pack/Kicks', '/Pack/Toms', '/Loops']) {
     for (const name of names) assert.equal(classifySample(name, dir).category, categorizeSample(name, dir), `${name} @ ${dir}`);
   }
@@ -3267,10 +3266,10 @@ if (failures > 0) {
 }
 console.log('\nall tests passed');
 
-await test('BBT Bossa C Hat and O Hat', async () => {
-  assert.equal(categorizeSample('BBT_Bossa_C_Hat.wav'), 'CHH');
-  assert.equal(categorizeSample('BBT_Bossa_O_Hat.wav'), 'OHH');
+await test('ABC Samba C Hat and O Hat', async () => {
+  assert.equal(categorizeSample('ABC_Samba_C_Hat.wav'), 'CHH');
+  assert.equal(categorizeSample('ABC_Samba_O_Hat.wav'), 'OHH');
   // Just in case they are CHat / OHat
-  // assert.equal(categorizeSample('BBT_Bossa_CHat.wav'), 'CHH');
-  // assert.equal(categorizeSample('BBT_Bossa_OHat.wav'), 'OHH');
+  // assert.equal(categorizeSample('ABC_Samba_CHat.wav'), 'CHH');
+  // assert.equal(categorizeSample('ABC_Samba_OHat.wav'), 'OHH');
 });

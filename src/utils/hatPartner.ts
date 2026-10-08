@@ -2,7 +2,7 @@ import { PAD_COUNT, PadLayout, poolCategoryFor } from '../padLayout';
 import { Sample } from '../types';
 
 /**
- * Closed/open hi-hat pairs by file name, e.g. `BlockWatch-Hat.wav` + `BlockWatch-HatOpn.wav`.
+ * Closed/open hi-hat pairs by file name, e.g. `BlockPatrol-Hat.wav` + `BlockPatrol-HatOpn.wav`.
  * Name-only on purpose: no audio is read or hashed, so this costs nothing on a large library.
  */
 
@@ -11,7 +11,7 @@ const HAT_WORDS = new Set([
   'open', 'opn', 'oh', 'ohh', 'closed', 'close', 'clsd', 'ch', 'chh', 'hat', 'hats', 'hh', 'hihat', 'hihats'
 ]);
 
-/** Hat words long enough to be recognised glued onto another word (`dphat`, `blockwatchhatopn`). */
+/** Hat words long enough to be recognised glued onto another word (`dphat`, `blockpatrolhatopn`). */
 const GLUED_WORDS = ['closed', 'close', 'clsd', 'hihats', 'hihat', 'open', 'hats', 'hat', 'opn', 'chh', 'ohh']
   .sort((a, b) => b.length - a.length);
 
@@ -50,7 +50,7 @@ const stemCache = new WeakMap<object, string | null>();
 /**
  * The part of a hat's file name that names the song or pack, or null when nothing distinctive
  * is left. Extension, separators, open/closed/hat words and every number are removed, so
- * `BlockWatch-Hat.wav` and `BlockWatch-HatOpn.wav` both give `blockwatch`, and numbering alone
+ * `BlockPatrol-Hat.wav` and `BlockPatrol-HatOpn.wav` both give `blockpatrol`, and numbering alone
  * (`Hat 02`, `DPHAT07`, `DJP_HAT_ (19)`) never pairs.
  */
 export function hatStem(name: string): string | null {

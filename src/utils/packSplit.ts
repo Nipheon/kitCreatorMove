@@ -3,8 +3,8 @@ import { DroppedFile, DroppedFolder, isAudioFile, looksLikeRoleFolder } from './
 /**
  * An immediate subfolder is only a sub-pack when it holds at least this many audio files
  * in its whole subtree. Below it, a subfolder is an odd bonus folder ("Bonus", "Demo",
- * "Extras 2"), not something worth its own row; the real collections in the owner's
- * survey have 16 or more one-shots per pack.
+ * "Extras 2"), not something worth its own row; real collections in a survey of test packs
+ * have 16 or more one-shots per pack.
  */
 export const MIN_PACK_FILES = 8;
 

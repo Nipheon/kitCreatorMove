@@ -1,5 +1,5 @@
 /**
- * Development-only sample seed: real filenames from a real pack, so the grid can be
+ * Development-only sample seed: invented filenames of the shapes real packs use, so the grid can be
  * looked at with content in it instead of sixteen pads reading "Empty".
  *
  * Only reachable at `?seed` on a dev server — the call site is behind `import.meta.env.DEV`
@@ -11,55 +11,55 @@ import { classifySample, looksLikeLoop, looksNonDrum } from './utils/fileReader'
 
 const SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
 
-/** Filenames as they ship in the pack, tidied of nothing. */
+/** Invented filenames in the naming mix of a typical pack. */
 const NAMES: string[] = [
-  "NT - BBY Snare 1.wav",
-  "NT - BBY Synth 1.wav",
-  "NT - BS Shaker 1.wav",
-  "NT - BS Snare1.wav",
-  "NT - BSR Snare 1.wav",
-  "NT - LDC Snare 1.wav",
-  "NT - MSTK Snare 1.wav",
-  "NT - NRG Kick 1.wav",
-  "NT Bass 1.wav",
-  "NT Bubble 1.wav",
-  "NT Buzz 1.wav",
-  "NT Clap 1.wav",
-  "NT Echo Bubble 1.wav",
-  "NT Echo Effect 1.wav",
-  "NT Electro Kick 1.wav",
-  "NT Good Kick 1.wav",
-  "NT Good Open Hat 1.wav",
-  "NT Good Snare 1.wav",
-  "NT Guitar 2.wav",
-  "NT Guitar 3.wav",
-  "NT HiHat 1.wav",
-  "NT HiHat 10.wav",
-  "NT HiHat 12.wav",
-  "NT HiHat 13.wav",
-  "NT HiHat 14.wav",
-  "NT HiHat 2.wav",
-  "NT HiHat 3.wav",
-  "NT HiHat 4.wav",
-  "NT HiHat 5.wav",
-  "NT HiHat 6.wav",
-  "NT HiHat 7.wav",
-  "NT HiHat 8.wav",
-  "NT Kick 10.wav",
-  "NT Kick 11.wav",
-  "NT Kick 13.wav",
-  "NT Kick 14.wav",
-  "NT Kick 2.wav",
-  "NT Kick 3.wav",
-  "NT Kick 4.wav",
-  "NT Kick 6.wav",
-  "NT Kick 7.wav",
-  "NT Kick 9.wav",
-  "snare_babymanuel1.wav",
-  "snare_babymanuel2.wav",
-  "snare_babymanuel3.wav",
-  "snare_babymanuel4.wav",
-  "snare_babymanuel5.wav"
+  "XQ - PKR Snare 1.wav",
+  "XQ - PKR Synth 1.wav",
+  "XQ - TQ Shaker 1.wav",
+  "XQ - TQ Snare1.wav",
+  "XQ - TRS Snare 1.wav",
+  "XQ - WLD Snare 1.wav",
+  "XQ - PLX Snare 1.wav",
+  "XQ - NRG Kick 1.wav",
+  "XQ Bass 1.wav",
+  "XQ Bubble 1.wav",
+  "XQ Buzz 1.wav",
+  "XQ Clap 1.wav",
+  "XQ Echo Bubble 1.wav",
+  "XQ Echo Effect 1.wav",
+  "XQ Electro Kick 1.wav",
+  "XQ Good Kick 1.wav",
+  "XQ Good Open Hat 1.wav",
+  "XQ Good Snare 1.wav",
+  "XQ Guitar 2.wav",
+  "XQ Guitar 3.wav",
+  "XQ HiHat 1.wav",
+  "XQ HiHat 10.wav",
+  "XQ HiHat 12.wav",
+  "XQ HiHat 13.wav",
+  "XQ HiHat 14.wav",
+  "XQ HiHat 2.wav",
+  "XQ HiHat 3.wav",
+  "XQ HiHat 4.wav",
+  "XQ HiHat 5.wav",
+  "XQ HiHat 6.wav",
+  "XQ HiHat 7.wav",
+  "XQ HiHat 8.wav",
+  "XQ Kick 10.wav",
+  "XQ Kick 11.wav",
+  "XQ Kick 13.wav",
+  "XQ Kick 14.wav",
+  "XQ Kick 2.wav",
+  "XQ Kick 3.wav",
+  "XQ Kick 4.wav",
+  "XQ Kick 6.wav",
+  "XQ Kick 7.wav",
+  "XQ Kick 9.wav",
+  "snare_tallboy1.wav",
+  "snare_tallboy2.wav",
+  "snare_tallboy3.wav",
+  "snare_tallboy4.wav",
+  "snare_tallboy5.wav"
 ];
 
 /**
@@ -72,7 +72,7 @@ export function devSeedFolders(count = 1): SourceFolder[] {
 }
 
 export function devSeedFolder(index = 0): SourceFolder {
-  const dir = '/neptunes kit';
+  const dir = '/dev kit';
   const samples: Sample[] = NAMES.map((name, i) => {
     const { category, kind } = classifySample(name, dir);
     return {
@@ -89,7 +89,7 @@ export function devSeedFolder(index = 0): SourceFolder {
 
   return {
     id: `seed-folder-${index}`,
-    name: index === 0 ? 'neptunes kit (dev seed)' : `neptunes kit ${index + 1} (dev seed)`,
+    name: index === 0 ? 'dev kit (dev seed)' : `dev kit ${index + 1} (dev seed)`,
     samples,
     isEnabled: true
   };

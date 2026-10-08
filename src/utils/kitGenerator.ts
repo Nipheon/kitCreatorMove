@@ -443,7 +443,7 @@ export async function generateRandomKit(
    * Two passes: every pad gets the sound it asked for before any pad gets a substitute.
    *
    * One pass in pad order let the bottom rows eat the pools the top row was waiting for.
-   * A real pack — 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash, 1 open hat
+   * A pack — 18 kicks, 8 snares, 2 closed hats, 2 perc, 1 clap, 1 crash, 1 open hat
    * — filled its hat and open-hat columns, ran them dry, and took the percussion as the
    * nearest sound; by the time the top row was reached the extras were gone and it held
    * three snares. The top row exists precisely to not be that.

@@ -377,7 +377,7 @@ function tokenize(name: string, isFile = false): string[] {
     .replace(/agog[ôó]/gi, 'agogo')         // agogô: the accent would split the word into "agog" + "o"
     .replace(/([a-z])(\d)/gi, '$1 $2')     // BD01 -> BD 01
     .replace(/(\d)([a-z])/gi, '$1 $2')     // 808bass -> 808 bass
-    // BohmSlappAltOpenHat -> Bohm Slapp Alt Open Hat. Without this the whole name is one
+    // BoomSlamAltOpenHat -> Boom Slam Alt Open Hat. Without this the whole name is one
     // token, and `hat` is three characters so it only ever matches a token outright: an
     // entire pack of camelCase names read as Other. It was invisible because such packs
     // usually also have a folder saying "OpenHats", which covered for it — until the same
@@ -407,7 +407,7 @@ const SNARE = [
 ];
 const CLAP = [
   'clap', 'claps', 'clp', 'cp', 'snap', 'snaps', 'handclap',
-  // Klub Klapz ("klp24fx1", folder "FX Klapz 1") and the Lunch77 "Klap [Lou]" / "Dre KLP (2)": a
+  // A pack that spells clap with a k ("klp24fx1", folder "FX Klapz 1", "Klap [Sam]", "Ace KLP (2)"): a
   // "k" spelling of clap. `klap` is whole token only (German "Klappe"); `klaps` (a slap) is left out.
   'klp', 'klapz', 'klap'
 ];
@@ -486,14 +486,14 @@ const OPEN = ['ohh', 'ohhs', 'oh', 'open', 'opn', 'o'];
  */
 const GLUED_HAT_QUALIFIERS: Record<string, Category> = {
   chat: 'CHH', ohat: 'OHH',
-  // Lower-case "openhat (6ix)" (40 packs; `hat` is three characters, so the glue rule never
+  // Lower-case "openhat (7ab)" (40 packs; `hat` is three characters, so the glue rule never
   // sees it), "ophh" and "clhh" (drum-machine sets: CR-78, RM50, 606).
   openhat: 'OHH', ophh: 'OHH', clhh: 'CHH'
 };
 
 /**
  * Ordinary words that contain a listed word glued and would match it: "whats" ends in
- * "hats", so `TakeWhatsMine-Crsh1.wav` read as a hat; "rider" starts with "ride", so
+ * "hats", so `GetWhatsHere-Crsh1.wav` read as a hat; "rider" starts with "ride", so
  * `night_rider` melodies and `Horse Rider` bass patches read as cymbals. They match
  * nothing glued; a listed word still matches as a whole token.
  */
@@ -506,8 +506,8 @@ const GLUE_FALSE_FRIENDS = [
 const WHOLE_TOKEN_ONLY = ['snar', 'klap', ...WEAK_WORDS];
 
 /**
- * A drum code plus one variant letter: Battery's multi-mic kit ("BDaEXT", "SDbOH"), the
- * Uberschall house set ("bdeHOE30011house1", "sdeHOE40013snare3"), "28-bde03", "Arc_SDe07_S_V1".
+ * A drum code plus one variant letter: a drum sampler's multi-mic kit ("BDaEXT", "SDbOH"), a
+ * house sample set ("bdeHOE30011house1", "sdeHOE40013snare3"), "28-bde03", "Zrc_SDe07_S_V1".
  * Tried only after the kick, snare, clap and hat words, and a crash or percussion word still
  * wins: `clap [sdyn]` and `SDF_HAT` keep the word that names them. Letters a-e only (snare b-e: `sda` is
  * also a producer tag and the `sda-disco` claps are not snares): that is the range seen in more than one
@@ -520,7 +520,7 @@ const VARIANT_CODES: [RegExp, Category][] = [
 
 /**
  * `op` next to a hat word is an OPEN hat: "op" is hip-hop shorthand for "overpowered" (`100 OP HAT`,
- * `Boom-Bap Hat OP 100`, `OpHat (Atl)`, `wadrm_ophat_acc0_r5`, `RockOpHat`, `Hi Hat Op`). The owner
+ * `Boom-Bap Hat OP 100`, `OpHat (Alp)`, `wadrm_ophat_acc0_r5`, `RockOpHat`, `Hi Hat Op`). The owner
  * confirmed by ear three sets that sit in closed-hat folders, so this is strong name evidence.
  * Tested on the name with camelCase split and lowercased: `op` must start a word (no letter in front,
  * so `skophat`, `Dophat`, `Hop Hat`, `Chop Hat`, `YChopHat`, `Stop Hat`, `Drop Hat`, `Cop Hat` do not
@@ -669,7 +669,7 @@ function classifyKind(text: string, isFile = false, folderBlocksWeak = false): C
    */
   if (tokens.includes('808')) return { category: 'Kick', kind: '808' };
 
-  // Cans and bottles shaken like a shaker ("Shaking A Full Unopened Coca Cola Can"). A weak
+  // Cans and bottles shaken like a shaker ("Shaking A Full Unopened Soda Can"). A weak
   // word, so it is checked after the 808 rule: "808 Shaking" in an 808s folder is a kick.
   if (tokens.includes('shaking')) return { category: 'Perc', kind: 'shaker' };
 
@@ -679,9 +679,9 @@ function classifyKind(text: string, isFile = false, folderBlocksWeak = false): C
 /**
  * The folder segments worth reading, deepest first.
  *
- * The outermost folder is the pack's name — "70s Breakbeat", "Kick Ass Drums" — and
+ * The outermost folder is the pack's name — "70s Breakbeat", "Kick Punch Drums" — and
  * describes the collection, not the file. Reading it made every sample in such a pack
- * inherit the pack's name: a perc hit in "Kick Ass Drums" came back as a Kick, and
+ * inherit the pack's name: a perc hit in "Kick Punch Drums" came back as a Kick, and
  * everything in "70s Breakbeat" was discarded as a loop. It is skipped whenever there
  * is a deeper folder that does describe the file, and used only when it is the sole
  * folder — a bare "Loops/" drop still counts.
@@ -707,8 +707,8 @@ const LOOP_WORDS = ['loop', 'loops', 'bpm'];
  * A loop is a bar of music, not a drum hit, so it has no business on a pad.
  *
  * Matching is deliberately narrow. "loop" is accepted as a whole token or glued to the
- * end of a longer word (percloop, prodigyloop), but never as a prefix — "Loopmasters"
- * is a sample-pack vendor whose name appears in perfectly good one-shots. The prefix
+ * end of a longer word (percloop, wonderloop), but never as a prefix — "Loopworks"
+ * stands for a sample-pack vendor whose name appears in perfectly good one-shots. The prefix
  * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
  * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
  */
@@ -803,7 +803,7 @@ export function looksLikeSongName(name: string): boolean {
   const text = raw.replace(/_/g, ' ').toLowerCase();
   if (BAND_CONNECTOR.test(text)) return true;
   const words = (part: string) => part.split(/[^a-z]+/).filter(Boolean).length;
-  // `_-_` is how ripped song files are named: 475 files over both dumps, none a drum one-shot (all Other).
+  // `_-_` is how ripped song files are named: 475 files in a large private test corpus, none a drum one-shot (all Other).
   if (/[^\s_]_-_[^\s_]/.test(raw) && words(text) >= 3) return true;
   const parts = text.split(ARTIST_TITLE_SEPARATOR);
   if (parts.length < 2) return false;
@@ -868,7 +868,7 @@ function nameLooksLikeBreak(name: string): boolean {
 }
 
 /**
- * "Lp" as the LAST token of a file name (`Watchmen-PercLp.wav`, `Perc_Lp.wav`). Two
+ * "Lp" as the LAST token of a file name (`Lookouts-PercLp.wav`, `Perc_Lp.wav`). Two
  * letters, and "LP" also means low-pass or a record, so it is evidence only at the end of
  * the name, ignoring a trailing index (`Lp Kick.wav` and `LP Filter Snare.wav` are not loops) and only for a sample
  * the categoriser left as `Other` or generic `Perc`: `Kick LP.wav` stays a kick. Never
@@ -919,7 +919,7 @@ export function classifySample(name: string, directory = ''): Classified {
   const classified = classifyKind(name, true, folderBlocksWeak);
   // `op` ("overpowered") next to a hat word is an open hat, and the filename beats a closed-hat
   // folder. A name that already says something else (kick, snare, closed ...) keeps that.
-  // A lone `c` token (`Op Hat [C4RT1]`, `power-c [ OpHat ]`) is the only closed word that does not count against it.
+  // A lone `c` token (`Op Hat [C4XY1]`, `power-c [ OpHat ]`) is the only closed word that does not count against it.
   if (nameHasOpHat(name)) {
     const nameClass = classified?.category === 'CHH' ? classify(name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' '), true) : classified?.category ?? null;
     if (nameClass === null || nameClass === 'Hat') return withDefault('OHH');
@@ -985,7 +985,7 @@ export function classifySample(name: string, directory = ''): Classified {
 export function looksLikeRoleFolder(name: string): boolean {
   const tokens = tokenize(name);
   // A bell or chime word is a role only when it is the whole name ("Bells", "Wind Chimes 2"): a pack called
-  // "Bell Boy Beats" or "Bells of Atlantis" is a pack, and reading it as a role stops a collection from splitting.
+  // "Bell Hop Beats" or "Bells of Atlantis" is a pack, and reading it as a role stops a collection from splitting.
   // Any other drum word still makes a role ("Bell Kicks").
   const weakOnly = tokens.filter(t => !/^\d+$/.test(t)).every(t => WEAK_WORDS.includes(t) || t === 'wind');
   if (hasWeakWord(tokens) ? weakOnly || classify(tokens.filter(t => !WEAK_WORDS.includes(t)).join(' ')) !== null : classify(name) !== null) return true;

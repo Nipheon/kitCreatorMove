@@ -6,6 +6,8 @@ Most of this looks like style noise and is not. Each rule is something that was 
 on hardware, and was fixed, usually with a test pinning it. If a change here looks like an obvious cleanup, it is almost certainly
 one of these.
 
+Real pack names and owner-library evidence live in AGENTS.private.md (git-ignored, local only).
+
 ## Layout
 
 Everything lives at the repository root, next to `package.json`:
@@ -16,7 +18,7 @@ public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
 src/utils/{ablPresetTemplate,adpcm,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,wavStripper}.ts
-test/{kit,io,packs}.test.ts
+test/{kit,io,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
 ```
 
 `package-lock.json` is the only lockfile (npm only; the AI Studio leftovers `bun.lock`, `metadata.json`, `.env.example` and
@@ -47,7 +49,7 @@ path with more than three segments means you are in the wrong place.
   of the task. `npm test` runs `test/kit.test.ts`, then `test/io.test.ts` (drop handling in `fileReader` and `audioTrimmer`, against
   a fake `OfflineAudioContext` and fake `FileSystemEntry` objects). Both are Node-only via `tsx`.
 - **Dev seed:** `npm run dev` then `http://localhost:3000/?seed` (`?seed=20` fakes twenty folders) fills the grid from
-  `src/devSeed.ts`: 47 real filenames from a real pack, categorised through the same pipeline as a drop, with a few ms of silence as
+  `src/devSeed.ts`: 47 invented filenames of the shapes real packs use, categorised through the same pipeline as a drop, with a few ms of silence as
   audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
@@ -164,11 +166,11 @@ path with more than three segments means you are in the wrong place.
 
 ## Sample detection (`fileReader.ts`)
 
-Tuned against ~2000 files (Dirt-Samples, Sonic Pi, Ableton factory content), later surveys of 58 packs, 70k and 120k files. Every
-rule exists because a simpler version broke on real packs.
+Tuned against ~2000 files (Dirt-Samples, Sonic Pi, Ableton factory content), later surveys of 58 packs and a large private test
+corpus of ~120k files. Every rule exists because a simpler version broke on real packs.
 
 - **Whole-token matching, not substrings** (`/tom/` hit "custom", `/sd/` hit "bassdrop", `/rim/` hit "primary").
-- **Tokens split at letter/digit boundaries and camelCase**, so `BD01`, `SN_02`, `HH02`, `CH01`, `OH03` and `BohmSlappAltOpenHat`
+- **Tokens split at letter/digit boundaries and camelCase**, so `BD01`, `SN_02`, `HH02`, `CH01`, `OH03` and `BoomSlamAltOpenHat`
   resolve. Missing the camelCase split made an entire collection `Other`, and hid until the same files also appeared under `DrumKits`.
 - **`tokenize` strips an extension only for file names** (`isFile = true`); folder and path text keeps its dots, so a folder called
   `808.Kicks` keeps its last part (a test pins it).
@@ -198,48 +200,46 @@ rule exists because a simpler version broke on real packs.
 - **Words of four or more characters also match glued** as prefix or suffix (`popkick`, `linnhats`, `realclaps`, `RIDED0`); shorter
   ones must be whole tokens.
 - **`chat` and `ohat` match as whole tokens only** (`GLUED_HAT_QUALIFIERS`); glued they filed `chatter` and `ohateful` as hi-hats.
-  The same table holds `openhat` (lower-case `openhat (6ix)`; `hat` is three characters so the glue rule never sees it, 111 files, 53
-  distinct names, 40 packs), `ophh` and `clhh` (drum-machine sets). The filename still beats the folder: `OPENHAT_CHARLES.wav` in
+  The same table holds `openhat` (lower-case `openhat (7ab)`; `hat` is three characters so the glue rule never sees it, 111 files, 53
+  distinct names, 40 packs in the private corpus), `ophh` and `clhh` (drum-machine sets). The filename still beats the folder: `OPENHAT_HARRY.wav` in
   `Closed Hats/` is an OHH.
-- **Vocabulary round 2 (two owner dumps, 120k files in 220 packs and a 108k-file hand-sorted library).** Added to the word lists:
+- **Vocabulary round 2 (two large private test corpora: one of ~120k files in many packs, one hand-sorted library).** Added to the word lists:
   `kck bdrum bdrums` (Kick), `snar` (Snare, **whole token only** via `WHOLE_TOKEN_ONLY`: glued it reads `snarl`/`snary`/`snaroll`
   as snares), `crs` (Crash), `prc shk` (Perc). `hhd1kck05` is now a Kick (it was a hat because it starts with `hh`).
-  **`VARIANT_CODES`: `bd` plus one letter a-e, `sd` plus one letter b-e** (`bdeHOE36024hard1`, `BDaEXT`, `28-bde03`, `SDbOH`, `Arc_SDe07_S_V1`) is a
+  **`VARIANT_CODES`: `bd` plus one letter a-e, `sd` plus one letter b-e** (`bdeHOE36024hard1`, `BDaEXT`, `28-bde03`, `SDbOH`, `Zrc_SDe07_S_V1`) is a
   Kick/Snare. `sda` is out on purpose (owner decision): the `sda-disco` files in `claps` are claps, so they fall back to the folder. It sits after the kick, snare, clap and hat words and before the bare `ch`/`oh` rule, and a crash or percussion word
   still wins, so `clap [sdyn]`, `SDF_HAT`, `Crisp Bdk Snare` and `808 (sdp interlude)` keep what they were. Putting it before the
-  hat check moves Battery's overhead-mic files (`SDbOH`, `BDaOH`, 10 files, were OHH). Letters beyond e were seen in one library
+  hat check moves a multi-mic drum sampler's overhead-mic files (`SDbOH`, `BDaOH`, 10 files, were OHH). Letters beyond e were seen in one library
   only; `bdy` is the udu "body" (8 files the owner filed as Perc) and `sdp` is a producer tag.
-- **Evidence bar for a new abbreviation: at least three independent libraries, not three folders.** The Lunch77 and "Shows the
-  Screen" kits copy the same files between packs (`SNC (9).wav` is in 21 of them) and the owner's library copies folders too
+- **Evidence bar for a new abbreviation: at least three independent libraries, not three folders.** Some trap and boom-bap kit series copy the same files between packs (`SNC (9).wav` is in 21 of them) and the private library copies folders too
   (`hi_c_03e.wav` is in `hat closed` and `unsorted`), so count distinct file names (digits stripped) as well as packs. Rejected on
   that bar, do not re-add without new evidence: `hi_c_*`/`hi_o_*`/`wi_c_*`
-  (one library, two copies), `cymcra` (21 files, one folder), `bdrm`/`bdeq` (one Alesis set), `cowbl`, `cnga*`/`cng`, `drmsn`/`drmsnd`,
-  `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tam` (the Tama brand in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
+  (one library, two copies), `cymcra` (21 files, one folder), `bdrm`/`bdeq` (one drum-machine set), `cowbl`, `cnga*`/`cng`, `drmsn`/`drmsnd`,
+  `snc`, `idsn`, `sanre`, `hatz`, `clhat`, `hatldk`, `chbb` (one library each); `tam` (a drum brand name in `unsorted`); `ho`, `cld`, `os` (ambiguous). Two more were measured and refused on purpose: bare `open` /
   `closed` as hat qualifiers without a hat word (163 name-only files, 122 already rescued by a hat folder, the rest `DOOR OPEN`,
   `Open Up`, `Open Hi` percussion), and the spaced `op hat`, which was refused then and is read now (see the `op` rule below). `close` (singular) is not in the closed list on
   purpose: it would only relabel generic `Hat` as `CHH`, the same pool.
-- **Owner exceptions to the evidence bar (round 3).** `klp`, `klap` and `klapz` are Clap although they come from one library (Klub
-  Klapz, 320 files, plus `Klap [Lou]` / `Dre KLP (2)` in the Lunch77 kits); `klap` is `WHOLE_TOKEN_ONLY` (German "Klappe") and
+- **Owner exceptions to the evidence bar (round 3).** `klp`, `klap` and `klapz` are Clap although they come mostly from one pack series (a pack that
+  spells clap with a k: 320 files, plus `Klap [Sam]` / `Ace KLP (2)` in a kit series); `klap` is `WHOLE_TOKEN_ONLY` (German "Klappe") and
   `klaps` (a slap) is not listed. The `FX Klapz 1/2` files (65) were never non-drum with their folders: the `claps` parent already
   made them Clap, and `looksNonDrum` only runs for `Other`; by name alone the `fx` token had marked them non-drum, now `klp` places
   them first. `tmb` is Perc (tambourine, with the shakers): the nine `FA####_tmb` files in `hat open`/`hat closed` now read Perc
   (the owner filed them as hats), and `88 HAT+TMB` stays a hat because a hat word wins over a Perc word.
 - **`op` next to a hat word is an OPEN hat, and the filename beats a closed-hat folder** (`OP_BEFORE_HAT`/`OP_AFTER_HAT`, tested on the
   camelCase-split lower-cased name). `op` is hip-hop shorthand for "overpowered"; the owner confirmed by ear three sets that sit in
-  closed-hat folders: `hat closed/NN OP HAT[ N].wav` (69 files in the dump), `The Lunch77 MF DOOM Drumkit/Closed Hats/Boom-Bap Hat OP NN`
-  and `Southside .../Closed Hats/OpHat (Atl|Coop|Mafia)`. Either order (`OP HAT`, `Hat OP`, `Hi Hat Op`, `op_hh`), separated by space,
+  closed-hat folders: `hat closed/NN OP HAT[ N].wav` (69 files), `Boom-Bap Kit A Drumkit/Closed Hats/Boom-Bap Hat OP NN`
+  and `Trap Kit H Drumkit/Closed Hats/OpHat (Alp|Cob|Bay)`. Either order (`OP HAT`, `Hat OP`, `Hi Hat Op`, `op_hh`), separated by space,
   `_`, `-`, `.` or glued (`OpHat`, `ophat`, `RockOpHat`). `op` must be a whole word: a letter in front disqualifies (`skophat`, `Dophat`,
   `Hop Hat`, `Chop Hat`, `YChopHat`, `Stop Hat`, `Drop Hat`, `Cop Hat`), it must not run on into a word (`open`), and `op` not adjacent
   to a hat word (`OP 1 kick`, `Op Snare`) is untouched. It applies when the name says nothing else (null, bare `Hat`, or `CHH` only via a
-  stray `c` token as in `Op Hat [C4RT1]`); another category or a real closed word (`Op Hat closed`) keeps its meaning. The narrow folder
+  stray `c` token as in `Op Hat [C4XY1]`); another category or a real closed word (`Op Hat closed`) keeps its meaning. The narrow folder
   sharpening for bare `Hat` is unchanged. Replaces the round 3 weak glued-`OpHat` rule. Not read: `OPHHcDIR`-style names where letters
   follow `hh` (40 files in one acoustic kit, still `Other`).
-- **Unqualified `Hat` in a generic hat folder is counted closed, and nothing in the name can change that.** `overkill/hats` (4,023
-  files, duplicated under `kits/drums overkill`) is `HIHAT_NNNN.wav` throughout: no open/closed token anywhere, so all are `Hat`. Across
-  both dumps 22,573 files read as generic `Hat` by name, 7,692 of them are sharpened by an open or closed folder, and 14,881 stay
+- **Unqualified `Hat` in a generic hat folder is counted closed, and nothing in the name can change that.** a ~4,000-file hat folder (`HIHAT_NNNN.wav` throughout, duplicated under a second kit folder in the private corpus) has no open/closed token anywhere, so all are `Hat`. Across
+  both private corpora 22,573 files read as generic `Hat` by name, 7,692 of them are sharpened by an open or closed folder, and 14,881 stay
   generic. Of those only `op` (20 files, now read next to a hat word) and `ho` (1) look like unrecognised qualifiers; `oh`, `open`, `opn`, `ch`, `closed`, `cl`
   are all recognised (0 left over).
-- **Name-only accuracy ceiling.** Of the owner's 6,276 hand-sorted files 1,904 are still missed by name alone after round 2: 975 are
+- **Name-only accuracy ceiling.** Of the 6,276 hand-sorted files in the private corpus 1,904 are still missed by name alone after round 2: 975 are
   numbered or code-only (`Audio_086`, `track21_003`, `19_02_08`, `x1`), 473 carry words but no drum vocabulary, 450 are the rejected
   single-library codes above. No rule can reach those; the folder rescues most of them (name+folder accuracy is 97.9%).
 - **A token starting `hh` is a hat**: the only thing separating `HHCD0` (closed hat) from `HC00` (high conga).
@@ -247,19 +247,19 @@ rule exists because a simpler version broke on real packs.
   starts at four characters. `chhs`/`ohhs` also need listing in the bare-token fallback at the end of `classify`. `timp` covers
   timpani via glue.
 - **All cymbals are `Crash`** (owner decision, replacing the earlier "ride stays Perc"): `crash crashes crsh splash china cc csh`
-  plus `ride rides rd cymbal cymbals cym cymb cy`. Moved 1,264 files from Perc in the owner's 120k-file dump. **Consequence:
+  plus `ride rides rd cymbal cymbals cym cymb cy`. Moved 1,264 files from Perc in the ~120k-file private corpus. **Consequence:
   rides are `Crash`, and crashes never choke** (see the choke entry under Preset generation).
-- **`GLUE_FALSE_FRIENDS` never match glued**: `whats thats chats` (`whats` ends in `hats`, so every `TakeWhatsMine-*` file that
+- **`GLUE_FALSE_FRIENDS` never match glued**: `whats thats chats` (`whats` ends in `hats`, so every `GetWhatsHere-*` file that
   was not a kick or snare filed as a hat) and `rider riders bride pride strider cymbalium` (`ride` is four characters and glues:
   `night_rider` melodies and `Horse Rider` patches read as cymbals, 67 files, and with rides now choking that would be a wrong
   choke). Whole-token matching of a listed word is unchanged.
-- **`shaking` is Perc, checked after the `808` rule** (`Shaking A Full Unopened Coca Cola Can`, 74 files; `808 Shaking` stays a kick). Deliberately NOT added after measuring on a 120k-file
-  dump: `hit shot shots stomp thud hiss pot pan can cola tap click` (`bell` was on this list and has since moved to Perc, see the bell entry). Most of their files sit in `FX`/`Vox`/`Extras` folders
+- **`shaking` is Perc, checked after the `808` rule** (`Shaking A Full Unopened Soda Can`, 74 files; `808 Shaking` stays a kick). Deliberately NOT added after measuring on the ~120k-file
+  private corpus: `hit shot shots stomp thud hiss pot pan can cola tap click` (`bell` was on this list and has since moved to Perc, see the bell entry). Most of their files sit in `FX`/`Vox`/`Extras` folders
   and are correctly non-drum; promoting them to Perc would bypass `looksNonDrum` (it only runs for `Other`) and `Perc` and `Other`
   already share one draw pool, so a household sound left `Other` is as playable as a `Perc`. `shots` also names every "One Shots"
   folder. Do not add them without a rule that keeps the non-drum folders out.
-- **`lp` is a loop marker only as the LAST token of a filename**, ignoring a trailing index (`Watchmen-PercLp.wav`,
-  `Perc Lp 2.wav`), only for a sample categorised `Other` or `Perc`, never read from folders. `Lp Kick`, `LP Thick`, `LP Cardiak
+- **`lp` is a loop marker only as the LAST token of a filename**, ignoring a trailing index (`Lookouts-PercLp.wav`,
+  `Perc Lp 2.wav`), only for a sample categorised `Other` or `Perc`, never read from folders. `Lp Kick`, `LP Thick`, `LP Marko
   String Drop` are not loops, and `Kick LP`/`808 Son LP` stay kicks ("LP" being low-pass or a record). Pinned by tests.
 - **A bare `808` token classifies as Kick**, checked last so `808 clap`, `808 snare`, `808 open hat` keep their own category. Whole
   token only.
@@ -292,8 +292,8 @@ rule exists because a simpler version broke on real packs.
   the generic words as `percussion`.
 - **`bell` is a Perc kind (own vocabulary round; label `Bell`).** Words `bell bells agogo agogos`; `bell(s)` are whole tokens only
   (`WHOLE_TOKEN_ONLY`: glued, `bell` reads belly, bella, bellows, Campbell, Isabella), plus the phrase `cow bell(s)` (also what camelCase
-  `CowBell` tokenises to) as `cowbell`. Evidence over both owner dumps and the archive.org listings: `bell` 90 packs / 245 distinct names
-  (dump 1), 18 folders / 61 names (dump 2), 4 libraries (archive.org); `bells` 25 packs / 28 names. Rules: it sits after the other groups in
+  `CowBell` tokenises to) as `cowbell`. Evidence over both private corpora and public archive listings: `bell` 90 packs / 245 distinct names
+  (corpus 1), 18 folders / 61 names (corpus 2), 4 libraries (public listings); `bells` 25 packs / 28 names. Rules: it sits after the other groups in
   `PERC_KINDS`, so `cowbell`, `triangle`, any kick, snare, clap, hat and crash word win (`Ride Bell` stays a ride, `Bell Kick` a kick). Perc
   is checked before the bare-`808` fallback, so `808 Bell` is a Perc bell. `bell` and `chime` are the WEAK words (`WEAK_WORDS`; everything
   else, `agogo` included, is strong and gets none of the guards below). Weak-word guards, all in `weakWordBlocked` (the dropped word falls
@@ -310,9 +310,9 @@ rule exists because a simpler version broke on real packs.
   open-hat folder stays OHH, `Big Bell.wav` in a ride folder stays Crash), except a folder that itself holds a bell/chime word (`Hats & Bells`)
   or a bare `808s` folder; a Perc folder of a specific kind gives the kind (`Bell.wav` in `Cowbells` is a cowbell, no category moves); an
   `agogo` name is never demoted by a folder. `looksLikeRoleFolder` (sub-pack detection in `packSplit.ts`) reads a bell or chime word as a
-  role only when it is the whole name (`Bells`, `Wind Chimes 2`), so a pack called `Bell Boy Beats` or `Bells of Atlantis` still splits out;
+  role only when it is the whole name (`Bells`, `Wind Chimes 2`), so a pack called `Bell Hop Beats` or `Bells of Atlantis` still splits out;
   across the 2,161 folder names of the three sources only three sub-packs named `<bell phrase> One Shots (<vendor tag>)` changed, role -> pack.
-  Change measured when `bell` landed, on both dumps: 579 files Other -> Perc (392 of them non-drum files in FX/Extras folders, now usable), 25
+  Change measured when `bell` landed, on both private corpora: 579 files Other -> Perc (392 of them non-drum files in FX/Extras folders, now usable), 25
   loops stay loops, 6 `RS_CowBell`-style files Snare -> Perc (correct), 1 Kick -> Perc; zero change on the 6,276 labelled files (name-only and
   name+folder identical). Known noise, accepted ("never 100%"): tonal one-shots of melodic bell patches (`IN Bells-000-036-c1`, trap bells) sit
   in Perc; the two whole-song files named after a Bell that this noise once listed are now caught by the song guard.
@@ -321,23 +321,23 @@ rule exists because a simpler version broke on real packs.
   1 library, and an English word), note-name and `pluck/arp/tone/fm` blockers (zero cross-library evidence in the data; a note-name rule
   would also undo the accepted tonal bells).
 - **`chime` is a Perc kind (label `Chime`), same mechanics as `bell`.** Words `chime chimes windchime windchimes`, whole tokens only (glued,
-  `chime` reads `chimera`, `Chimerz`; `chimney`, `chimp` never match). Evidence over both dumps and archive.org: `chime` 20 libraries / 24
+  `chime` reads `chimera`, `Chimerz`; `chimney`, `chimp` never match). Evidence over both private corpora and public listings: `chime` 20 libraries / 24
   names, `chimes` 13 / 30, `windchimes` 5 / 7 (`windchimez`: 1 library, left out). Mostly wind chimes and synth chimes, and the owner accepted
   them as usable Perc (FX-folder chimes included). Same weak-word guards as bell, same folder precedence (`Chimes` in a cymbals folder stays a
-  cymbal, `Chime Snare` a snare, `Bell Chime` a bell). Together with the agogo and guard changes below, 100 files change their result over both dumps and the
-  archive.org listing (45 Other -> Perc chime, 51 generic percussion -> chime or bell kind only, 4 bell -> Other), and none of
+  cymbal, `Chime Snare` a snare, `Bell Chime` a bell). Together with the agogo and guard changes below, 100 files change their result over both corpora and the
+  public listing (45 Other -> Perc chime, 51 generic percussion -> chime or bell kind only, 4 bell -> Other), and none of
   the 6,276 labelled files, name-only or name+folder.
 - **`agogo` reads as kind `bell`** (also `agogos`, `agogô`: `tokenize` rewrites `agogô` to `agogo` because the accent would split it). 28 names
   in 12 libraries, all drum-machine or percussion kits, previously generic `percussion`; the category is unchanged.
 - **Song guard (`looksLikeSongName`): a whole-song file named after a bell is never a bell.** Only consulted for a weak word, so it moves no
   other category (a song-like name with a kick word is still a kick; `Hat (Artist - Song).wav` is still a hat). Tested on the raw name with `_`
   as space and bracketed text removed (`Bell (Artist - Song)` is a one-shot sampled from a song, as kits name them): a band connector (`and
-  the`, `& the`, `vs the`, `presents the`, `feat`, `featuring`); `_-_` between words with at least three words (475 files in the dumps, 0 drum
+  the`, `& the`, `vs the`, `presents the`, `feat`, `featuring`); `_-_` between words with at least three words (475 files in the private corpora, 0 drum
   one-shots, all songs and acapellas); or a spaced hyphen/tilde/dash with at least two words each side, no digit in the artist part and five
   words in all. Not used, because they hit drum kits: name length (2,016 files with 8+ words, mostly `Kick (Artist - Song Title)`), a
   leading track number (`01 Some Producer Bell`), any spaced hyphen (`Bell - Alpha`, `ZQ - Bell`, `Little bell 2 - Small bell`). Residual
-  misses, accepted: a short two-word artist-title like `Jimmy Bell - Song`. Measured on dump 2's song folder (780 files): 500 match
-  the pattern (the rest have no separator or a one-word artist). Of the 902 files with a bell/chime word over both dumps and the archive.org
+  misses, accepted: a short two-word artist-title like `Jimmy Bell - Song`. Measured on a song folder of corpus 2 (780 files): 500 match
+  the pattern (the rest have no separator or a one-word artist). Of the 902 files with a bell/chime word over both corpora and the public
   listing, 3 match the song pattern (the two named after a Bell, plus one loop); the guard changes those three (two songs, one loop that stays a loop), and
   every other file keeps its result.
 - **`classifySample(name, dir)` returns `{ category, kind }`; `categorizeSample` is a one-line wrapper returning the category.** The
@@ -350,10 +350,10 @@ rule exists because a simpler version broke on real packs.
   kind; the one refinement is that a name saying only "percussion" or "cymbal" (the weak kinds of `Perc` and `Crash`) takes the kind of
   the nearest folder in the SAME category (`Perc_01.wav` in `Toms/` is a tom). That never changes a category, and a specific name
   wins (`Shaker 1.wav` in `Toms/` stays a shaker, `Kick 1.wav` in `808s/` stays `kick`). Invariants, tested and checked over both
-  owner dumps (337,923 classifications, zero kinds outside their category): `kindBelongsTo(kind, category)` always holds, and the
-  categories, loop and non-drum flags of every file in both dumps are byte-identical to the run before kinds existed (zero
+  private corpora (337,923 classifications, zero kinds outside their category): `kindBelongsTo(kind, category)` always holds, and the
+  categories, loop and non-drum flags of every file in both corpora are byte-identical to the run before kinds existed (zero
   transitions; run the round-2 `bench.mts` and `diff.mts` before and after any change here).
-- **Kind accuracy (folder-named ground truth in both dumps, loops skipped, mixed folders such as `KICKS_TOMS` excluded; name only
+- **Kind accuracy (folder-named ground truth in both corpora, loops skipped, mixed folders such as `KICKS_TOMS` excluded; name only
   -> name + folder):** snare 89.5 -> 98.8%, kick 88.5 -> 99.7, 808 79.0 -> 95.5 (a file called "kick" in an `808s` folder is `kick`),
   clap 90.7 -> 95.2, crash 61.3 -> 92.7 (157 rides in crash folders), tom 88.1 -> 99.5, ride 82.2 -> 96.8, shaker 53.2 -> 95.3,
   rimshot 66.1 -> 97.9, snap 60.9 -> 98.9, any-cymbal folders 66.5 -> 67.6 (hats mixed into `cymbals` folders), bongo 68.4 -> 87.5
@@ -366,7 +366,7 @@ rule exists because a simpler version broke on real packs.
   that resolves to a bare `Hat` (`hihat_01.wav` in `Open Hats/` is an OHH). `closed hat.wav` in `Open Hats/` stays CHH; a kick in a
   hat folder stays a kick.
 - **`folderCandidates()` reads folders deepest-first and skips the outermost** unless it is the only one. The outermost is the
-  pack's marketing name (`70s Breakbeats`, `Kick Ass Drums`). Deepest-first alone is not enough: `/Kick Ass Drums/misc/` still needs
+  pack's marketing name (`70s Breakbeats`, `Kick Punch Drums`). Deepest-first alone is not enough: `/Kick Punch Drums/misc/` still needs
   the skip.
 - **A folder that names a drum category outranks marker words in it.** `Bass Drums` is `/\bbass drums?\b/`, `bassdrums` is in
   `KICK`, and `looksNonDrum` skips any folder that `classify` can place.
@@ -421,11 +421,11 @@ rule exists because a simpler version broke on real packs.
   Breakbeats` / `Breaks Vol 2` are full of one-shots.
 - **`BREAK_WORDS` readmits that word under two guards**, both load-bearing: filename only (the folder is never read, so `Breaks Vol
   2/one shots/snare 3.wav` is a snare), and only for a sample the categoriser could not place (`Break Snare.wav` stays a snare).
-  Whole-token, so `Breakfast.wav` and `breakdance vox.wav` are untouched. It exists because `03 BBL BREAKS.wav` in `BONUS - Breaks/`
+  Whole-token, so `Breakfast.wav` and `breakdance vox.wav` are untouched. It exists because `03 XYZ BREAKS.wav` in `BONUS - Breaks/`
   used to land on a pad as `Other` and compete for a column with the real drums. `breaks125.wav` and `breakbeat 01.wav` read as
   loops on purpose: those two cases of test `one-shots are not mistaken for loops` were inverted to land this, and the test pins all
   three guards.
-- **`loop` never matches as a prefix** ("Loopmasters" is a vendor name in ordinary one-shots), and **a glued `loop` needs three or
+- **`loop` never matches as a prefix** ("Loopworks" stands for a vendor name in ordinary one-shots), and **a glued `loop` needs three or
   more characters before it** (`bloop` stays a one-shot).
 - **A tempo must say `bpm`**; a bare bracketed number (`[120]`) is as likely an index.
 - **A tempo is loop evidence in a filename, never in a folder name** (same for the `bpm` token). Folders like `Construction Kit (135
@@ -521,7 +521,7 @@ rule exists because a simpler version broke on real packs.
 - **Shuffle never returns the pad's own sample**: it excludes the current sample and walks the preference chain. Only if the library
   holds nothing else does the pad keep it; shuffling must never empty a pad.
 - **Hat partners (`utils/hatPartner.ts`, applied at the end of `generateRandomKit` and in `rerollSinglePad`).** Sample packs ship
-  closed/open pairs with matching names (`BlockWatch-Hat` + `BlockWatch-HatOpn`). Closed hats are drawn exactly as before, with NO bias
+  closed/open pairs with matching names (`BlockPatrol-Hat` + `BlockPatrol-HatOpn`). Closed hats are drawn exactly as before, with NO bias
   towards ones that have partners (a test compares 2000 draws against a uniform expectation); afterwards, if the closed hat on a pad
   has a partner open hat, the open-hat pad immediately to its right takes one. **Stem:** `hatStem` is the file name without extension,
   split at separators, camelCase and letter/digit boundaries, with every number and the words open/opn/oh/ohh/closed/close/clsd/ch/
@@ -537,7 +537,7 @@ rule exists because a simpler version broke on real packs.
   The open pad takes a partner from the OHH pool (same lazy `identityOf` check as any draw, a repeat is flagged `isDuplicate` and
   skipped) or, when the draw already put that partner on another unlocked open-hat pad, the two pads swap contents (no sample on two
   pads); the sample that leaves goes back to its pool. Pads of an earlier pair that already hold their own partner are not raided, so
-  with two closed hats sharing one partner (`SpacedOut-Hat`, `SpacedOut-Hat2`) the lower pad wins. No usable partner: the pad keeps
+  with two closed hats sharing one partner (`ZonedOut-Hat`, `ZonedOut-Hat2`) the lower pad wins. No usable partner: the pad keeps
   what it has. **Locks:** a locked open pad is never overwritten; a locked closed hat still pulls its partner onto an unlocked open
   pad. **Reroll:** rerolling a closed-hat pad re-applies the rule to the pad on its right unless that pad is locked (`lockedPads`
   travels in the last argument, `DrawHooks`); rerolling an open pad draws as before. `substituted`/`empty` are computed on the
@@ -664,12 +664,12 @@ rule exists because a simpler version broke on real packs.
   (`utils/packSplit.ts`, `utils/folderGroups.ts`, `components/SourceFolderRows.tsx`, tests in `test/packs.test.ts`).**
   - *Detection* (`splitPacks`, pure, one level only): an immediate subfolder is a sub-pack when its name is not role-like
     (`isRoleLikeName`: the classifier's own folder vocabulary via `looksLikeRoleFolder` exported from `fileReader.ts`, plus a short
-    supplement in `packSplit.ts` found by running over the 213-folder survey: layer, transient(s), instrument, other, hit(s),
+    supplement in `packSplit.ts` found by running over a 213-folder survey: layer, transient(s), instrument, other, hit(s),
     organ(s)/pluck(s), short/long/hard/soft/dry/wet as tokens, "Drums"/"Samples"/"Kit" as the whole name, and letter-spaced titles like
     `P E R C` collapsed first) AND holds at least `MIN_PACK_FILES` (8) audio files in its whole subtree (below that it is a bonus
     folder; real packs have 16+). At least `MIN_SUB_PACKS` (2) are needed: one named pack beside role folders is one pack
-    (`Cardo ... Drumkit/Cardo ... Drumkit` + Kicks/Snares/FX), and the `Lunch77` / `All Encompassing Kit` / `Errorfound` / `!COLLECTION!`
-    style kits (role folders only) stay whole. Do not widen the role vocabulary inside `fileReader.ts` for this; add to the supplement.
+    (`Pack A Drumkit/Pack A Drumkit` + Kicks/Snares/FX), and kits whose subfolders are role folders only (a boom-bap
+    kit series, a one-folder complete kit) stay whole. Do not widen the role vocabulary inside `fileReader.ts` for this; add to the supplement.
     Everything not in a sub-pack (role folders, small folders, loose files) stays together as one child
     `"<parent> (other files)"`. `splitPacks` throws if the children are not exactly the input files. Files keep their original `path`, so
     classification sees `/Parent/Sub/Kicks` exactly as before.
@@ -780,7 +780,7 @@ driven over CDP: `Runtime.evaluate` dispatches a synthetic `drop` with stubbed `
 on `#root`'s first element child (not `window`: React listens at the root, below it), then `Page.captureScreenshot`. It is the only
 way to see a filled grid without a real sample folder, and the empty grid hides most of what the theme does.
 
-**Suite coverage:** `test/packs.test.ts` covers collection detection (fixtures from real pack structures), the parent-aware prefix and duplicate key, tri-state and the multi-id toggle/remove plans. `test/kit.test.ts` (Node-only, via `tsx`, no components) covers the kinds (bell, chime, agogo, the weak-word folder guards and the song guard with its legitimate-one-shot counterexamples, all with invented names), kit generation, bundle building, sample
+**Suite coverage:** `test/packs.test.ts` covers collection detection (fixtures modelled on real pack structures, with invented names), the parent-aware prefix and duplicate key, tri-state and the multi-id toggle/remove plans. `test/kit.test.ts` (Node-only, via `tsx`, no components) covers the kinds (bell, chime, agogo, the weak-word folder guards and the song guard with its legitimate-one-shot counterexamples, all with invented names), kit generation, bundle building, sample
 detection, preset shape, pad-to-note mapping, choke grouping, kit naming, batch building, WAV handling and the lazy dedupe (call counts, same-pool replacement, locked pads, progress, the visibility helper). The generation races in `App` (`isGenerating`, superseding) are not reachable from Node and are confirmed by reading only; `test/io.test.ts` covers
 drop handling and trimming with fakes for `FileSystemEntry` and `OfflineAudioContext`.
 

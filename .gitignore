@@ -9,3 +9,7 @@ coverage/
 # Local-only agent instructions. Names the work account and its address, so it must
 # never be committed here again.
 CLAUDE.md
+
+# local-only: real pack names and owner-library evidence
+AGENTS.private.md
+test/private/
