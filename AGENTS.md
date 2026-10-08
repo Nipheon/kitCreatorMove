@@ -54,6 +54,7 @@ path with more than three segments means you are in the wrong place.
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
 - **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only (page views, referrer, country, browser, device type, load timings); never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
+- **Security headers live in `vercel.json`** (CSP with `script-src 'self'` plus the Cloudflare beacon host, `connect-src` limited to `'self'` and `cloudflareinsights.com`, `media-src 'self' blob: data:`, `frame-ancestors 'none'`, nosniff, Referrer-Policy). Any new external script, font, image host or `fetch` target must be added there or it is blocked in production; check the browser console on a Vercel preview after changing it.
 
 ## React and lifecycle (`App.tsx`)
 
