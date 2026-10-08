@@ -441,7 +441,12 @@ const PERC_KINDS: [SampleKind, string[]][] = [
   ['tom', ['tom', 'toms', 'ht', 'mt', 'lt']],
   // `cl` and `clv` are the 808 claves.
   ['woodblock', ['woodblock', 'block', 'wood', 'clave', 'claves', 'clv', 'cl']],
-  ['triangle', ['triangle']]
+  ['triangle', ['triangle']],
+  // Sleigh, church, tubular, ceramic and hand bells, and "bell" alone. Whole tokens only (WHOLE_TOKEN_ONLY):
+  // glued, `bell` would read belly, bella, bellows, Campbell and Isabella. Tried last, so a cowbell, a
+  // triangle or a ride bell keeps its own word. Dropped for a name with a melodic or non-drum word
+  // (BELL_BLOCKERS): `Bell Pad`, `Melody Bell` are tones, not hits.
+  ['bell', ['bell', 'bells']]
 ];
 /** Percussion known only as percussion: the kind is `percussion`. */
 const PERC_GENERIC = [
@@ -453,6 +458,9 @@ const PERC_GENERIC = [
   'prc'
 ];
 const PERC = [...PERC_KINDS.flatMap(([, words]) => words), ...PERC_GENERIC];
+const BELL_WORDS = PERC_KINDS.find(([kind]) => kind === 'bell')![1];
+const PERC_WITHOUT_BELL = PERC.filter(w => !BELL_WORDS.includes(w));
+const PERC_KINDS_WITHOUT_BELL = PERC_KINDS.filter(([kind]) => kind !== 'bell');
 
 const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
 const CLOSED = ['chh', 'chhs', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
@@ -482,7 +490,7 @@ const GLUE_FALSE_FRIENDS = [
 ];
 
 /** Four-character words that must not glue to a neighbouring word, only match as a token. */
-const WHOLE_TOKEN_ONLY = ['snar', 'klap'];
+const WHOLE_TOKEN_ONLY = ['snar', 'klap', 'bell', 'bells'];
 
 /**
  * A drum code plus one variant letter: Battery's multi-mic kit ("BDaEXT", "SDbOH"), the
@@ -524,6 +532,7 @@ const PHRASES: [RegExp, Category, SampleKind][] = [
   [/\bhand clap\b/, 'Clap', 'clap'],
   [/\bfinger snap\b/, 'Clap', 'snap'],
   [/\bwood block\b/, 'Perc', 'woodblock'],
+  [/\bcow bells?\b/, 'Perc', 'cowbell'],
   [/\bhi hat\b/, 'Hat', 'hat']
 ];
 
@@ -614,7 +623,9 @@ function classifyKind(text: string, isFile = false): Classified | null {
   if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return withDefault('OHH');
 
   if (has(CRASH)) return kindIn(CRASH_KINDS, 'Crash');
-  if (has(PERC)) return kindIn(PERC_KINDS, 'Perc');
+  // A bell next to a melodic or non-drum word is a tone, not a hit: it stays where the rest of the name puts it.
+  const bellAllowed = !tokens.some(t => BELL_BLOCKERS.includes(t));
+  if (has(bellAllowed ? PERC : PERC_WITHOUT_BELL)) return kindIn(bellAllowed ? PERC_KINDS : PERC_KINDS_WITHOUT_BELL, 'Perc');
 
   /**
    * An 808 with nothing else to go on is the kick voice — that is what the name means in
@@ -715,6 +726,12 @@ const NON_DRUM_WORDS = [
   'choir', 'whistle', 'sitar', 'flute', 'organ', 'violin', 'cello', 'harp',
   'trumpet', 'sax', 'saxophone', 'accordion'
 ];
+
+/**
+ * Words that stop `bell` counting as a percussion hit: the non-drum words (melody, pad, lead, synth,
+ * vox ...) plus chord(s), without the fx words (`Ceramic Bell FX Samples` is a bell hit).
+ */
+const BELL_BLOCKERS = [...NON_DRUM_WORDS.filter(w => !['fx', 'sfx', 'efx'].includes(w)), 'chord', 'chords'];
 
 /**
  * Folder names that mean "not the drums" even when the files inside are named
@@ -847,6 +864,16 @@ export function classifySample(name: string, directory = ''): Classified {
   }
 
   if (fromName) {
+    // `bell` is weak name evidence: the nearest folder that names another drum category wins
+    // (`Bell Choke.wav` in an open-hat folder, `Big Bell.wav` in a ride folder are that category's sounds).
+    if (fromName.kind === 'bell') {
+      for (const folder of folderCandidates(directory)) {
+        const fromFolder = classifyKind(folder);
+        if (fromFolder === null) continue;
+        if (fromFolder.category !== 'Perc') return fromFolder;
+        break;
+      }
+    }
     if (isWeakKind(fromName)) {
       for (const folder of folderCandidates(directory)) {
         const fromFolder = classifyKind(folder);

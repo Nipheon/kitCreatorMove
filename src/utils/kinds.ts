@@ -11,7 +11,7 @@ export type SampleKind =
   | 'clap' | 'snap'
   | 'closed' | 'open' | 'hat'
   | 'crash' | 'ride' | 'cymbal'
-  | 'shaker' | 'tambourine' | 'cowbell' | 'conga' | 'bongo' | 'tom' | 'woodblock' | 'triangle' | 'percussion'
+  | 'shaker' | 'tambourine' | 'cowbell' | 'bell' | 'conga' | 'bongo' | 'tom' | 'woodblock' | 'triangle' | 'percussion'
   | 'other';
 
 /** Every kind a category may carry; the first is the category's default (what the evidence "only says"). */
@@ -23,7 +23,7 @@ export const KINDS_BY_CATEGORY: Record<Category, readonly SampleKind[]> = {
   OHH: ['open'],
   Hat: ['hat'],
   Crash: ['cymbal', 'crash', 'ride'],
-  Perc: ['percussion', 'shaker', 'tambourine', 'cowbell', 'conga', 'bongo', 'tom', 'woodblock', 'triangle'],
+  Perc: ['percussion', 'shaker', 'tambourine', 'cowbell', 'bell', 'conga', 'bongo', 'tom', 'woodblock', 'triangle'],
   Other: ['other']
 };
 
@@ -34,7 +34,7 @@ export const KIND_LABELS: Record<SampleKind, string> = {
   clap: 'Clap', snap: 'Snap',
   closed: 'Closed', open: 'Open', hat: 'Hat',
   crash: 'Crash', ride: 'Ride', cymbal: 'Cymbal',
-  shaker: 'Shaker', tambourine: 'Tamb', cowbell: 'Cowbell', conga: 'Conga', bongo: 'Bongo',
+  shaker: 'Shaker', tambourine: 'Tamb', cowbell: 'Cowbell', bell: 'Bell', conga: 'Conga', bongo: 'Bongo',
   tom: 'Tom', woodblock: 'Woodblock', triangle: 'Triangle', percussion: 'Perc',
   other: 'Other'
 };

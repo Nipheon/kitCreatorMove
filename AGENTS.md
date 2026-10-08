@@ -254,7 +254,7 @@ rule exists because a simpler version broke on real packs.
   `night_rider` melodies and `Horse Rider` patches read as cymbals, 67 files, and with rides now choking that would be a wrong
   choke). Whole-token matching of a listed word is unchanged.
 - **`shaking` is Perc, checked after the `808` rule** (`Shaking A Full Unopened Coca Cola Can`, 74 files; `808 Shaking` stays a kick). Deliberately NOT added after measuring on a 120k-file
-  dump: `hit shot shots bell stomp thud hiss pot pan can cola tap click`. Most of their files sit in `FX`/`Vox`/`Extras` folders
+  dump: `hit shot shots stomp thud hiss pot pan can cola tap click` (`bell` was on this list and has since moved to Perc, see the bell entry). Most of their files sit in `FX`/`Vox`/`Extras` folders
   and are correctly non-drum; promoting them to Perc would bypass `looksNonDrum` (it only runs for `Other`) and `Perc` and `Other`
   already share one draw pool, so a household sound left `Other` is as playable as a `Perc`. `shots` also names every "One Shots"
   folder. Do not add them without a rule that keeps the non-drum folders out.
@@ -286,10 +286,25 @@ rule exists because a simpler version broke on real packs.
   choke, hat partners and the grid never read `kind`; the pad label, the kind filter and the variety cap do (entries below). The type
   `SampleKind` and `KINDS_BY_CATEGORY` are pure data (the first kind listed is the category's default, `defaultKind`): Kick `kick 808`,
   Snare `snare rimshot sidestick`, Clap `clap snap`, CHH `closed`, OHH `open`, Hat `hat`, Crash `cymbal crash ride`, Perc
-  `percussion shaker tambourine cowbell conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
-  `bell` is NOT a kind: no bell word is in the vocabulary, and adding one would move files between categories. Toms are Perc (as
+  `percussion shaker tambourine cowbell bell conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
+  Toms are Perc (as
   before), kind `tom`; maracas and cabasa read as `shaker`, claves as `woodblock`, timpani/djembe/cajon/guiro/tabla and the rest of
   the generic words as `percussion`.
+- **`bell` is a Perc kind (own vocabulary round; label `Bell`).** Words `bell bells`, whole tokens only (`WHOLE_TOKEN_ONLY`: glued, `bell`
+  reads belly, bella, bellows, Campbell, Isabella), plus the phrase `cow bell(s)` (also what camelCase `CowBell` tokenises to) as `cowbell`. Evidence over
+  both owner dumps and the archive.org listings: `bell` 90 packs / 245 distinct names (dump 1), 18 folders / 61 names (dump 2), 4 libraries
+  (archive.org); `bells` 25 packs / 28 names. Rules: it sits last in `PERC_KINDS`, so `cowbell`, `triangle`, any kick, snare, clap, hat and
+  crash word win (`Ride Bell` stays a ride, `Bell Kick` a kick). Perc is checked before the bare-`808` fallback, so `808 Bell` is now a Perc bell.
+  A bell next to a melodic or non-drum word (`BELL_BLOCKERS`: the `NON_DRUM_WORDS` except fx/sfx/efx, plus chord/chords: `Bell Pad`,
+  `Melody Bell`) is not a bell hit and stays where the rest of the name puts it. `bell` is weak NAME evidence: in `classifySample` the
+  nearest folder that names another drum category wins (`Bell Choke.wav` in an open-hat folder stays OHH, `Big Bell.wav` in a ride folder
+  stays Crash); a Perc or unnamed folder (`FX`) does not. Category change measured on both dumps: 579 files Other -> Perc (392 of them were
+  non-drum files in FX/Extras folders and become usable), 25 loops stay loops, 6 `RS_CowBell`-style files Snare -> Perc (correct), 1 Kick -> Perc;
+  zero change on the 6,276 labelled files (name-only and name+folder identical). Known noise, accepted ("never 100%"): a surname
+  (two whole-song files named after a Bell in dump 2), tonal one-shots of melodic bell patches (`IN Bells-000-036-c1`, trap bells) now sit in Perc.
+  Rejected words: glued compounds (`sleighbell`, `jinglebell`, `glasbell`, `metbell`, `sonnydbell`: each 1-3 libraries, mostly one name),
+  `chime`/`chimes`/`windchimes` (wind chimes and synth chimes, not bells; 13-20 libraries, mixed, open question), `tubular` (always next to
+  `bell` anyway), `glockenspiel` (2 libraries), `glock` (a gun), `agogo` (stays generic `percussion`, `agogo bell` reads bell).
 - **`classifySample(name, dir)` returns `{ category, kind }`; `categorizeSample` is a one-line wrapper returning the category.** The
   kind is read from the SAME rule that chose the category (`classifyKind`), never a second pass: inside a category the word groups
   `SNARE_KINDS`, `CLAP_KINDS`, `CRASH_KINDS` and `PERC_KINDS` are tried most specific first (`sidestick` before `rim`, `crash`

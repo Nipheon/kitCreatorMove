@@ -2897,6 +2897,7 @@ await test('kinds: exact real names from the owner libraries', () => {
     ['ride or wrong_19.wav', 'Crash', 'ride'], ['Cymbals_01_V15.wav', 'Crash', 'cymbal'], ['JJ - SplashRev.wav', 'Crash', 'cymbal'],
     ['Tom_05.wav', 'Perc', 'tom'], ['JMX_Toms_72.wav', 'Perc', 'tom'], ['CONGA 6.wav', 'Perc', 'conga'], ['808MC2_Orig.wav', 'Perc', 'conga'],
     ['bongos_13.wav', 'Perc', 'bongo'], ['220 COWBELL.wav', 'Perc', 'cowbell'], ['808O56CB11.wav', 'Perc', 'cowbell'],
+    ['Church Bell.wav', 'Perc', 'bell'], ['Tubular Bells 2.wav', 'Perc', 'bell'], ['Sleigh_Bell.wav', 'Perc', 'bell'],
     ['Shaker Afr_104.WAV', 'Perc', 'shaker'], ['EA-Tamb 01.aif', 'Perc', 'tambourine'], ['Plastic Tambourine One shots-9.wav', 'Perc', 'tambourine'],
     ['Triangle (5).wav', 'Perc', 'triangle'], ['Harmonic Clave.wav', 'Perc', 'woodblock'], ['AOW CL.WAV', 'Perc', 'woodblock'],
     ['PERCUSSION_1334.wav', 'Perc', 'percussion'], ['Djembe Open Slap Low.wav', 'Perc', 'percussion'],
@@ -2927,6 +2928,37 @@ await test('kinds: phrases, glued spellings and the weak words', () => {
   assert.deepEqual(classifySample('bdc.wav'), { category: 'Kick', kind: 'kick' }, 'variant codes take the category default');
   assert.deepEqual(classifySample('WhatEver.wav'), { category: 'Other', kind: 'other' });
   assert.equal(classifySample('Custom Loop.wav').kind, 'other', 'tom inside custom is no tom');
+});
+
+await test('kinds: bell is a Perc kind from whole tokens, keeps every other drum word and yields to tones and folders', () => {
+  const bell = { category: 'Perc', kind: 'bell' };
+  for (const name of ['Bell.wav', 'BELL_3.WAV', 'Ceramic Bells FX Reverse-7.wav', 'Hand Bell 02.wav', 'FX_TubularBells.wav', 'Bell Tree.wav', 'agogo_bell_hi.wav'])
+    assert.deepEqual(classifySample(name), bell, name);
+  // a cowbell is a cowbell, spelled with a space or camelCase, and the RS_ prefix no longer makes it a snare
+  assert.deepEqual(classifySample('Cow Bell 2.wav'), { category: 'Perc', kind: 'cowbell' });
+  assert.deepEqual(classifySample('RS_CowBell.wav'), { category: 'Perc', kind: 'cowbell' });
+  // another drum word wins, ride bells stay cymbals
+  assert.deepEqual(classifySample('Ride Bell.wav'), { category: 'Crash', kind: 'ride' });
+  assert.deepEqual(classifySample('Bell Kick.wav'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(classifySample('Snare Bell.wav'), { category: 'Snare', kind: 'snare' });
+  assert.deepEqual(classifySample('Triangle Bell.wav'), { category: 'Perc', kind: 'triangle' });
+  // not whole tokens, so not bells
+  for (const name of ['Belly Up.wav', 'Bellows.wav', 'Campbell 1.wav', 'Isabella.wav', 'Bella.wav', 'Underbelly.wav', 'Sleighbell.wav'])
+    assert.notEqual(classifySample(name).kind, 'bell', name);
+  // a bell next to a melodic or non-drum word is a tone and stays where the rest of the name puts it
+  for (const name of ['Bell Pad.wav', 'Melody Bell 140.wav', 'Synth Bell.wav', 'Bell Chords Cm.wav', 'Bell Vox.wav'])
+    assert.deepEqual(classifySample(name), { category: 'Other', kind: 'other' }, name);
+  // the nearest folder naming another drum category wins over the bell word, a Perc or unnamed folder does not
+  assert.deepEqual(classifySample('Hard Bell High.wav', '/Pack/Hats Open/Metallic'), { category: 'OHH', kind: 'open' });
+  assert.deepEqual(classifySample('Big Bell.wav', '/Pack/Cymbals/Ride'), { category: 'Crash', kind: 'ride' });
+  assert.deepEqual(classifySample('Big Bell.wav', '/Pack/Percussion'), bell);
+  assert.deepEqual(classifySample('Big Bell.wav', '/Pack/FX'), bell);
+  // a folder of bells gives anonymous files the kind
+  assert.deepEqual(classifySample('hit_01.wav', '/Pack/Bells'), bell);
+  // usable: a bell in an FX folder is a hit, not a non-drum
+  const fx = classifySample('Church Bell.wav', '/Pack/FX');
+  assert.equal(looksNonDrum(fx.category, 'Church Bell.wav', '/Pack/FX'), false);
+  assert.equal(padLabel('Perc', 'bell', 'Perc'), 'Bell');
 });
 
 await test('kinds: a folder gives the kind when it decided the category, or sharpens a weak name', () => {
