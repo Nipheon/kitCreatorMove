@@ -71,9 +71,9 @@ LICENSE
 AGENTS.md               # Conventions and hard-won rules — read before editing
 public/                 # Copied to the site root by Vite
   icon.png              # Header icon (third-party, see Credits)
-  icon-32.png           # Favicon
-  icon-180.png          # iOS home-screen icon
-  og-image.png          # Social preview image (1200x630)
+  icon-32.png           # Favicon (derived from icon.png, see Credits)
+  icon-180.png          # iOS home-screen icon (derived from icon.png, see Credits)
+  og-image.png          # Social preview image (1200x630, shows the drum, see Credits)
   robots.txt
   sitemap.xml
 src/
@@ -129,8 +129,9 @@ Developed with the assistance of **Google Gemini** and **Anthropic Claude** AI m
 
 Drum icon by [iconfromus](https://www.magnific.com/author/iconfromus/icons) from
 [Magnific](https://www.magnific.com/icon/drum_8584847), used under its attribution
-licence. It ships in this repository as `public/icon.png` and is **not** covered by the
-licence below.
+licence. It ships in this repository as `public/icon.png`, and the images derived from it
+(`public/icon-32.png`, `public/icon-180.png`, and `public/og-image.png`, which shows the drum)
+carry the same terms. None of these four files is covered by the licence below.
 
 ## License
 

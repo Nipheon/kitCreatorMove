@@ -53,7 +53,7 @@ path with more than three segments means you are in the wrong place.
   audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
-- **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only; never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
+- **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only (page views, referrer, country, browser, device type, load timings); never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
 
 ## React and lifecycle (`App.tsx`)
 
@@ -737,8 +737,8 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **Icon:** header icon and favicon are the same drum image (`public/icon.png`, 32px and 180px copies). Header `<img>` has empty
   `alt` (decoration beside a heading) and explicit width/height (no layout shift). **It is third-party work under an attribution
   licence**, credited in help section 8 and the README as *Drum icon by iconfromus from Magnific*, linking both the designer's profile and
-  the icon (attribution confirmed by the owner; magnific.com 403s automated requests). The README states that the 0BSD licence does
-  not cover `public/icon.png`. Do not drop either credit, and do not let the 0BSD `LICENSE` be read as covering it.
+  the icon (attribution confirmed by the owner; magnific.com 403s automated requests). The README and help section 7 state that the 0BSD licence does
+  not cover `public/icon.png` nor its derivatives `icon-32.png`, `icon-180.png` and `og-image.png` (which shows the drum); keep that list in step. Do not drop either credit, and do not let the 0BSD `LICENSE` be read as covering it.
   Replacing the icon means removing the credits with it, not before.
 - **Help modal** (header `HelpCircle`; eight sections: 1 Overview, 2 Adding & Scanning, 3 4x4 Pad Grid (Preview Kit, Auto Preview,
   pad tint), 4 Presets & Batch (Grid IDs, `PREFIX-gridid-Suffix` naming, batch, device transfer), 5 Sample Filters (filters,

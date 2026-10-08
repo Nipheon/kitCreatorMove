@@ -1601,7 +1601,7 @@ export default function App() {
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names are a folder prefix, the Grid ID, and a random suffix — <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKT-ksho-Vibe</code>. Custom typed prefixes and suffixes are preserved.</li>
                   <li><strong className='text-text-bright'>Grid ID:</strong> A short fingerprint of the pad layout, one letter per column: <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>k</code> kick, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>s</code> snare, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>c</code> clap, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>h</code> closed hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>o</code> open hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>p</code> percussion, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>x</code> other. Two kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device without relearning where anything sits. The panel shows the full ID, including the shared top row after an underscore; the exported name carries the column half, which is what fits on the Move's display.</li>
-                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 distinct randomized kits at once. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Tick Download as one zip to get a single zip archive instead.</li>
+                  <li><strong className='text-text-bright'>Batch Export:</strong> Export up to 10 randomized kits at once. A library with few samples per role yields similar kits. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Tick Download as one zip to get a single zip archive instead.</li>
                   <li><strong className='text-text-bright'>Device Transfer:</strong> Each exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> is a single file, not a folder: upload it to your Ableton Move. If you chose Download as one zip, unzip it first.</li>
                 </ul>
               </section>
@@ -1633,8 +1633,8 @@ export default function App() {
                 </p>
                 <p className='text-text-subtle'>
                   The one exception is ordinary web analytics: Cloudflare Web Analytics and Vercel
-                  Web Analytics count visits (page views, referrer, country, browser and device
-                  type), the same as any website. Your samples, your kits and your file names
+                  Web Analytics count visits (page views, referrer, country, browser, device type
+                  and load timings), the same as any website. Your samples, your kits and your file names
                   never leave the page.
                 </p>
               </section>
@@ -1653,7 +1653,8 @@ export default function App() {
                       github.com/Nipheon/kitCreatorMove
                     </a>{' '}
                     — the whole app, under the BSD Zero Clause licence: do what you like
-                    with it, no attribution needed.
+                    with it, no attribution needed. The one exception is the drum icon (see Thank You) and the
+                    images made from it: icon.png, icon-32.png, icon-180.png and og-image.png.
                   </li>
                   <li>
                     <strong className='text-text-bright'>Bugs and ideas:</strong>{' '}
@@ -1712,7 +1713,8 @@ export default function App() {
                     className='text-accent-yellow hover:underline font-medium'
                   >
                     Magnific
-                  </a>, used under its attribution licence.
+                  </a>, used under its attribution licence. The same goes for the favicon, the
+                  home-screen icon and the social preview image, which are made from it.
                 </p>
                 <p className='text-text-light'>
                   Check out{' '}
