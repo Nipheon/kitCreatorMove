@@ -748,9 +748,12 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   button on close, Escape closes it and Tab is trapped inside.
 - **Pad semantics are in the pad entry above** (play button, sibling controls, disabled `Pad N, empty`).
 - **Keyboard:** the global key handler is registered once, so it reaches `randomizeKit` and the help state through `randomizeRef`
-  and `helpOpenRef`; never close over state in it. Space generates from anywhere (a focused pad button too; Enter still activates
-  buttons), is ignored in text inputs, selects, checkboxes, sliders, contenteditable, custom toggles (`role=checkbox|switch|radio|menuitemcheckbox`, e.g. the collection parent eye, which keeps the browser's own Space activation) and while the help dialog is open (pad hotkeys
-  are also off then), ignores key repeat, and cancels the button click on keyup. It does nothing during a scan or export.
+  and `helpOpenRef`; never close over state in it. Space generates from anywhere except a focused button, link or `summary`
+  (they keep Space as their own activation; only the main Generate button, marked `data-generate`, hands it to the shortcut; Enter activates
+  any button), is ignored in text inputs, selects, checkboxes, sliders, contenteditable, custom toggles (`role=checkbox|switch|radio|menuitemcheckbox`, e.g. the collection parent eye, which keeps the browser's own Space activation) and while the help dialog is open (pad hotkeys
+  are also off then), ignores key repeat, and cancels the button click on keyup. It does nothing during a scan or export, or when no sample is usable (`usableCount === 0`, like the disabled Generate button).
+  A pointerdown on the Preview button while a preview runs stops it (the global capture handler) and sets `stoppedByPointerdown`, so the click
+  that follows is a no-op however slow it is; the flag is cleared right after pointerup/pointercancel.
   Ticking Auto Preview previews the current kit immediately (`toggleAutoPreview`); unticking leaves a running preview alone.
 - **Known gap, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
   `pointer-events-none` layer.

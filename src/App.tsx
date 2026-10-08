@@ -124,6 +124,9 @@ export default function App() {
   const previewTimerIds = useRef<number[]>([]);
   const spinTimerIds = useRef<number[]>([]);
   const lastStoppedTime = useRef(0);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  /** Set when a pointerdown on the Preview button stopped a running preview; the click that follows must not start one again. */
+  const stoppedByPointerdown = useRef(false);
   /** Pad index -> id of the sample that pad has finished buffering. */
   const readyPads = useRef(new Map<number, string>());
   /**
@@ -310,6 +313,11 @@ export default function App() {
   }, [stopPreview]);
 
   const previewKit = React.useCallback(() => {
+    // The pointerdown already stopped it; a slow click (over the 200 ms grace below) must not restart it.
+    if (stoppedByPointerdown.current) {
+      stoppedByPointerdown.current = false;
+      return;
+    }
     if (isPreviewing || Date.now() - lastStoppedTime.current < 200) {
       stopPreview();
       return;
@@ -331,7 +339,14 @@ export default function App() {
   useEffect(() => {
     if (!isPreviewing) return;
 
-    const handleGlobalInteraction = () => {
+    const handleGlobalInteraction = (e: Event) => {
+      if (e.type === 'pointerdown' && e.target instanceof Node && previewButtonRef.current?.contains(e.target)) {
+        stoppedByPointerdown.current = true;
+        // The click follows pointerup in the same task; whatever is left over (drag off the button, no click) is cleared right after.
+        const clear = () => window.setTimeout(() => { stoppedByPointerdown.current = false; }, 0);
+        window.addEventListener('pointerup', clear, { once: true });
+        window.addEventListener('pointercancel', clear, { once: true });
+      }
       stopPreview();
     };
 
@@ -426,14 +441,17 @@ export default function App() {
       if (e.target instanceof HTMLElement && e.target.isContentEditable) return;
       // Custom toggles (the collection parent eye) expect Space to activate them.
       if (e.key === ' ' && e.target instanceof HTMLElement && e.target.matches('[role=checkbox],[role=switch],[role=radio],[role=menuitemcheckbox]')) return;
+      // Buttons, links and summaries keep Space as their own activation key; only the generate
+      // button itself hands it to the shortcut.
+      if (e.key === ' ' && e.target instanceof HTMLElement && e.target.closest('button,a[href],summary') && !e.target.closest('[data-generate]')) return;
       if (e.repeat) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       // The dialog owns the keyboard while it is open: no pad hotkeys, no generating.
       if (helpOpenRef.current) return;
 
       if (e.key === ' ') {
-        // Space generates from anywhere, including a pad button that was just clicked.
-        // Enter still activates a focused button.
+        // Space generates from anywhere except a focused button, link or summary (which it
+        // activates) and the fields above. Enter still activates a focused button.
         e.preventDefault();
         spaceHandled.current = true;
         randomizeRef.current();
@@ -846,7 +864,7 @@ export default function App() {
 
   // The Space shortcut must not start a generation while a scan or an export is running.
   randomizeRef.current = () => {
-    if (isLoading || isExporting) return;
+    if (isLoading || isExporting || usableCount === 0) return;
     void randomizeKit();
   };
 
@@ -1287,6 +1305,7 @@ export default function App() {
             )}
             <button
               onClick={randomizeKit}
+              data-generate
               className='px-8 py-3 bg-accent-yellow text-text-inverse font-bold uppercase text-sm tracking-widest rounded-full hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_24px_var(--accent-yellow-glow)] cursor-pointer'
               disabled={usableCount === 0 || isGenerating}
             >
@@ -1294,6 +1313,7 @@ export default function App() {
             </button>
             <div className='flex items-center gap-3'>
               <button
+                ref={previewButtonRef}
                 onClick={previewKit}
                 disabled={isEmpty || isGenerating}
                 className='px-6 py-3 bg-surface-pad border border-border-main hover:border-accent-teal text-text-bright hover:text-accent-teal font-bold uppercase text-sm tracking-widest rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2'
@@ -1556,7 +1576,7 @@ export default function App() {
                       <div>Z X C V</div>
                     </div>
                   </li>
-                  <li><strong className='text-text-bright'>Space:</strong> Generates a new kit from anywhere on the page, except while you are typing in a field or the manual is open.</li>
+                  <li><strong className='text-text-bright'>Space:</strong> Generates a new kit from anywhere on the page, except while you are typing in a field, another button or link has focus (Space then activates it) or the manual is open.</li>
                   <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
                   <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
