@@ -566,6 +566,18 @@ export async function rerollSinglePad(
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
   nextKit[targetIndex] = chosenSample ?? current;
 
+  // The old sample has left the kit: its audio is free again unless another pad still holds the same bytes. Without
+  // this a partner open hat identical to the old closed hat was flagged `isDuplicate` by the partner rule below.
+  if (chosenSample && current && chosenSample !== current) {
+    const oldIdentity = await identity(current);
+    let heldElsewhere = false;
+    for (let i = 0; i < nextKit.length && !heldElsewhere; i++) {
+      const other = nextKit[i];
+      if (i !== targetIndex && other && (await identity(other)) === oldIdentity) heldElsewhere = true;
+    }
+    if (!heldElsewhere && oldIdentity !== (await identity(chosenSample))) used.delete(oldIdentity);
+  }
+
   // A re-rolled closed hat pulls its partner onto the open-hat pad on its right; re-rolling the
   // open pad itself draws as usual.
   const pair = chosenSample ? partnerPads(heldLayout).find(([left]) => left === targetIndex) : undefined;

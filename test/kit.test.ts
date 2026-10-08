@@ -2882,6 +2882,81 @@ await test('hat partners: rerolling a closed hat re-applies the rule, rerolling 
   assert.ok(notPartner > 0, 'rerolling the open pad draws as usual');
 });
 
+await test('hat partners: the partner pad draws uniformly among the partners, and unpaired closed hats get a plain draw', async () => {
+  // Three stems, each one closed hat with three open partners, plus three unpaired closed and three unpaired open hats.
+  const stems = ['Aaa', 'Bbb', 'Ccc'];
+  const closed = stems.map(n => makeSample(`${n}-Hat.wav`, 'Hat'));
+  const partnered = stems.flatMap(n => [1, 2, 3].map(k => makeSample(`${n}-HatOpn${k}.wav`, 'OHH', `${n}${k}`)));
+  const unpairedClosed = ['Ddd', 'Eee', 'Fff'].map(n => makeSample(`${n}-Hat.wav`, 'Hat'));
+  const unpairedOpen = ['Ggg', 'Hhh', 'Iii'].map(n => makeSample(`${n}-HatOpn.wav`, 'OHH'));
+  const samples = [
+    ...closed, ...unpairedClosed, ...partnered, ...unpairedOpen,
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`Perc${i}.wav`, 'Perc'))
+  ];
+  const index = buildPartnerIndex(samples);
+  const seen = new Map<string, Map<string, number>>();
+  let unpairedDraws = 0; let unpairedGotPartnerOwned = 0;
+  const draws = 2400;
+  for (let n = 0; n < draws; n++) {
+    const result = await generateRandomKit(samples, [], {}, undefined, { identityOf: fastIdentity });
+    assert.equal(result.layout.id, 'ksho_pppp');
+    const hat = result.kit[2]!; const open = result.kit[3]!;
+    if (index.has(hat.id)) {
+      assert.ok(index.get(hat.id)!.includes(open), `${hat.name} then ${open.name}`);
+      const row = seen.get(hat.name) ?? new Map<string, number>();
+      row.set(open.name, (row.get(open.name) ?? 0) + 1);
+      seen.set(hat.name, row);
+    } else {
+      unpairedDraws++;
+      if (partnered.includes(open)) unpairedGotPartnerOwned++;
+    }
+  }
+  // Per paired closed hat: its three partners come up about equally often (expected a third each).
+  for (const hat of closed) {
+    const row = seen.get(hat.name)!;
+    const total = [...row.values()].reduce((a, b) => a + b, 0);
+    assert.equal(row.size, 3, `${hat.name} reaches all three partners`);
+    for (const [name, count] of row) assert.ok(count > total / 3 * 0.6 && count < total / 3 * 1.4, `${hat.name} -> ${name}: ${count} of ${total}`);
+  }
+  // An unpaired closed hat leaves the open pad a plain draw from all 12 open hats: 9 of them are partnered (75%).
+  const share = unpairedGotPartnerOwned / unpairedDraws;
+  assert.ok(share > 0.65 && share < 0.85, `unpaired closed hats got a partnered open hat ${(share * 100).toFixed(0)}% of ${unpairedDraws} draws`);
+});
+
+await test('hat partners: a reroll leaves no partner flagged as a duplicate of the sample it replaced', async () => {
+  // The old closed hat and a partner of the new one are byte-identical copies: once the old one has left the kit the
+  // partner is free to take the open pad, and must not be flagged isDuplicate.
+  const oldClosed = makeSample('Old-Hat.wav', 'Hat', 'shared bytes');
+  const newClosed = makeSample('New-Hat.wav', 'Hat', 'new closed bytes');
+  const twinOpen = makeSample('New-HatOpn.wav', 'OHH', 'shared bytes');
+  const keptOpen = makeSample('Zzz-HatOpn.wav', 'OHH', 'kept open bytes');
+  const rest = [
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Kick${i}.wav`, 'Kick')),
+    ...Array.from({ length: 6 }, (_, i) => makeSample(`Snare${i}.wav`, 'Snare')),
+    ...Array.from({ length: 4 }, (_, i) => makeSample(`Perc${i}.wav`, 'Perc'))
+  ];
+  const library = [oldClosed, newClosed, twinOpen, keptOpen, ...rest];
+  const start = await generateRandomKit(library, [], {}, undefined, { identityOf: fastIdentity });
+  // the four hats only sit on pads 2 and 3 (a small library can substitute them elsewhere)
+  const kit = start.kit.map(s => (s && [oldClosed, newClosed, twinOpen, keptOpen].includes(s) ? null : s));
+  kit[2] = oldClosed;
+  kit[3] = keptOpen;
+  let flagged = 0; let partnered = 0;
+  for (let n = 0; n < 400; n++) {
+    for (const s of library) s.isDuplicate = false;
+    const next = await rerollSinglePad(library, kit, 2, {}, start.layout);
+    if (twinOpen.isDuplicate) flagged++;
+    if (next.kit[2] === newClosed && next.kit[3] === twinOpen) partnered++;
+    const identities = new Set<string>();
+    for (const s of next.kit) if (s) identities.add(await identityOf(s));
+    assert.equal(identities.size, next.kit.filter(Boolean).length, 'distinct audio on every pad');
+  }
+  assert.equal(flagged, 0, 'the twin was flagged as a duplicate of the sample that left the kit');
+  assert.equal(partnered, 400, 'the new closed hat pulls its partner');
+});
+
 // --- sample kinds ---------------------------------------------------------------------------
 
 const ALL_CATEGORIES = Object.keys(KINDS_BY_CATEGORY) as Category[];
