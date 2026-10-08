@@ -21,6 +21,7 @@ A fast, browser-based web application that turns your drum sample libraries into
 - 🔊 **Kit Preview & Auto-Preview**: Step through the whole kit in pad order, with playback timed from when each pad is actually audible rather than when playback was requested.
 - ✂️ **Silence Trimming**: Trims leading and trailing silence (< -60 dBFS) via the Web Audio API, preserving the source sample rate and bit depth. Metadata chunks (LIST, bext, iXML, ID3 ...) are always removed from WAV files, because the Move cannot use them and your originals stay with you. With trimming off the audio is copied as it is; with trimming on, a 16- or 24-bit WAV that has silence to cut is re-encoded (same sample rate and bit depth); AIFF files are converted to WAV on export; files that cannot be trimmed keep their audio.
 - 📦 **Batch Exporting**: Batch Download packages 2 to 10 kits at once: the kit on screen plus new randomised ones. By default each kit downloads as its own `.ablpresetbundle` file, one after another; your browser may ask once to allow multiple downloads, so choose **Allow**. Choose **One zip** for a single `<prefix>_Batch.zip` instead (unzip it before uploading the bundles to your Move).
+- 🔒 **Privacy**: Samples never leave your computer. The only things the app stores, in your browser's local storage, are two interface settings: the Quick preview tick and the batch amount. Cloudflare and Vercel web analytics count visits only.
 - 🔔 **Toast Warnings**: A top-centre notification for substituted categories, empty pads, or roles the library cannot fill.
 
 ## Quick Start
