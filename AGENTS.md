@@ -719,7 +719,13 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **Toasts:** `Toast` sits top-centre, shows `substituted`, `empty` and `unavailableRoles`, is presentational and `App` owns timing (`WARNING_TOAST_MS`, 5s); a second internal timer was a second source
   of truth and kept resetting because `onClose` was a new closure (now a `useCallback`). Entrance animation is local CSS
   (`.toast-enter`, honours `prefers-reduced-motion`), not `tailwindcss-animate` classes (bare Tailwind 4, no plugins, they compile
-  to nothing). `role="status"` (polite), not `role="alert"` (assertive).
+  to nothing). `role="status"` (polite), not `role="alert"` (assertive). The toast's live region is a permanently mounted fixed rail
+  (`inset-x-3`, centred; below the header under `sm`, so it does not cover the title and Help on a phone) and only its content comes and
+  goes. The same rule holds for every live region: the error box (`role=alert`), the notice box, "Checking samples" and the scan announcer
+  (one `sr-only` status for all pending rows) are always mounted and filled, because a region inserted together with its text is not
+  reliably announced. The animation is Y-only (the rail does the centring).
+- **The root is `h-screen` with `supports-[height:100dvh]:h-dvh`** (not a bare `h-dvh` class beside `h-screen`: Tailwind emits `h-dvh`
+  before `h-screen`, so the fallback would win), so mobile browser chrome does not cut the bottom controls off.
 - **The UI must not state things the app does not know.** Hardcoded device status, firmware, bit depth and sample rate were removed.
   Report only filled pads, source audio size, the active layout and usable-vs-total samples. The panel no longer says samples keep
   their original format (removed for layout room, still true); re-add only if there is room.

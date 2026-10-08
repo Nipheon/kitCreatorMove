@@ -1045,7 +1045,7 @@ export default function App() {
 
   return (
     <div
-      className="flex flex-col h-screen w-screen bg-surface-darkest text-text-bright font-sans overflow-hidden"
+      className="flex flex-col h-screen supports-[height:100dvh]:h-dvh w-screen bg-surface-darkest text-text-bright font-sans overflow-hidden"
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -1116,6 +1116,10 @@ export default function App() {
           <PickSources onPick={processFiles} disabled={isLoading || isGenerating} />
           <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
             <SourceFolderRows folders={sourceFolders} disabled={isGenerating} onToggle={toggleFolders} onRemove={removeFolders} />
+            {/* Mounted always, filled while a scan runs: a live region that appears together with its text is not reliably announced. */}
+            <div role='status' className='sr-only'>
+              {scanning.map(row => describeScanProgress(row.folder, row.files).announce).join('. ')}
+            </div>
             {scanning.map(row => {
               const text = describeScanProgress(row.folder, row.files);
               return (
@@ -1127,7 +1131,6 @@ export default function App() {
                       <span className='text-sm truncate text-text-bright flex-1'>{row.folder}</span>
                     </div>
                     <div className='text-xs text-text-muted mt-0.5 pl-[23px]' aria-hidden='true'>{text.visible}</div>
-                    <div role='status' className='sr-only'>{text.announce}</div>
                     <div className='scan-bar absolute left-0 right-0 bottom-0 h-0.5 bg-border-main' aria-hidden='true'>
                       <div className='scan-bar-fill h-full bg-accent-yellow' />
                     </div>
@@ -1305,11 +1308,9 @@ export default function App() {
           <div className='relative flex items-center gap-3 sm:gap-4 flex-wrap justify-center'>
             {/* Only appears once a check has run past PROGRESS_DELAY_MS; absolutely placed so
                 it never moves the grid. */}
-            {checkProgress?.kind === 'pads' && (
-              <div role='status' className='pointer-events-none absolute top-full left-0 right-0 mt-2 text-sm text-text-muted uppercase tracking-wider text-center'>
-                Checking samples {checkProgress.done} / {checkProgress.total}
-              </div>
-            )}
+            <div role='status' className='pointer-events-none absolute top-full left-0 right-0 mt-2 text-sm text-text-muted uppercase tracking-wider text-center'>
+              {checkProgress?.kind === 'pads' && `Checking samples ${checkProgress.done} / ${checkProgress.total}`}
+            </div>
             <button
               onClick={randomizeKit}
               data-generate
@@ -1484,9 +1485,9 @@ export default function App() {
           </div>
 
           {/* Messages stack up (notices are appended), so each box wraps long text, caps its height and can be dismissed. */}
+          <div role='alert'>
           {error && (
             <div
-              role='alert'
               className='mt-6 flex items-start gap-2 text-sm text-danger-text border border-danger-border bg-danger-bg rounded px-3 py-2'
             >
               <div className='flex-1 min-w-0 max-h-40 overflow-y-auto break-words'>{error}</div>
@@ -1501,9 +1502,10 @@ export default function App() {
               </button>
             </div>
           )}
+          </div>
+          <div role='status'>
           {notice && (
             <div
-              role='status'
               className='mt-6 flex items-start gap-2 text-sm text-warning-amber border border-warning-border bg-warning-bg rounded px-3 py-2'
             >
               <div className='flex-1 min-w-0 max-h-40 overflow-y-auto break-words'>{notice}</div>
@@ -1518,6 +1520,7 @@ export default function App() {
               </button>
             </div>
           )}
+          </div>
 
         </aside>
       </main>
