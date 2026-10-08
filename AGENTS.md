@@ -94,7 +94,7 @@ path with more than three segments means you are in the wrong place.
   `compression: 'STORE'` everywhere: audio barely compresses and DEFLATE burns CPU.
 - **A batch downloads each kit as its own `.ablpresetbundle` by default** (`exportBatchSeparately`: one bundle in memory at a time,
   `DOWNLOAD_GAP_MS` = 300 between downloads because browsers drop or prompt on back-to-back ones; the browser may ask once to allow
-  multiple downloads and the app says to choose Allow). The "Download as one zip" checkbox (`batchAsZip`) switches to
+  multiple downloads and the app says to choose Allow, in the notice shown only after the FIRST separate batch of a session: `allowHintShown` ref in `App.tsx`, not persisted, reset on reload). The "Download as one zip" checkbox (`batchAsZip`) switches to
   `exportBatchKits`, one `<prefix>_Batch.zip` wrapping the bundles. `downloadBlob` revokes its object URL after `REVOKE_DELAY_MS`
   (60 s); revoking sooner cancels large or queued downloads in Firefox and Safari. Do not shorten it.
 - **Export failures name where they failed.** `ExportError` carries `stage` (`read`, `trim`, `build`, `archive`, `download`), the

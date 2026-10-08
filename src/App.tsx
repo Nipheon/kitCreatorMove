@@ -129,6 +129,7 @@ export default function App() {
    * a kit and rolling past it must never make a later kit collide with a phantom.
    */
   const exportedNames = useRef(new Set<string>());
+  const allowHintShown = useRef(false);
   /** Removes the in-flight `pad-ready` gate listener, if a preview is waiting on one. */
   const readyWaitCleanup = useRef<(() => void) | null>(null);
   // Detaches the listener waiting for the current step's `pad-started`; stopPreview must
@@ -956,7 +957,11 @@ export default function App() {
           const result = await exportBatchSeparately(batch, { trimSilence, onProgress });
           names.push(...result.downloaded);
           report = result.report;
-          setNotice(prev => [prev, `Downloaded ${result.downloaded.length} files. If your browser asked to allow multiple downloads, choose Allow; if files are missing, use "Download as one zip".`].filter(Boolean).join(' '));
+          // Only the first separate batch of a session: the browser asks once per site, so repeating the hint is noise.
+          if (!allowHintShown.current) {
+            allowHintShown.current = true;
+            setNotice(prev => [prev, `Downloaded ${result.downloaded.length} files. If your browser asked to allow multiple downloads, choose Allow; if files are missing, use "Download as one zip".`].filter(Boolean).join(' '));
+          }
         }
       } else {
         const single = uniqueKitName(exportName, exportedNames.current);
