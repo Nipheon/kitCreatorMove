@@ -80,8 +80,9 @@ path with more than three segments means you are in the wrong place.
   await.
 - **Duplicate folders are skipped by lowercased key** through `mergeScannedFolders` (`utils/folderMerge.ts`, pure, takes the
   *current* list). The key (`folderKey`) is the name, or `parent name + '/' + name` for a sub-pack (see Collections); a key repeated
-  within one drop counts once, and a drop where everything was skipped shows nothing in the UI (console.info only; counted per dropped entry, so a
-  collection dropped twice is one folder, not seven).
+  within one drop counts once. Skipped folders are always announced in the notice box (`skippedFoldersNotice`: "Skipped N folders already
+  loaded under the same name: X."), also when other folders were added, because a same-named folder from another pack is dropped by the
+  name key too. Counted per dropped entry, so a collection dropped twice is one folder, not seven.
 - **Skip Loops / Skip Non-Drums do not re-roll the kit.** They change the pool the next kit draws from; the usable count and
   per-type figures beside them update at once. A kit generated earlier may hold a sample the filter would now exclude, by design:
   nothing is taken away mid-listen. Type toggles (`disabledTypes`) do regenerate, passing the new set explicitly because state still
@@ -105,9 +106,11 @@ path with more than three segments means you are in the wrong place.
   read eagerly with `arrayBuffer()` inside `createPresetBundle`, not lazily by JSZip, so a read failure names the sample.
 - **The size guard follows what is held in memory:** the largest kit for separate downloads, the sum of all kits for the zip. It is
   computed from the real kits 2..n (`buildBatch` runs before the confirm), not the on-screen kit times the batch size.
-- **The error and notice boxes stay short.** Never shown: "already loaded" folders (console.info), files the app cannot read (one
-  console.warn per drop), locked pads holding the same audio. A drop adding nothing shows only "No .wav or .aiff files found...", and
-  nothing at all when everything was already loaded. Still shown: the split notice, export notices/errors, "Error processing files".
+- **The error and notice boxes stay short.** Never shown: files the app cannot read (one console.warn per drop), locked pads holding the
+  same audio. A drop adding nothing shows only "No .wav or .aiff files found..." (or the skipped-folders notice when everything was
+  already loaded). Still shown: the skipped-folders and split notices, export notices/errors, "Error processing files".
+- **Drops are ignored in three cases:** while a scan or a generation is running (like the Pick buttons; a drop's generation would supersede a
+  pending remove/toggle/export and silently cancel it), and when the drag carries no `Files` (dragged text or a link).
 - **Export notices are appended, never replaced:** after a batch `emptyPadsNotice` (`countKitsWithEmptyPads`: "N of M kits have empty
   pads") and the trim notices (`trimFailures`, and `trimSkipped` for formats that cannot be trimmed) stack after any rename notice.
 - **`safeFileName()` (`kitNaming.ts`) sanitises the typed prefix/suffix for the download and zip entry names** (`/ \ : * ? " < > |` and
@@ -591,8 +594,9 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **The prefix describes what the kit is built from**, recomputed when folders are added, removed or disabled: none enabled gives
   `DEFAULT_PREFIX` (`MOV`), one gives its name (first three letters), more gives `MULTI_FOLDER_PREFIX` (`MKT`). Setting it only on first drop left `AAAA-` on kits built entirely from "BBBB".
 - **Once the user types a prefix, deriving stops** (`prefixEdited`).
-- **The suffix is rolled once on first drop**, then belongs to the user (Randomize Suffix button). Folder changes must not reroll
-  it.
+- **The suffix is rolled once on the first drop of the session** (`suffixSettled` ref), then belongs to the user (typing, or the Randomize
+  Suffix button). Folder changes must not reroll it, also when the list is emptied and refilled. The prefix input stores uppercase
+  (CSS only shows it, so the state must match).
 - Naming lives in `kitNaming.ts` so it can be tested (the suite is Node-only). Typed prefix/suffix reach file names only through
   `safeFileName()` (see Audio and export).
 - **Export names dedupe against what was actually exported, never what was generated** (`exportedNames` in `App.tsx`,

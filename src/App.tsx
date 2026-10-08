@@ -14,7 +14,7 @@ import {
   classifySample, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
-import { mergeScannedFolders } from './utils/folderMerge';
+import { mergeScannedFolders, skippedFoldersNotice } from './utils/folderMerge';
 import { planRemove, planToggle } from './utils/folderGroups';
 import { expandCollections } from './utils/packSplit';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitResult, rerollSinglePad } from './utils/kitGenerator';
@@ -95,6 +95,8 @@ export default function App() {
   // Once the user types their own prefix, stop deriving it from the folder list.
   const [prefixEdited, setPrefixEdited] = useState(false);
   const [kitSuffix, setKitSuffix] = useState('KIT');
+  /** True once the suffix was rolled (first drop) or touched by the user; from then on folder changes never reroll it. */
+  const suffixSettled = useRef(false);
   const [batchSize, setBatchSize] = useState(1);
   const [batchAsZip, setBatchAsZip] = useState(false);
   const [trimSilence, setTrimSilence] = useState(true);
@@ -158,6 +160,7 @@ export default function App() {
       if (cancelled) return;
       setKitResult(seeded);
       setKitPrefix(prefixForFolders(folders));
+      suffixSettled.current = true;
       setKitSuffix(generateKitName(folders[0].name).suffix);
     });
     return () => { cancelled = true; };
@@ -623,7 +626,10 @@ export default function App() {
       const { accepted } = mergeScannedFolders(current.sourceFolders, candidates);
       // Counted per dropped entry, so a collection dropped twice reads as one folder, not seven.
       const acceptedNames = new Set(accepted.map(f => f.parent?.name ?? f.name));
-      const skippedDuplicates = topLevel.filter(t => !acceptedNames.has(t.name)).length;
+      const skippedNames = topLevel.filter(t => !acceptedNames.has(t.name)).map(t => t.name);
+      const skippedNote = skippedFoldersNotice(skippedNames);
+      // Visible even when other folders were added: a same-named folder from another pack is not loaded.
+      if (skippedNote) setNotice(prev => [prev, skippedNote].filter(Boolean).join(' '));
       const newFolders: SourceFolder[] = [];
 
       for (const folder of accepted) {
@@ -654,9 +660,8 @@ export default function App() {
       }
 
       if (newFolders.length === 0) {
-        // Everything already loaded: nothing visible happens. Otherwise say why nothing was added.
-        if (skippedDuplicates > 0) console.info(`Nothing added: ${skippedDuplicates} dropped folder(s) already loaded.`);
-        else setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
+        // Everything already loaded: the skipped-folders notice above says so. Otherwise say why nothing was added.
+        if (skippedNames.length === 0) setError('No .wav or .aiff files found in what you dropped. Move plays those two formats only.');
         return;
       }
 
@@ -690,9 +695,12 @@ export default function App() {
       }
       // Re-read: the prefix may have been typed while the draw ran.
       if (!latest.current.prefixEdited) setKitPrefix(prefixForFolders(updated));
-      // The suffix is only rolled for the first drop; after that it is the user's,
-      // changed by the Randomize Suffix button.
-      if (wasEmpty) setKitSuffix(generateKitName(newFolders[0].name).suffix);
+      // The suffix is only rolled for the first drop of the session; after that it is the user's
+      // (typed, or the Randomize Suffix button), also when the list was emptied and refilled.
+      if (wasEmpty && !suffixSettled.current) {
+        suffixSettled.current = true;
+        setKitSuffix(generateKitName(newFolders[0].name).suffix);
+      }
     } catch (err) {
       console.error('Failed to process files:', err);
       setError('Error processing files. Please try again.');
@@ -709,7 +717,11 @@ export default function App() {
     e.preventDefault();
     dragDepth.current = 0;
     setIsDragging(false);
-    if (isLoading) return; // two overlapping scans would both capture the same state
+    // Dragged text or a link carries no files: nothing to scan, nothing to report.
+    if (!Array.from(e.dataTransfer.types ?? []).includes('Files')) return;
+    // Two overlapping scans would both capture the same state, and a drop's generation would
+    // supersede a pending remove/toggle/export, silently cancelling it. Same as the Pick buttons.
+    if (isLoading || generating.current) return;
     if (e.dataTransfer.items) processFiles(e.dataTransfer.items);
   };
 
@@ -1312,7 +1324,10 @@ export default function App() {
                 <span id='preset-name-label' className='text-sm text-text-muted uppercase'>Preset Name</span>
                 <button
                   type='button'
-                  onClick={() => setKitSuffix(generateKitName('').suffix)}
+                  onClick={() => {
+                    suffixSettled.current = true;
+                    setKitSuffix(generateKitName('').suffix);
+                  }}
                   className='text-sm text-accent-yellow hover:brightness-125 transition-all flex items-center gap-1 cursor-pointer'
                 >
                   <RefreshCw size={14} /> Randomize Suffix
@@ -1323,7 +1338,8 @@ export default function App() {
                   type='text'
                   value={kitPrefix}
                   onChange={(e) => {
-                    setKitPrefix(e.target.value);
+                    // The field is shown uppercase; store what is shown.
+                    setKitPrefix(e.target.value.toUpperCase());
                     setPrefixEdited(true);
                   }}
                   className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright uppercase'
@@ -1335,7 +1351,10 @@ export default function App() {
                 <input
                   type='text'
                   value={kitSuffix}
-                  onChange={(e) => setKitSuffix(e.target.value)}
+                  onChange={(e) => {
+                    suffixSettled.current = true;
+                    setKitSuffix(e.target.value);
+                  }}
                   className='w-1/2 bg-surface-pad border border-border-main rounded px-3 py-2 text-sm focus:border-accent-yellow outline-none text-text-bright'
                   placeholder='SUFFIX'
                   maxLength={12}
@@ -1518,7 +1537,7 @@ export default function App() {
                   <li><strong className='text-text-bright'>Pick folders / Pick files:</strong> No drag and drop, for instance on a phone? Use the buttons above the folder list. Pick folders opens your system's folder picker and loads the folder you choose, with its subfolders, exactly like a drop. If your browser only lets you pick files, use Pick files: loose files are grouped into one Dropped Files folder.</li>
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
-                  <li><strong className='text-text-bright'>Duplicate Protection:</strong> Folders already present in your list are automatically skipped.</li>
+                  <li><strong className='text-text-bright'>Duplicate Protection:</strong> A folder whose name is already in your list is skipped, even if it comes from a different pack, and a notice names what was skipped.</li>
                   <li><strong className='text-text-bright'>Collections:</strong> A folder that holds several separate packs (Kit 1, Kit 2, ...) is listed as a parent with its sub-packs underneath. Tick the parent to use all of them, or tick only the sub-packs you want to mix. The parent's eye looks half-filled when only some are on; clicking it then turns all on. The cross on the parent removes the whole collection, on a sub-pack just that one. A folder made of Kicks, Snares, FX and similar folders is one pack and is not split.</li>
                   <li><strong className='text-text-bright'>Hide a Folder:</strong> The eye icon next to a loaded folder takes it out of the pool without unloading it. The kit re-rolls immediately without those samples, the folder dims in the list, and the eye brings it straight back — handy for auditioning one pack against another. Locked pads keep what they are holding even if its folder is hidden.</li>
                   <li><strong className='text-text-bright'>Remove a Folder:</strong> The cross unloads it for good. Hiding is the reversible one.</li>

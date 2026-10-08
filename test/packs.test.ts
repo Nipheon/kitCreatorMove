@@ -9,7 +9,7 @@ import { DroppedFile, DroppedFolder, LOOSE_FILES_FOLDER } from '../src/utils/fil
 import {
   enableOnToggle, groupFolders, planRemove, planToggle, triState
 } from '../src/utils/folderGroups';
-import { folderKey, mergeScannedFolders } from '../src/utils/folderMerge';
+import { folderKey, mergeScannedFolders, skippedFoldersNotice } from '../src/utils/folderMerge';
 import { DEFAULT_PREFIX, MULTI_FOLDER_PREFIX, prefixForFolders } from '../src/utils/kitNaming';
 import {
   expandCollections, isRoleLikeName, MIN_PACK_FILES, OTHER_FILES_SUFFIX, splitPacks
@@ -166,6 +166,15 @@ test('duplicate detection keys sub-packs on parent name + name', () => {
   assert.equal(again.skippedDuplicates, 1);
   // A plain folder called "Kit 1" is a different thing from a sub-pack called "Kit 1".
   assert.equal(mergeScannedFolders(current, [{ name: 'Kit 1' }]).accepted.length, 1);
+});
+
+test('skippedFoldersNotice lists each skipped name once and is null when nothing was skipped', () => {
+  assert.equal(skippedFoldersNotice([]), null);
+  assert.equal(skippedFoldersNotice(['Kicks']), 'Skipped 1 folder already loaded under the same name: Kicks.');
+  assert.equal(
+    skippedFoldersNotice(['Kicks', 'Snares', 'Kicks']),
+    'Skipped 2 folders already loaded under the same name: Kicks, Snares.'
+  );
 });
 
 // --- prefix --------------------------------------------------------------------------------

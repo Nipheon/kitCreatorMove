@@ -32,3 +32,14 @@ export function mergeScannedFolders<T extends Keyed>(
   }
   return { accepted, skippedDuplicates };
 }
+
+/**
+ * The visible note for dropped folders that were not added because a folder of the same name
+ * is already loaded (the key is the name, so a same-named folder from another pack lands here too).
+ * Null when nothing was skipped. Names repeated within one drop are listed once.
+ */
+export function skippedFoldersNotice(names: readonly string[]): string | null {
+  const unique = [...new Set(names)];
+  if (unique.length === 0) return null;
+  return `Skipped ${unique.length} folder${unique.length === 1 ? '' : 's'} already loaded under the same name: ${unique.join(', ')}.`;
+}
