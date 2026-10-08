@@ -318,8 +318,8 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
     names are unique across categories, so the set needs no category. Nothing persists. `toggleKind` regenerates unlocked pads at once
     and passes the new set explicitly, like `toggleType`.
   - **Breakdown kind sub-lists:** `kindCountsByRow` (pure, `kitGenerator.ts`) counts usable/total per kind under each pool row; Kick,
-    Snare, Clap and `PERC + CRASH` (crash kinds are under Perc) get an expandable list when the library holds >= 2 kinds in the row. Perc
-    starts open, the others closed (`aria-expanded`, chevron button), each kind has the type rows' eye toggle.
+    Snare, Clap and `PERC + CRASH` (crash kinds are under Perc) get an expandable list when the library holds >= 2 kinds in the row. All
+    lists start closed and only the user opens them (`aria-expanded`, chevron button; owner rule 2026-10-08: no chevron ever opens by itself), each kind has the type rows' eye toggle.
   - **Variety (`preferNewKinds`, `KIND_CAP` = 2):** while a pool is popped, a candidate is welcome when fewer than two pads of its variety
     group (`VARIETY_GROUPS`: Perc + Crash) hold its kind; the pick is uniform among welcome candidates (last welcome one of the shuffled
     pool). If none is welcome the normal pop happens, so it never empties a pad. It lives inside `claimFrom`, so fill order, top-row-first
@@ -741,7 +741,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
     supersede the previous one.
   - *Tri-state*: `triState(children)` is on/off/mixed. The parent eye is `role=checkbox` with `aria-checked` true/false/`mixed`; clicking
     a mixed parent turns every child on (`enableOnToggle`). The chevron has `aria-expanded`/`aria-controls`, the child list is
-    `role=group`. Expanded by default for <= 10 children, collapsed above; the override lives in component state, not persisted.
+    `role=group`. Always collapsed until the user opens it (owner rule 2026-10-08); the override lives in component state, not persisted.
   - *Counter*: "N folder(s) used" counts enabled leaf folders (children count individually); the parent row shows `x/y sub-packs`.
 - **Scan progress is inline, not an overlay (`ScanProgress` in `fileReader.ts`, `utils/scanProgress.ts`).** `getFilesFromDataTransfer`
   takes an optional third `onProgress({ folder, files })`: once per top-level entry with `files: 0` before anything is read (loose

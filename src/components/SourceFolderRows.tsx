@@ -3,8 +3,6 @@ import { useState } from 'react';
 import { SourceFolder } from '../types';
 import { enableOnToggle, groupFolders, triState } from '../utils/folderGroups';
 
-/** A collection with this many sub-packs or fewer opens expanded; a longer list starts collapsed. */
-export const EXPAND_BY_DEFAULT_MAX = 10;
 
 interface Props {
   folders: SourceFolder[];
@@ -60,7 +58,7 @@ export function SourceFolderRows({ folders, disabled, onToggle, onRemove }: Prop
 
         const state = triState(row.children);
         const ids = row.children.map(c => c.id);
-        const expanded = expandedOverride[row.id] ?? row.children.length <= EXPAND_BY_DEFAULT_MAX;
+        const expanded = expandedOverride[row.id] ?? false;
         const total = row.children.reduce((n, c) => n + c.samples.length, 0);
         const enabledCount = row.children.filter(c => c.isEnabled !== false).length;
         const listId = `subpacks-${row.id}`;
