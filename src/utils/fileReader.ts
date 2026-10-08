@@ -498,7 +498,9 @@ const CRASH = [
   // "Rid1", "Rid1pp" (ride, 7 drum-machine makers).
   'rid',
   // "Bld_Crs", "jkbcym_crs_15" (8 packs).
-  'crs'
+  'crs',
+  // Round 4, owner decision: a gong is a cymbal (kind `cymbal`); whole token only (WHOLE_TOKEN_ONLY).
+  'gong'
 ];
 
 /**
@@ -606,7 +608,7 @@ const TOM_COMPOUND = /^(?:h|m|l|hi|mid|lo|low|high|floor|e)tom$|^tom(?:h|l|hi|lo
 const WHOLE_TOKEN_ONLY = [
   'snar', 'klap', 'agog', ...WEAK_WORDS,
   // Round 4: glued they read cowboy, congratulations/congo, clavinet/clavicle, shaky/shakira, timbaland.
-  'cowb', 'cong', 'clav', 'trian', 'shak', 'shkr', 'caba', 'timb', 'timbal'
+  'gong', 'cowb', 'cong', 'clav', 'trian', 'shak', 'shkr', 'caba', 'timb', 'timbal'
 ];
 
 /**
@@ -785,7 +787,12 @@ function classifyKind(text: string, isFile = false, folderBlocksWeak = false): C
    * and only on a bare token, so it cannot fire on a stray year or catalogue number that
    * happens to sit next to a real word.
    */
-  if (tokens.includes('808')) return { category: 'Kick', kind: '808' };
+  if (tokens.includes('808')) {
+    // Owner decision: 808 is a whole drum machine, so a bare `808` is the kick only when nothing names another sound.
+    // That includes the weak words (`808 cow`, `808 shake`, `808 stick`).
+    const weak = FALLBACK_WORDS.find(([words]) => tokens.some(t => words.includes(t)));
+    return weak ? { category: weak[1], kind: weak[2] } : { category: 'Kick', kind: '808' };
+  }
 
   // Cans and bottles shaken like a shaker ("Shaking A Full Unopened Soda Can"). A weak
   // word, so it is checked after the 808 rule: "808 Shaking" in an 808s folder is a kick.

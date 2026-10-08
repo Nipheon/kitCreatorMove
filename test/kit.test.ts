@@ -995,8 +995,18 @@ await test('round 4: shake, stick(s) and cow are weak words: they fill an unplac
   assert.equal(categorizeSample('Stick 1.wav', '/Pack/Snares'), 'Snare');
   assert.equal(categorizeSample('Shake.wav', '/Pack/Kicks'), 'Kick');
   assert.equal(categorizeSample('Shake That.wav', '/Pack/Claps'), 'Clap');
-  // A categorised name keeps its meaning (the bare-808 rule runs before the weak words).
-  assert.deepEqual(classifySample('trunk shake 808.wav', '/Pack/808s'), { category: 'Kick', kind: '808' });
+  // Owner decision: a percussion word beats the bare-808 kick rule, the weak words included; bare 808 stays a kick.
+  assert.deepEqual(classifySample('trunk shake 808.wav', '/Pack/808s'), { category: 'Perc', kind: 'shaker' });
+  for (const [name, category, kind] of [['808cow.wav', 'Perc', 'cowbell'], ['808 Cowbell.wav', 'Perc', 'cowbell'], ['808 Clave.wav', 'Perc', 'woodblock'],
+    ['808 Shaker.wav', 'Perc', 'shaker'], ['808 Tom.wav', 'Perc', 'tom'], ['808 Stick.wav', 'Perc', 'percussion'],
+    ['808.wav', 'Kick', '808'], ['808 Kick.wav', 'Kick', 'kick'], ['808 Bass.wav', 'Kick', '808'], ['808 Clap.wav', 'Clap', 'clap'], ['808 Snare.wav', 'Snare', 'snare']] as [string, Category, SampleKind][]) {
+    const c = classifySample(name);
+    assert.deepEqual([c.category, c.kind], [category, kind], name);
+  }
+  assert.deepEqual(classifySample('Hit 01.wav', '/Pack/808s'), { category: 'Kick', kind: '808' });
+  // A gong is a cymbal (owner decision), whole token only.
+  assert.deepEqual(classifySample('Gong 2.wav'), { category: 'Crash', kind: 'cymbal' });
+  for (const name of ['Gongula.wav', 'Gongon.wav']) assert.equal(categorizeSample(name), 'Other', name);
   assert.equal(categorizeSample('Closed Hat Stick.wav'), 'CHH');
   // Non-drum and loop files stay out of the percussion pool.
   for (const [name, dir] of [['Cow.wav', '/Pack/Vox'], ['Shake.wav', '/Pack/FX'], ['Stick Hit.wav', '/Pack/Vocals'], ['Voice Stick 1.wav', '/Pack/Samples']] as [string, string][]) {
@@ -3386,7 +3396,7 @@ await test('kinds: the kind always belongs to the category (word lists, pairs, f
   const words = [...new Set([...V.KICK, ...V.SNARE, ...V.CLAP, ...V.CRASH, ...V.PERC, ...V.HAT, ...V.CLOSED, ...V.OPEN,
     '808', 'shaking', 'chat', 'ohat', 'openhat', 'ophh', 'clhh', 'bda', 'sdb', 'op', 'hi', 'side', 'stick', 'cross', 'wood', 'block', 'finger', 'hand',
     'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox', 'hollywood', 'snapchat', 'percussive', 'agog',
-    'shake', 'cow', 'stick', 'stk', 'timb', 'htom', 'hitom', 'clhat', 'hatopen', 'phh', 'cowb', 'clav', 'rid', 'cong', 'per'])];
+    'shake', 'cow', 'stick', 'stk', 'timb', 'htom', 'hitom', 'clhat', 'hatopen', 'phh', 'cowb', 'clav', 'rid', 'cong', 'per', 'gong'])];
   let n = 0;
   const check = (name: string, dir = '') => {
     const c = classifySample(name, dir);
