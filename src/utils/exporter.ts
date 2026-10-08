@@ -20,7 +20,8 @@ export interface ExportReport {
 
 /** Sample packs reuse names like "Kick.wav", so pad-prefix every entry to keep them distinct. */
 export function zipEntryName(sample: Sample, index: number): string {
-  return `${index.toString().padStart(2, '0')}_${sample.name}`;
+  // A backslash in a zip entry name is read as a path separator by some extractors.
+  return `${index.toString().padStart(2, '0')}_${sample.name.replace(/\\/g, '-')}`;
 }
 
 export function kitSizeBytes(kit: (Sample | null)[]): number {

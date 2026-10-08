@@ -88,11 +88,20 @@ export function prefixForFolders(folders: SourceFolder[]): string {
  * merely appeared in the preview.
  */
 export function uniqueKitName(base: string, taken: Set<string>): string {
-  if (!taken.has(base)) return base;
+  const keys = fileKeys(taken);
+  if (!keys.has(fileKey(base))) return base;
   let n = 2;
-  while (taken.has(`${base}-${n}`)) n++;
+  while (keys.has(fileKey(`${base}-${n}`))) n++;
   return `${base}-${n}`;
 }
+
+/**
+ * Kits are compared by the file name they will download or be zipped under, lower-cased:
+ * macOS and Windows treat `zap` and `Zap` as one file, and a zip entry written twice under the
+ * same name silently replaces the first bundle.
+ */
+const fileKey = (name: string) => safeFileName(name).toLowerCase();
+const fileKeys = (names: Set<string>) => new Set([...names].map(fileKey));
 
 /**
  * The grid id travels in the exported kit name so a rack can be identified on the
@@ -154,6 +163,7 @@ export async function buildBatch({
   // Seeded from what has actually been exported, so a kit generated and discarded
   // never pushes a number onto a later name.
   const taken = new Set(exportedNames);
+  const takenKeys = fileKeys(taken);
   const kits: { kit: (Sample | null)[]; name: string }[] = [];
 
   // Held so a filter changed since the last generate cannot give kits 2..n another grid
@@ -162,6 +172,7 @@ export async function buildBatch({
 
   const first = uniqueKitName(exportName, taken);
   taken.add(first);
+  takenKeys.add(fileKey(first));
   kits.push({ kit: [...kit], name: first });
 
   for (let i = 1; i < batchSize; i++) {
@@ -172,12 +183,13 @@ export async function buildBatch({
     let name = '';
     for (let attempt = 0; attempt < SUFFIX_ATTEMPTS && !name; attempt++) {
       const candidate = kitNameFor(prefix, suffix(), next.layout.columnsId);
-      if (!taken.has(candidate)) name = candidate;
+      if (!takenKeys.has(fileKey(candidate))) name = candidate;
     }
     if (!name) {
       name = uniqueKitName(kitNameFor(prefix, suffix(), next.layout.columnsId), taken);
     }
     taken.add(name);
+    takenKeys.add(fileKey(name));
     kits.push({ kit: next.kit, name });
   }
   return kits;

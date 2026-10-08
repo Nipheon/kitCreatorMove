@@ -115,8 +115,11 @@ path with more than three segments means you are in the wrong place.
   pads") and the trim notices (`trimFailures`, and `trimSkipped` for formats that cannot be trimmed) stack after any rename notice.
 - **`safeFileName()` (`kitNaming.ts`) sanitises the typed prefix/suffix for the download and zip entry names** (`/ \ : * ? " < > |` and
   control characters become `-`; empty falls back to `MOV`). The preset name stored inside the file stays exactly as typed.
+  **Kit names are deduped on `safeFileName(name).toLowerCase()`** (`uniqueKitName`, `buildBatch`): a typed `zap` and a random `Zap` are one
+  file on macOS/Windows, and `masterZip.file` silently replaces a same-named entry. Pinned by tests.
 - **Zip entries are prefixed with the pad index** (`zipEntryName`). Packs are full of `Kick.wav`; without the prefix two samples
-  collapse into one entry and a pad loses audio.
+  collapse into one entry and a pad loses audio. A backslash in the sample name becomes `-` (some extractors read it as a
+  separator); the percent-encoded preset URI is built from the same entry name, so the two cannot drift.
 - **Do not touch `encodeURIComponent` in `exporter.ts`.** Percent-encoded `sampleUri`s were verified to resolve on hardware; leave
   the encoding alone.
 - **WAV and AIFF only.** Move plays nothing else. FLAC/M4A/MP3/OGG were once accepted, passed through trimming untouched and failed

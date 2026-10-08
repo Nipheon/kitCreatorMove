@@ -31,7 +31,7 @@ import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { defaultKind, KIND_LABELS, kindBelongsTo, kindsOf, KINDS_BY_CATEGORY, SampleKind } from '../src/utils/kinds';
 import {
-  createPresetBundle, DOWNLOAD_GAP_MS, ExportError, exportBatchKits, exportBatchSeparately, isOutOfMemory,
+  createPresetBundle, DOWNLOAD_GAP_MS, zipEntryName, ExportError, exportBatchKits, exportBatchSeparately, isOutOfMemory,
   REVOKE_DELAY_MS
 } from '../src/utils/exporter';
 import {
@@ -1049,6 +1049,21 @@ await test('a name is only numbered when it is already taken', async () => {
 
   // Numbers count collisions, so they never skip: three Flips give -2 and -3, not -4.
   assert.deepEqual([...taken].sort(), ['MKT-ksho-Flip', 'MKT-ksho-Flip-2']);
+});
+
+await test('kit names collide case-insensitively and after file-name sanitising', async () => {
+  // macOS and Windows see `zap` and `Zap` as one file; a zip entry written twice replaces the first.
+  const taken = new Set(['MKT-ksho-Zap']);
+  assert.equal(uniqueKitName('mkt-ksho-zap', taken), 'mkt-ksho-zap-2');
+  taken.add('mkt-ksho-zap-2');
+  assert.equal(uniqueKitName('MKT-KSHO-ZAP', taken), 'MKT-KSHO-ZAP-3');
+  // `a/b` and `a-b` download under the same name.
+  assert.equal(uniqueKitName('a/b', new Set(['a-b'])), 'a/b-2');
+});
+
+await test('zip entry names carry the pad index and no backslash', async () => {
+  assert.equal(zipEntryName(makeSample('Kick.wav', 'Kick'), 3), '03_Kick.wav');
+  assert.equal(zipEntryName(makeSample('a\\b.wav', 'Kick'), 12), '12_a-b.wav');
 });
 
 await test('the suffix pool is large and well formed', async () => {
@@ -2420,6 +2435,14 @@ await test('buildBatch: names are unique and avoid exported names', async () => 
   assert.equal(new Set(names).size, names.length);
   assert.equal(names[0], `${input.exportName}-2`);
   for (const n of names) assert.ok(n === names[0] || !input.exportedNames.has(n));
+});
+
+await test('buildBatch: a random suffix that differs only in case from a taken name is not reused', async () => {
+  const input = await batchBase({ batchSize: 2, suffix: () => 'zap' });
+  input.exportedNames.add(kitNameFor('MOV', 'Zap', input.layout.columnsId));
+  input.exportName = kitNameFor('MOV', 'Flip', input.layout.columnsId);
+  const out = await buildBatch(input);
+  assert.equal(out[1].name, `${kitNameFor('MOV', 'zap', input.layout.columnsId)}-2`);
 });
 
 await test('buildBatch: kits 2..n carry the held layout and keep locked pads', async () => {
