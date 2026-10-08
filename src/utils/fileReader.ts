@@ -903,6 +903,23 @@ const NON_DRUM_NAME_WORDS = [
 ];
 
 /**
+ * A filename that ends in a note name and an octave ("Marimba C2", "Sine_E0", "Stick-C#1", "Pluck Eb4", "Bass-000-036-c1", "A-1"),
+ * optionally followed by an index ("C2 03", "C2 (2)"): one sample of a pitched instrument mapped across the keyboard. The note
+ * is a letter a-g (either case), an optional `#`/`b`, an optional minus and ONE digit, and must follow a separator (` `, `_`, `-`)
+ * or start the name, so `Hat A12`, `Mix4` and `Kick2` do not match. Only read for a file that classified as `Other`
+ * (`looksNonDrum`), so `808 F#1` stays a kick and a tuned tom keeps its category. Names with a hit, impact, shot, drum, kit or
+ * click word keep their place: chromatically mapped drum sets ("Drums_C1", "RckHts C1 01") are drums, not tones.
+ */
+const NOTE_SUFFIX = /(?:^|[ _-])[A-Ga-g](?:#|b|B)?-?\d(?:[ _-]+\d{1,2}|\s*\(\d{1,2}\))?$/;
+const NOTE_GUARD = ['hit', 'hits', 'hts', 'impact', 'shot', 'shots', 'drum', 'drums', 'kit', 'click', 'stab', 'stabs'];
+
+function nameEndsInNote(name: string): boolean {
+  const stem = name.replace(/\.[a-z0-9]+$/i, '');
+  if (!NOTE_SUFFIX.test(stem)) return false;
+  return !tokenize(stem).some(t => NOTE_GUARD.includes(t) || t.endsWith('hts'));
+}
+
+/**
  * Words that stop `bell` counting as a percussion hit: the non-drum words (melody, pad, lead, synth,
  * vox ...) plus chord(s), without the fx words (`Ceramic Bell FX Samples` is a bell hit).
  */
@@ -996,7 +1013,7 @@ export function looksNonDrum(category: Category, name: string, directory = ''): 
   const hasWord = (text: string, list: string[], isFile = false) =>
     tokenize(text, isFile).some(t => list.includes(t));
 
-  if (hasWord(name, NON_DRUM_WORDS, true) || hasWord(name, NON_DRUM_NAME_WORDS, true)) return true;
+  if (hasWord(name, NON_DRUM_WORDS, true) || hasWord(name, NON_DRUM_NAME_WORDS, true) || nameEndsInNote(name)) return true;
 
   return folderCandidates(directory).some(folder => {
     // A folder that names a drum category outranks any marker word inside it. Without

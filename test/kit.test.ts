@@ -1042,6 +1042,25 @@ await test('round 4: NON_DRUM_NAME_WORDS mark an unplaced FILENAME as non-drum, 
   for (const folder of ['Cuica', 'Surdo', 'Taiko', 'Vibraslap']) assert.ok(looksLikeRoleFolder(folder), folder);
 });
 
+await test('a note name and octave at the end of an unplaced filename marks it non-drum, and never a categorised file', async () => {
+  for (const name of ['Zither C2.wav', 'Sine_E0.wav', 'Glass-F#3.wav', 'Warble Eb4.wav', 'Warble Bb1.wav', 'Organ A-1.wav', 'Lute-000-036-c1.wav', 'Lute-000-068-g#3.wav',
+    'Zither C2 03.wav', 'Zither C2 (2).wav', 'Zither c2.wav', 'B1.wav']) {
+    assert.equal(categorizeSample(name), 'Other', name);
+    assert.ok(looksNonDrum('Other', name, ''), name);
+  }
+  // A drum or percussion word keeps the file a drum: the rule only reads files that classified as Other.
+  for (const [name, category] of [['808 F#1.wav', 'Kick'], ['Kick C1.wav', 'Kick'], ['Snare_D2.wav', 'Snare'], ['Tom A2.wav', 'Perc'], ['Conga C3.wav', 'Perc'], ['Cowbell G#4.wav', 'Perc'], ['Open Hat G2.wav', 'OHH']] as [string, Category][]) {
+    assert.equal(categorizeSample(name), category, name);
+    assert.ok(!looksNonDrum(category, name, ''), name);
+  }
+  // Names with a hit, impact, shot, drum, kit or click word are chromatically mapped drums or hits, not tones.
+  for (const name of ['Drums_C1.wav', 'Rock Hits C1 01.wav', 'Big Impact A2.wav', 'One Shot D#3.wav', 'Click F2.wav', 'Kit E1.wav']) assert.ok(!looksNonDrum('Other', name, ''), name);
+  // Not a note: an index, a version letter glued to digits, a longer number, a note in the middle.
+  for (const name of ['Pack A12.wav', 'Mix4.wav', 'Take 12.wav', 'Cat3.wav', 'Version B 120.wav', 'C2 Zither.wav']) assert.ok(!looksNonDrum('Other', name, ''), name);
+  // Filename only: a folder named for a note changes nothing.
+  assert.ok(!looksNonDrum('Other', 'Take.wav', '/Pack/C2'));
+});
+
 await test('op next to a hat word is an open hat, even in a closed-hat folder', async () => {
   // "op" is hip-hop shorthand for "overpowered"; the owner confirmed these three sets by ear.
   for (const n of ['100 OP HAT.wav', '101 OP HAT 2.wav', '135 OP HAT.wav']) {
