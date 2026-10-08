@@ -8,6 +8,7 @@
 import assert from 'node:assert/strict';
 import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
+import { aiffToWav, parseAiffFormat, readExtended80 } from '../src/utils/aiff';
 import { collectAudioFiles, getFilesFromDataTransfer, getFilesFromFileList, HEAD_STEPS, LOOSE_FILES_FOLDER, SCAN_CONCURRENCY } from '../src/utils/fileReader';
 import { revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
 import type { Sample } from '../src/types';
@@ -617,6 +618,99 @@ await test('an extensible fmt chunk too short to hold its sub-format is rejected
   const got = await quiet(() => collectAudioFiles(dirEntry('', 'P', p => [entryFor(p, 'short.wav', wav)]), report));
   assert.deepEqual(got, []);
   assert.match(report.rejected[0].reason, /without a sub-format/);
+});
+
+// ── AIFF ──────────────────────────────────────────────────────────────────────
+
+const be16 = (v: number) => [(v >> 8) & 0xff, v & 0xff];
+const be32 = (v: number) => [(v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff];
+/** 80-bit extended for integer rates: exponent 16383 + floor(log2), mantissa normalised to 64 bits. */
+const ext80 = (rate: number) => {
+  const exp = Math.floor(Math.log2(rate));
+  const mant = BigInt(rate) << BigInt(63 - exp);
+  return [...be16(16383 + exp), ...Array.from({ length: 8 }, (_, i) => Number((mant >> BigInt(56 - 8 * i)) & 0xffn))];
+};
+const beChunk = (id: string, body: number[]) => [...ascii(id), ...be32(body.length), ...body, ...(body.length % 2 ? [0] : [])];
+
+/** An AIFF (or AIFF-C when `compression` is given) with `sound` bytes as SSND, and `junk` bytes of a leading chunk. */
+function aiffFile(opts: { ch?: number; bits?: number; rate?: number; frames?: number; sound?: number[]; compression?: string; junk?: number }) {
+  const ch = opts.ch ?? 1, bits = opts.bits ?? 16, rate = opts.rate ?? 44100;
+  const sound = opts.sound ?? [0x12, 0x34, 0xff, 0xfe];
+  const frames = opts.frames ?? Math.floor(sound.length / (ch * Math.ceil(bits / 8)));
+  const comm = [...be16(ch), ...be32(frames), ...be16(bits), ...ext80(rate),
+    ...(opts.compression ? [...ascii(opts.compression), 0] : [])];
+  const body = [
+    ...ascii(opts.compression ? 'AIFC' : 'AIFF'),
+    ...(opts.junk ? beChunk('ANNO', Array(opts.junk).fill(0x41)) : []),
+    ...beChunk('COMM', comm),
+    ...beChunk('SSND', [...be32(0), ...be32(0), ...sound])
+  ];
+  return new Uint8Array([...ascii('FORM'), ...be32(body.length), ...body]);
+}
+
+await test('the 80-bit AIFF sample rate decodes exactly for the usual rates', async () => {
+  for (const rate of [8000, 22050, 44100, 48000, 96000, 192000]) {
+    const bytes = new Uint8Array(ext80(rate));
+    assert.equal(readExtended80(new DataView(bytes.buffer), 0), rate);
+  }
+});
+
+await test('aiffToWav converts big-endian 16-bit PCM to a little-endian WAV with the same sound', async () => {
+  const wav = aiffToWav(asBuffer(aiffFile({ sound: [0x12, 0x34, 0xff, 0xfe, 0x80, 0x00] })))!;
+  const buf = await wav.arrayBuffer();
+  assert.deepEqual(await readWavFormat(wav), { numChannels: 1, sampleRate: 44100, bitsPerSample: 16, audioFormat: 1 });
+  assert.deepEqual(Array.from(new Uint8Array(buf, 44)), [0x34, 0x12, 0xfe, 0xff, 0x00, 0x80]);
+  assert.equal(new DataView(buf).getUint32(40, true), 6);
+});
+
+await test('aiffToWav: sowt is copied, 24-bit is reversed, 8-bit is made unsigned, stereo stays interleaved', async () => {
+  const sowt = aiffToWav(asBuffer(aiffFile({ compression: 'sowt', sound: [0x34, 0x12, 0xfe, 0xff] })))!;
+  assert.deepEqual(Array.from(new Uint8Array(await sowt.arrayBuffer(), 44)), [0x34, 0x12, 0xfe, 0xff]);
+  const none = aiffToWav(asBuffer(aiffFile({ compression: 'NONE', sound: [0x12, 0x34] })))!;
+  assert.deepEqual(Array.from(new Uint8Array(await none.arrayBuffer(), 44)), [0x34, 0x12]);
+  const b24 = aiffToWav(asBuffer(aiffFile({ bits: 24, rate: 48000, sound: [1, 2, 3, 4, 5, 6] })))!;
+  assert.deepEqual(await readWavFormat(b24), { numChannels: 1, sampleRate: 48000, bitsPerSample: 24, audioFormat: 1 });
+  assert.deepEqual(Array.from(new Uint8Array(await b24.arrayBuffer(), 44)), [3, 2, 1, 6, 5, 4]);
+  const b8 = aiffToWav(asBuffer(aiffFile({ bits: 8, sound: [0x00, 0x7f, 0x80, 0xff] })))!;
+  assert.deepEqual(Array.from(new Uint8Array(await b8.arrayBuffer(), 44)), [0x80, 0xff, 0x00, 0x7f]);
+  const st = aiffToWav(asBuffer(aiffFile({ ch: 2, sound: [0, 1, 0, 2, 0, 3, 0, 4] })))!;
+  assert.equal((await readWavFormat(st))?.numChannels, 2);
+  assert.deepEqual(Array.from(new Uint8Array(await st.arrayBuffer(), 44)), [1, 0, 2, 0, 3, 0, 4, 0]);
+});
+
+await test('aiffToWav gives up (null) on compression, missing sound data and non-AIFF bytes', async () => {
+  assert.equal(aiffToWav(asBuffer(aiffFile({ compression: 'ulaw', bits: 16 }))), null);
+  assert.equal(aiffToWav(asBuffer(aiffFile({ sound: [] }))), null);
+  assert.equal(aiffToWav(new ArrayBuffer(40)), null);
+  assert.equal(parseAiffFormat(asBuffer(aiffFile({ compression: 'ima4' })))?.compression, 'ima4');
+});
+
+await test('AIFF import: PCM and AIFF-C NONE/sowt pass through unchanged, other compressions are rejected, unreadable ones left alone', async () => {
+  const files: [string, Uint8Array][] = [
+    ['pcm.aif', aiffFile({})], ['none.aiff', aiffFile({ compression: 'NONE' })], ['sowt.aif', aiffFile({ compression: 'sowt' })],
+    ['junk.aif', aiffFile({ junk: 6000 })], ['far.aif', aiffFile({ junk: 70_000 })],
+    ['ulaw.aif', aiffFile({ compression: 'ulaw' })], ['ima4.aiff', aiffFile({ compression: 'ima4' })],
+    ['float.aif', aiffFile({ compression: 'fl32', bits: 32 })], ['farulaw.aif', aiffFile({ compression: 'ulaw', junk: 70_000 })],
+    ['x.aif', new Uint8Array([120])]
+  ];
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(dirEntry('', 'P', p => files.map(([n, b]) => entryFor(p, n, b))), report));
+  assert.deepEqual(names(got), ['far.aif', 'junk.aif', 'none.aiff', 'pcm.aif', 'sowt.aif', 'x.aif']);
+  assert.deepEqual(report.rejected.map(r => r.name).sort(), ['farulaw.aif', 'float.aif', 'ima4.aiff', 'ulaw.aif']);
+  assert.match(report.rejected.find(r => r.name === 'ulaw.aif')!.reason, /mu-law/);
+  const pcm = got.find(g => g.file.name === 'pcm.aif')!.file;
+  assert.deepEqual(new Uint8Array(await pcm.arrayBuffer()), aiffFile({}));
+});
+
+await test('RIFX and RF64 WAVs are rejected explicitly, not left alone', async () => {
+  const mk = (magic: string) => { const b = pcmWavParts({ data: [1, 2, 3, 4] }).slice(); b.set(ascii(magic), 0); return b; };
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(dirEntry('', 'P', p => [
+    entryFor(p, 'ok.wav', mk('RIFF')), entryFor(p, 'be.wav', mk('RIFX')), entryFor(p, 'big.wav', mk('RF64'))
+  ]), report));
+  assert.deepEqual(names(got), ['ok.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name).sort(), ['be.wav', 'big.wav']);
+  assert.match(report.rejected.find(r => r.name === 'be.wav')!.reason, /RIFX/);
 });
 
 // ── Scan progress ─────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { Category } from '../types';
 import { defaultKind, SampleKind } from './kinds';
 import { AdpcmError, decodeMsAdpcm } from './adpcm';
+import { aiffRejection, AiffFormat, parseAiffFormat } from './aiff';
 import { parseWavFormat, readChunks, WavFormat } from './wavStripper';
 
 export interface DroppedFile {
@@ -51,6 +52,11 @@ export function parseFormatFromHead(head: ArrayBuffer, fileSize: number): WavFor
   return parseWavFormat(head);
 }
 
+/** RIFF variants the readers and the Move do not handle; `readChunks` only knows `RIFF` and would let them through unread. */
+const UNSUPPORTED_RIFF: Record<string, string> = {
+  RIFX: 'RIFX (big-endian) WAV', RF64: 'RF64 WAV', BW64: 'BW64 WAV'
+};
+
 /**
  * Why a WAV holds no audio, judged from bytes that start at the top of the file: no `data` chunk in
  * a file read in full, or a `data` chunk whose header is the last thing in the file. null when it
@@ -75,6 +81,11 @@ async function prepareWav(file: File, report: DropReport): Promise<File | null> 
   try {
     for (const bytes of HEAD_STEPS) {
       const head = await file.slice(0, bytes).arrayBuffer();
+      const container = UNSUPPORTED_RIFF[String.fromCharCode(...new Uint8Array(head, 0, Math.min(4, head.byteLength)))];
+      if (container) {
+        report.rejected.push({ name: file.name, reason: container });
+        return null;
+      }
       format = parseFormatFromHead(head, file.size);
       if (format !== null) seen = head;
       if (format !== null || head.byteLength >= file.size) break;
@@ -125,6 +136,35 @@ async function prepareWav(file: File, report: DropReport): Promise<File | null> 
 }
 
 /**
+ * Decides what to do with an AIFF, with the same head-first reads as a WAV. Plain AIFF and AIFF-C
+ * `NONE`/`sowt`/`twos` pass through as the very same File; any other AIFF-C compression is rejected.
+ * A file whose `COMM` chunk cannot be found is left alone, as a WAV with no `fmt ` is.
+ */
+async function prepareAiff(file: File, report: DropReport): Promise<File | null> {
+  let format: AiffFormat | null = null;
+  try {
+    for (const bytes of HEAD_STEPS) {
+      const head = await file.slice(0, bytes).arrayBuffer();
+      format = parseAiffFormat(head, file.size);
+      if (format !== null || head.byteLength >= file.size) break;
+    }
+    if (format === null && file.size > HEAD_STEPS[HEAD_STEPS.length - 1]) {
+      format = parseAiffFormat(await file.arrayBuffer());
+    }
+  } catch (err) {
+    console.warn(`Could not inspect ${file.name}:`, err);
+    return file;
+  }
+  if (format === null) return file;
+  const reason = aiffRejection(format);
+  if (reason) {
+    report.rejected.push({ name: file.name, reason });
+    return null;
+  }
+  return file;
+}
+
+/**
  * Move plays WAV and AIFF only. Compressed formats would be copied into the bundle
  * untouched and then fail on the device, which is worse than never accepting them.
  */
@@ -142,7 +182,7 @@ const directoryOf = (fullPath: string) => {
  */
 async function prepareAudioFile(file: File, path: string, report: DropReport): Promise<DroppedFile | null> {
   if (!isAudioFile(file.name)) return null;
-  const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : file;
+  const ready = /\.wav$/i.test(file.name) ? await prepareWav(file, report) : await prepareAiff(file, report);
   return ready ? { file: ready, path } : null;
 }
 
