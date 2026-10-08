@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { categoryAccent, padLabel } from '../padLayout';
 import { Sample } from '../types';
 import { defaultKind, KIND_LABELS } from '../utils/kinds';
-import { sampleUrl } from '../utils/sampleUrl';
+import { auditionUrl, needsAuditionConversion, sampleUrl } from '../utils/sampleUrl';
 
 interface ChokeDetail {
   group: number;
@@ -87,14 +87,18 @@ export const Pad: React.FC<PadProps> = ({
       return;
     }
 
-    const audio = new Audio(sampleUrl(sample));
+    // An AIFF has no src until its WAV is made (below); everything else plays the file itself.
+    const converting = needsAuditionConversion(sample);
+    const audio = new Audio(converting ? undefined : sampleUrl(sample));
     audio.preload = 'auto';
+    let cancelled = false;
 
     const handleEnded = () => setIsPlaying(false);
     const handlePause = () => setIsPlaying(false);
     const handleError = (e: Event) => {
       console.error('Audio error:', e);
       setIsPlaying(false);
+      announceReady(); // a pad that cannot load must not hold the preview back
     };
     /**
      * Preview scheduling waits on this. A pad that never buffers simply never reports,
@@ -112,12 +116,25 @@ export const Pad: React.FC<PadProps> = ({
     audio.addEventListener('error', handleError);
     audio.addEventListener('canplaythrough', announceReady);
 
-    audio.load();
     audioRef.current = audio;
-    // A blob already decoded for an earlier kit can be ready before canplaythrough fires.
-    if (audio.readyState >= 3) announceReady();
+    if (converting) {
+      void auditionUrl(sample).then(url => {
+        if (cancelled) return;
+        if (url) {
+          audio.src = url;
+          audio.load();
+        } else {
+          announceReady(); // not convertible: report at once instead of waiting for App's ceiling timer
+        }
+      });
+    } else {
+      audio.load();
+      // A blob already decoded for an earlier kit can be ready before canplaythrough fires.
+      if (audio.readyState >= 3) announceReady();
+    }
 
     return () => {
+      cancelled = true;
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);

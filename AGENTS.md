@@ -70,6 +70,13 @@ path with more than three segments means you are in the wrong place.
   `Pad` asks `sampleUrl(sample)`, which caches in a `WeakMap` keyed on the `File` (copies from `handleExcludeSample` share one URL,
   StrictMode's double effect cannot make two). `Sample.url` is optional and only set when a sample brings its own (dev seed, tests).
   `revokeSampleUrl(sample)` replaces the direct revoke in `removeFolder`; it is a no-op for a sample never played. Pinned by a test.
+  **AIFF is auditioned as a WAV made on demand** (`auditionUrl`, `needsAuditionConversion`, `aiffToWav` in `utils/aiff.ts`): Chromium and
+  Firefox answer `canPlayType('audio/aiff')` with `''`, so an AIFF pad used to be silent and stalled Preview Kit for the 2 s ceiling. `Pad`
+  starts such an `Audio` without a `src`, sets the converted blob URL when ready (cached per `File` like `sampleUrl`, released by
+  `revokeSampleUrl`) and, when conversion is impossible or any `<audio>` raises `error`, announces `pad-ready` at once so the preview does
+  not wait. The conversion (big-endian to little-endian PCM, 8-bit made unsigned, `sowt` copied) is for audition only: the EXPORT writes the
+  original AIFF bytes, as before. Confirmed in a browser (Playwright, Chromium 1248 and Firefox 157, generated 16-bit AIFF and AIFF-C `sowt`
+  packs): every clicked pad fires `playing`, and Preview Kit's first pad plays about 30-70 ms after the click; the pure parts are pinned in `test/io.test.ts`.
 - **`newId()` keeps its non-secure-context fallback.** `crypto.randomUUID` is secure-context only and the dev server binds
   `0.0.0.0`, so the app is routinely opened over plain http. For the same reason `crypto.subtle` is unavailable (relevant to dedupe,
   below).

@@ -10,7 +10,7 @@ import { createTrimmer, encodeWav } from '../src/utils/audioTrimmer';
 import { decodeMsAdpcm } from '../src/utils/adpcm';
 import { aiffToWav, parseAiffFormat, readExtended80 } from '../src/utils/aiff';
 import { collectAudioFiles, getFilesFromDataTransfer, getFilesFromFileList, HEAD_STEPS, LOOSE_FILES_FOLDER, SCAN_CONCURRENCY } from '../src/utils/fileReader';
-import { revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
+import { auditionUrl, needsAuditionConversion, revokeSampleUrl, sampleUrl } from '../src/utils/sampleUrl';
 import type { Sample } from '../src/types';
 import { mergeScannedFolders } from '../src/utils/folderMerge';
 import { readWavFormat } from '../src/utils/wavStripper';
@@ -978,6 +978,38 @@ await test('a WAV with no fmt chunk anywhere is read up to the whole file, then 
   const root = dirEntry('', 'P', p => [{ isFile: true, isDirectory: false, name: 'x.wav', fullPath: `${p}/x.wav`, file: (ok: (f: File) => void) => ok(file) } as unknown as Fake]);
   assert.deepEqual(names(await collectAudioFiles(root)), ['x.wav']);
   assert.deepEqual(reads, [...HEAD_STEPS, noFmt.length]);
+});
+
+await test('auditionUrl plays a WAV made from an AIFF once, gives up on unconvertible AIFF, and leaves other files alone', async () => {
+  const made: Blob[] = [];
+  const revoked: string[] = [];
+  const realCreate = URL.createObjectURL, realRevoke = URL.revokeObjectURL;
+  URL.createObjectURL = (b: Blob | MediaSource) => { made.push(b as Blob); return `blob:test/${made.length - 1}`; };
+  URL.revokeObjectURL = (u: string) => { revoked.push(u); };
+  try {
+    const mk = (name: string, bytes: Uint8Array) => ({ id: name, file: new File([bytes as BlobPart], name), name, category: 'Kick' } as Sample);
+    const aif = mk('a.aif', aiffFile({ sound: [0x12, 0x34, 0xff, 0xfe] }));
+    assert.equal(needsAuditionConversion(aif), true);
+    const url = await auditionUrl(aif);
+    assert.equal(url, 'blob:test/0');
+    assert.equal(await auditionUrl({ ...aif }), url, 'a copy of the sample shares the URL');
+    assert.equal(made.length, 1);
+    assert.deepEqual((await readWavFormat(made[0]))?.bitsPerSample, 16);
+
+    assert.equal(await auditionUrl(mk('u.aif', aiffFile({ compression: 'ulaw' }))), null);
+    assert.equal(await auditionUrl(mk('junk.aiff', new Uint8Array([1, 2, 3]))), null);
+
+    const wav = mk('k.wav', pcmWavParts({ data: [1, 2] }));
+    assert.equal(needsAuditionConversion(wav), false);
+    assert.equal(await auditionUrl(wav), sampleUrl(wav), 'a WAV plays itself');
+
+    revokeSampleUrl(aif);
+    await Promise.resolve();
+    assert.ok(revoked.includes('blob:test/0'));
+  } finally {
+    URL.createObjectURL = realCreate;
+    URL.revokeObjectURL = realRevoke;
+  }
 });
 
 // ── Preview URLs are made on first use ────────────────────────────────────────
