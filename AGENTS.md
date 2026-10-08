@@ -115,7 +115,7 @@ path with more than three segments means you are in the wrong place.
   computed from the real kits 2..n (`buildBatch` runs before the confirm), not the on-screen kit times the batch size.
 - **The error and notice boxes stay short.** Never shown: files the app cannot read (one console.warn per drop), locked pads holding the
   same audio. A drop adding nothing shows only "No .wav or .aiff files found..." (or the skipped-folders notice when everything was
-  already loaded). Still shown: the skipped-folders and split notices, export notices/errors, "Error processing files".
+  already loaded). Still shown: the skipped-folders and split notices, export notices/errors, "Error processing files", and `Some entries in "X" could not be read.` when a dropped folder's listing failed part-way (`DropReport.skippedFolders`: `readAllEntries` keeps the batches read before the failure instead of losing the folder; the notice appends after the split notes).
 - **Drops are ignored in three cases:** while a scan or a generation is running (like the Pick buttons; a drop's generation would supersede a
   pending remove/toggle/export and silently cancel it), and when the drag carries no `Files` (dragged text or a link).
 - **Export notices are appended, never replaced:** after a batch `emptyPadsNotice` (`countKitsWithEmptyPads`: "N of M kits have empty

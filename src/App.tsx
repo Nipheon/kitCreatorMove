@@ -701,7 +701,8 @@ export default function App() {
         .map(sp => ({ name: sp.name, count: accepted.filter(f => f.parent?.name === sp.name).length }))
         .filter(sp => sp.count > 0)
         .map(sp => `Split "${sp.name}" into ${sp.count} sub-pack${sp.count === 1 ? '' : 's'}.`);
-      if (splitNotes.length > 0) setNotice(prev => [prev, ...splitNotes].filter(Boolean).join(' '));
+      const partialNotes = [...new Set(report.skippedFolders)].map(name => `Some entries in "${name}" could not be read.`);
+      if (splitNotes.length + partialNotes.length > 0) setNotice(prev => [prev, ...splitNotes, ...partialNotes].filter(Boolean).join(' '));
       // Same batch as the real rows, so a pending row is swapped, not followed by a second one.
       setScanning([]);
       // The drop itself hashes nothing; only samples drawn into this kit are read. This

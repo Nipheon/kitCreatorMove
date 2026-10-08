@@ -21,9 +21,11 @@ export interface DropReport {
   converted: string[];
   /** Files skipped because the app cannot read their format. */
   rejected: { name: string; reason: string }[];
+  /** Names of folders whose listing failed part-way: what was read before the failure is kept, the rest is missing. */
+  skippedFolders: string[];
 }
 
-export const newDropReport = (): DropReport => ({ converted: [], rejected: [] });
+export const newDropReport = (): DropReport => ({ converted: [], rejected: [], skippedFolders: [] });
 
 const FORMAT_NAMES: Record<number, string> = {
   0x0002: 'MS ADPCM', 0x0006: 'A-law', 0x0007: 'mu-law', 0x0011: 'IMA ADPCM',
@@ -188,20 +190,23 @@ async function prepareAudioFile(file: File, path: string, report: DropReport): P
 
 /**
  * readEntries returns at most 100 entries per call, so it has to be drained
- * until it yields an empty batch.
+ * until it yields an empty batch. A call that fails part-way keeps the batches already read
+ * (`complete: false`), so one bad batch does not lose a whole big folder.
  */
-async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+async function readAllEntries(reader: FileSystemDirectoryReader): Promise<{ entries: FileSystemEntry[]; complete: boolean }> {
   const all: FileSystemEntry[] = [];
-  let batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
-    reader.readEntries(resolve, reject)
-  );
-  while (batch.length > 0) {
-    all.push(...batch);
-    batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
-      reader.readEntries(resolve, reject)
-    );
+  try {
+    for (;;) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
+        reader.readEntries(resolve, reject)
+      );
+      if (batch.length === 0) return { entries: all, complete: true };
+      all.push(...batch);
+    }
+  } catch (err) {
+    console.warn('Could not read all entries of a folder:', err);
+    return { entries: all, complete: false };
   }
-  return all;
 }
 
 /**
@@ -228,6 +233,7 @@ export const SCAN_CONCURRENCY = 16;
 function mergeReport(into: DropReport, from: DropReport): void {
   into.converted.push(...from.converted);
   into.rejected.push(...from.rejected);
+  into.skippedFolders.push(...from.skippedFolders);
 }
 
 /**
@@ -267,7 +273,9 @@ async function visitEntry(entry: FileSystemEntry): Promise<Visit> {
       if (ready) out.files.push(ready);
     } else if (entry.isDirectory && entry.name !== '__MACOSX') {
       const reader = (entry as FileSystemDirectoryEntry).createReader();
-      out.children = await readAllEntries(reader);
+      const read = await readAllEntries(reader);
+      out.children = read.entries;
+      if (!read.complete) out.report.skippedFolders.push(entry.name);
     }
   } catch (err) {
     // One unreadable file or folder must not discard everything else in the drop.

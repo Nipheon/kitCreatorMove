@@ -531,7 +531,7 @@ const entryFor = (dir: string, name: string, bytes: Uint8Array): Fake => ({
   file: (ok: (f: File) => void) => ok(new File([bytes as BlobPart], name))
 } as unknown as Fake);
 
-const emptyReport = () => ({ converted: [] as string[], rejected: [] as { name: string; reason: string }[] });
+const emptyReport = () => ({ converted: [] as string[], rejected: [] as { name: string; reason: string }[], skippedFolders: [] as string[] });
 
 await test('collectAudioFiles converts ADPCM, rejects other formats, passes PCM and float through byte-identical', async () => {
   const adpcm = encodeAdpcm(interleave(wave(200, 3000), wave(250, 3000)), 2, 44100, 2048);
@@ -618,6 +618,30 @@ await test('an extensible fmt chunk too short to hold its sub-format is rejected
   const got = await quiet(() => collectAudioFiles(dirEntry('', 'P', p => [entryFor(p, 'short.wav', wav)]), report));
   assert.deepEqual(got, []);
   assert.match(report.rejected[0].reason, /without a sub-format/);
+});
+
+await test('a folder whose listing fails part-way keeps the batches already read and is reported', async () => {
+  const kids = ['a.wav', 'b.wav', 'c.wav', 'd.wav', 'e.wav'];
+  let calls = 0;
+  const flaky = {
+    isFile: false, isDirectory: true, name: 'Pack', fullPath: '/Pack',
+    createReader: () => ({
+      readEntries: (ok: (e: Fake[]) => void, err: (e: unknown) => void) => {
+        calls++;
+        if (calls === 1) ok(kids.slice(0, 2).map(n => fileEntry('/Pack', n)));
+        else if (calls === 2) ok(kids.slice(2, 4).map(n => fileEntry('/Pack', n)));
+        else err(new Error('listing failed'));
+      }
+    })
+  } as unknown as Fake;
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(flaky, report));
+  assert.deepEqual(names(got), ['a.wav', 'b.wav', 'c.wav', 'd.wav']);
+  assert.deepEqual(report.skippedFolders, ['Pack']);
+
+  const clean = emptyReport();
+  await collectAudioFiles(dirEntry('', 'Ok', p => [fileEntry(p, 'a.wav')]), clean);
+  assert.deepEqual(clean.skippedFolders, []);
 });
 
 // ── AIFF ──────────────────────────────────────────────────────────────────────
