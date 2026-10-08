@@ -374,6 +374,7 @@ export async function getFilesFromFileList(
 function tokenize(name: string, isFile = false): string[] {
   // Only a file name has an extension; a folder called "808.Kicks" keeps its last part.
   return (isFile ? name.replace(/\.[a-z0-9]+$/i, '') : name)
+    .replace(/agog[ôó]/gi, 'agogo')         // agogô: the accent would split the word into "agog" + "o"
     .replace(/([a-z])(\d)/gi, '$1 $2')     // BD01 -> BD 01
     .replace(/(\d)([a-z])/gi, '$1 $2')     // 808bass -> 808 bass
     // BohmSlappAltOpenHat -> Bohm Slapp Alt Open Hat. Without this the whole name is one
@@ -443,24 +444,36 @@ const PERC_KINDS: [SampleKind, string[]][] = [
   ['woodblock', ['woodblock', 'block', 'wood', 'clave', 'claves', 'clv', 'cl']],
   ['triangle', ['triangle']],
   // Sleigh, church, tubular, ceramic and hand bells, and "bell" alone. Whole tokens only (WHOLE_TOKEN_ONLY):
-  // glued, `bell` would read belly, bella, bellows, Campbell and Isabella. Tried last, so a cowbell, a
-  // triangle or a ride bell keeps its own word. Dropped for a name with a melodic or non-drum word
-  // (BELL_BLOCKERS): `Bell Pad`, `Melody Bell` are tones, not hits.
-  ['bell', ['bell', 'bells']]
+  // glued, `bell` would read belly, bella, bellows, Campbell and Isabella. Tried after the other words, so a
+  // cowbell, a triangle or a ride bell keeps its own word. `bell` and `bells` are weak evidence (WEAK_WORDS):
+  // dropped for a name with a melodic or non-drum word (BELL_BLOCKERS: `Bell Pad`, `Melody Bell` are tones, not
+  // hits) or a whole-song name (`looksLikeSongName`). `agogo` (agogô, a double bell) is strong: it needs no guard.
+  ['bell', ['bell', 'bells', 'agogo', 'agogos']],
+  // Wind, door and synth chimes. Same mechanics as bell (whole tokens, same guards); `windchimes` is one
+  // word in 5 libraries (`windchimez`, 1 library, is left out).
+  ['chime', ['chime', 'chimes', 'windchime', 'windchimes']]
 ];
 /** Percussion known only as percussion: the kind is `percussion`. */
 const PERC_GENERIC = [
   'perc', 'percussion', 'cr', 'guiro', 'timbale', 'timbales',
-  'djembe', 'cajon', 'agogo', 'castanet', 'castanets', 'tabla', 'udu',
+  'djembe', 'cajon', 'castanet', 'castanets', 'tabla', 'udu',
   // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
   'timp', 'timpani',
   // "Lst_Prc9", "PRC-F1_S" (14 packs).
   'prc'
 ];
 const PERC = [...PERC_KINDS.flatMap(([, words]) => words), ...PERC_GENERIC];
-const BELL_WORDS = PERC_KINDS.find(([kind]) => kind === 'bell')![1];
-const PERC_WITHOUT_BELL = PERC.filter(w => !BELL_WORDS.includes(w));
-const PERC_KINDS_WITHOUT_BELL = PERC_KINDS.filter(([kind]) => kind !== 'bell');
+/**
+ * The bell and chime words: weak name evidence, because "bell" is also a surname, a synth patch and a
+ * melodic tone, and "chime" a wind chime or a synth lead. Everything else in `PERC_KINDS` is strong.
+ */
+const WEAK_WORDS = ['bell', 'bells', 'chime', 'chimes', 'windchime', 'windchimes'];
+/** `PERC_KINDS` and `PERC` without the weak words: what a name reads as once a guard has dropped bell and chime. */
+const PERC_KINDS_STRONG = PERC_KINDS
+  .map(([kind, words]) => [kind, words.filter(w => !WEAK_WORDS.includes(w))] as [SampleKind, string[]])
+  .filter(([, words]) => words.length > 0);
+const PERC_STRONG = [...PERC_KINDS_STRONG.flatMap(([, words]) => words), ...PERC_GENERIC];
+const WEAK_KINDS: SampleKind[] = ['bell', 'chime'];
 
 const HAT = ['hat', 'hats', 'hihat', 'hihats', 'hh', 'hhs'];
 const CLOSED = ['chh', 'chhs', 'ch', 'closed', 'clsd', 'cls', 'cl', 'c'];
@@ -490,7 +503,7 @@ const GLUE_FALSE_FRIENDS = [
 ];
 
 /** Four-character words that must not glue to a neighbouring word, only match as a token. */
-const WHOLE_TOKEN_ONLY = ['snar', 'klap', 'bell', 'bells'];
+const WHOLE_TOKEN_ONLY = ['snar', 'klap', ...WEAK_WORDS];
 
 /**
  * A drum code plus one variant letter: Battery's multi-mic kit ("BDaEXT", "SDbOH"), the
@@ -572,7 +585,27 @@ function classify(text: string, isFile = false): Category | null {
   return classifyKind(text, isFile)?.category ?? null;
 }
 
-function classifyKind(text: string, isFile = false): Classified | null {
+/** Whether `tokens` hold a bell or chime word (whole tokens; the agogo and the other words are strong). */
+const hasWeakWord = (tokens: string[]) => tokens.some(t => WEAK_WORDS.includes(t));
+
+/**
+ * Whether a name that carries a bell or chime word is NOT a hit: a tone or a song. The dropped words fall
+ * back to whatever else the name says, and a folder of bells does not give them back (`nameBlocksWeak`).
+ */
+function weakWordBlocked(text: string, isFile: boolean, tokens: string[], folderBlocksWeak: boolean): boolean {
+  if (folderBlocksWeak || tokens.some(t => BELL_BLOCKERS.includes(t))) return true;
+  // CampBell (Campbell, split at the capital) is a surname.
+  if (tokens.some((t, i) => t === 'camp' && (tokens[i + 1] === 'bell' || tokens[i + 1] === 'bells'))) return true;
+  return isFile && looksLikeSongName(text);
+}
+
+/** A file name whose own bell or chime word is dropped by a guard (blockers, song, or a melodic nearest folder). */
+function nameBlocksWeak(name: string, folderBlocksWeak: boolean): boolean {
+  const tokens = tokenize(name, true);
+  return hasWeakWord(tokens) && weakWordBlocked(name, true, tokens, folderBlocksWeak);
+}
+
+function classifyKind(text: string, isFile = false, folderBlocksWeak = false): Classified | null {
   const tokens = tokenize(text, isFile);
   if (tokens.length === 0) return null;
   // Short abbreviations must be whole tokens — "tom" inside "custom" is not a tom.
@@ -623,9 +656,10 @@ function classifyKind(text: string, isFile = false): Classified | null {
   if (tokens.includes('ohh') || tokens.includes('ohhs') || tokens.includes('oh')) return withDefault('OHH');
 
   if (has(CRASH)) return kindIn(CRASH_KINDS, 'Crash');
-  // A bell next to a melodic or non-drum word is a tone, not a hit: it stays where the rest of the name puts it.
-  const bellAllowed = !tokens.some(t => BELL_BLOCKERS.includes(t));
-  if (has(bellAllowed ? PERC : PERC_WITHOUT_BELL)) return kindIn(bellAllowed ? PERC_KINDS : PERC_KINDS_WITHOUT_BELL, 'Perc');
+  // A bell or chime next to a melodic or non-drum word, or in a whole-song name, is not a hit: it stays where the
+  // rest of the name puts it.
+  const weakAllowed = !(hasWeakWord(tokens) && weakWordBlocked(text, isFile, tokens, folderBlocksWeak));
+  if (has(weakAllowed ? PERC : PERC_STRONG)) return kindIn(weakAllowed ? PERC_KINDS : PERC_KINDS_STRONG, 'Perc');
 
   /**
    * An 808 with nothing else to go on is the kick voice — that is what the name means in
@@ -733,6 +767,51 @@ const NON_DRUM_WORDS = [
  */
 const BELL_BLOCKERS = [...NON_DRUM_WORDS.filter(w => !['fx', 'sfx', 'efx'].includes(w)), 'chord', 'chords'];
 
+/** Folder names whose files are melodic material (the `NON_DRUM_FOLDERS` minus the Extras/Imported/Misc bins, which hold usable hits). */
+const MELODIC_FOLDERS = ['patches', 'waveforms', 'soundbanks', 'tags', 'akwf', 'presets', 'instruments', 'melodies', 'melodic'];
+
+/**
+ * Whether a folder says the files in it are tones, so a bell or chime word in their names is not a hit:
+ * `Bell 01.wav` in `Synth Pads` or `Melodic`. Same blockers as the name, but not `FX`/`Extras`/`Misc`: bells and
+ * chimes in those folders stay usable (owner decision). A folder that itself names a drum category is skipped,
+ * as in `looksNonDrum`; only the nearest folder counts (the outer ones are pack names: `Some Chop Crew & ...` holds `chop`).
+ */
+function folderBlocksWeakWords(directory: string): boolean {
+  // Only the nearest folder: the outer ones are pack names and `FX AND RISERS/FX` is an FX folder.
+  const folder = folderCandidates(directory)[0];
+  if (folder === undefined || classify(folder) !== null) return false;
+  return tokenize(folder).some(t => BELL_BLOCKERS.includes(t) || MELODIC_FOLDERS.includes(t));
+}
+
+/**
+ * A whole-song file name (`Artist_And_The_Band_-_Title.wav`), which must never read as a percussion hit because
+ * the artist is called Bell. Only consulted for a bell or chime word (`weakWordBlocked`), so it moves nothing else.
+ * Three patterns, all tested on the raw name with `_` read as a space (tokenising throws the separators away):
+ *   - a band connector: `and the`, `& the`, `feat`, `featuring`, `vs the`, `presents the` (`Sammy Bell And The Rockets`).
+ *   - `_-_` between words with three or more words in all (`Some_Name_-_Title`; `Bell_-_Alpha` stays a one-shot).
+ *   - `artist - title`: a spaced hyphen, tilde or dash with at least two words on each side, no digit in the
+ *     artist part and at least five words in all (`Some Name - Two Words` is a song; `Bell - Alpha`,
+ *     `ZQ - Bell`, `Little bell 2 - Small bell` are one-shots).
+ * Text in brackets is ignored. Deliberately not used: length alone, a leading track number (`01 Some Producer Bell` is a one-shot).
+ */
+const BAND_CONNECTOR = /(?:^|\s)(?:and|vs\.?|presents|ft\.?|feat\.?|featuring)\s+the(?![a-z])|\s&\s*the(?![a-z])|(?:^|[\s(\[])(?:feat|featuring)(?![a-z])/;
+const ARTIST_TITLE_SEPARATOR = /\s[-–~]\s/;
+
+export function looksLikeSongName(name: string): boolean {
+  // Brackets are dropped first: `Bell (Some Artist - Some Song)` is a one-shot sampled from a song, as kits name them.
+  const raw = name.replace(/\.[a-z0-9]+$/i, '').replace(/[([{][^)\]}]*[)\]}]/g, ' ');
+  const text = raw.replace(/_/g, ' ').toLowerCase();
+  if (BAND_CONNECTOR.test(text)) return true;
+  const words = (part: string) => part.split(/[^a-z]+/).filter(Boolean).length;
+  // `_-_` is how ripped song files are named: 475 files over both dumps, none a drum one-shot (all Other).
+  if (/[^\s_]_-_[^\s_]/.test(raw) && words(text) >= 3) return true;
+  const parts = text.split(ARTIST_TITLE_SEPARATOR);
+  if (parts.length < 2) return false;
+  const artist = parts[0];
+  const title = parts.slice(1).join(' ');
+  return !/\d/.test(artist) && words(artist) >= 2 && words(title) >= 2 && words(artist) + words(title) >= 5;
+}
+
 /**
  * Folder names that mean "not the drums" even when the files inside are named
  * anonymously — `Fill 1.wav`, `AKWF_0001.wav`, `G Suspended 2.wav`. Matched against the
@@ -836,7 +915,8 @@ const isWeakKind = (c: Classified) => c.kind === defaultKind(c.category) && (c.c
  * nearest folder in the SAME category (`Toms/hit_01.wav` is a tom, still a Perc), never a new category.
  */
 export function classifySample(name: string, directory = ''): Classified {
-  const classified = classifyKind(name, true);
+  const folderBlocksWeak = folderBlocksWeakWords(directory);
+  const classified = classifyKind(name, true, folderBlocksWeak);
   // `op` ("overpowered") next to a hat word is an open hat, and the filename beats a closed-hat
   // folder. A name that already says something else (kick, snare, closed ...) keeps that.
   // A lone `c` token (`Op Hat [C4RT1]`, `power-c [ OpHat ]`) is the only closed word that does not count against it.
@@ -864,13 +944,17 @@ export function classifySample(name: string, directory = ''): Classified {
   }
 
   if (fromName) {
-    // `bell` is weak name evidence: the nearest folder that names another drum category wins
-    // (`Bell Choke.wav` in an open-hat folder, `Big Bell.wav` in a ride folder are that category's sounds).
-    if (fromName.kind === 'bell') {
+    // `bell` and `chime` are weak name evidence: the nearest folder that names another drum category wins
+    // (`Bell Choke.wav` in an open-hat folder, `Big Bell.wav` in a ride folder are that category's sounds), and a
+    // Perc folder of a specific kind gives the kind (`Bell.wav` in `Cowbells` is a cowbell). Not a folder that
+    // itself names bells or chimes (`Hats & Bells`) and not a bare `808s` folder, which says nothing about a bell.
+    if (WEAK_KINDS.includes(fromName.kind) && !tokenize(name, true).some(t => t === 'agogo' || t === 'agogos')) {
       for (const folder of folderCandidates(directory)) {
         const fromFolder = classifyKind(folder);
         if (fromFolder === null) continue;
+        if (hasWeakWord(tokenize(folder)) || fromFolder.kind === '808') break;
         if (fromFolder.category !== 'Perc') return fromFolder;
+        if (!WEAK_KINDS.includes(fromFolder.kind) && fromFolder.kind !== defaultKind('Perc')) return fromFolder;
         break;
       }
     }
@@ -883,9 +967,11 @@ export function classifySample(name: string, directory = ''): Classified {
     return fromName;
   }
 
+  // A bell word the name's own guards dropped (`Bell Pad.wav`, a song) is not given back by a folder of bells.
+  const nameWeakDropped = nameBlocksWeak(name, folderBlocksWeak);
   for (const folder of folderCandidates(directory)) {
     const fromFolder = classifyKind(folder);
-    if (fromFolder) return fromFolder;
+    if (fromFolder && !(nameWeakDropped && WEAK_KINDS.includes(fromFolder.kind))) return fromFolder;
   }
   return withDefault('Other');
 }
@@ -897,8 +983,12 @@ export function classifySample(name: string, directory = ''): Classified {
  * `utils/packSplit.ts` to tell sub-packs from role folders.
  */
 export function looksLikeRoleFolder(name: string): boolean {
-  if (classify(name) !== null) return true;
-  if (textLooksLikeLoop(name, false)) return true;
   const tokens = tokenize(name);
+  // A bell or chime word is a role only when it is the whole name ("Bells", "Wind Chimes 2"): a pack called
+  // "Bell Boy Beats" or "Bells of Atlantis" is a pack, and reading it as a role stops a collection from splitting.
+  // Any other drum word still makes a role ("Bell Kicks").
+  const weakOnly = tokens.filter(t => !/^\d+$/.test(t)).every(t => WEAK_WORDS.includes(t) || t === 'wind');
+  if (hasWeakWord(tokens) ? weakOnly || classify(tokens.filter(t => !WEAK_WORDS.includes(t)).join(' ')) !== null : classify(name) !== null) return true;
+  if (textLooksLikeLoop(name, false)) return true;
   return tokens.some(t => NON_DRUM_WORDS.includes(t) || NON_DRUM_FOLDERS.includes(t));
 }

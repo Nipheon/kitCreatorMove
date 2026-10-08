@@ -286,25 +286,60 @@ rule exists because a simpler version broke on real packs.
   choke, hat partners and the grid never read `kind`; the pad label, the kind filter and the variety cap do (entries below). The type
   `SampleKind` and `KINDS_BY_CATEGORY` are pure data (the first kind listed is the category's default, `defaultKind`): Kick `kick 808`,
   Snare `snare rimshot sidestick`, Clap `clap snap`, CHH `closed`, OHH `open`, Hat `hat`, Crash `cymbal crash ride`, Perc
-  `percussion shaker tambourine cowbell bell conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
+  `percussion shaker tambourine cowbell bell chime conga bongo tom woodblock triangle`, Other `other`; `KIND_LABELS` are at most 9 characters.
   Toms are Perc (as
   before), kind `tom`; maracas and cabasa read as `shaker`, claves as `woodblock`, timpani/djembe/cajon/guiro/tabla and the rest of
   the generic words as `percussion`.
-- **`bell` is a Perc kind (own vocabulary round; label `Bell`).** Words `bell bells`, whole tokens only (`WHOLE_TOKEN_ONLY`: glued, `bell`
-  reads belly, bella, bellows, Campbell, Isabella), plus the phrase `cow bell(s)` (also what camelCase `CowBell` tokenises to) as `cowbell`. Evidence over
-  both owner dumps and the archive.org listings: `bell` 90 packs / 245 distinct names (dump 1), 18 folders / 61 names (dump 2), 4 libraries
-  (archive.org); `bells` 25 packs / 28 names. Rules: it sits last in `PERC_KINDS`, so `cowbell`, `triangle`, any kick, snare, clap, hat and
-  crash word win (`Ride Bell` stays a ride, `Bell Kick` a kick). Perc is checked before the bare-`808` fallback, so `808 Bell` is now a Perc bell.
-  A bell next to a melodic or non-drum word (`BELL_BLOCKERS`: the `NON_DRUM_WORDS` except fx/sfx/efx, plus chord/chords: `Bell Pad`,
-  `Melody Bell`) is not a bell hit and stays where the rest of the name puts it. `bell` is weak NAME evidence: in `classifySample` the
-  nearest folder that names another drum category wins (`Bell Choke.wav` in an open-hat folder stays OHH, `Big Bell.wav` in a ride folder
-  stays Crash); a Perc or unnamed folder (`FX`) does not. Category change measured on both dumps: 579 files Other -> Perc (392 of them were
-  non-drum files in FX/Extras folders and become usable), 25 loops stay loops, 6 `RS_CowBell`-style files Snare -> Perc (correct), 1 Kick -> Perc;
-  zero change on the 6,276 labelled files (name-only and name+folder identical). Known noise, accepted ("never 100%"): a surname
-  (two whole-song files named after a Bell in dump 2), tonal one-shots of melodic bell patches (`IN Bells-000-036-c1`, trap bells) now sit in Perc.
-  Rejected words: glued compounds (`sleighbell`, `jinglebell`, `glasbell`, `metbell`, `sonnydbell`: each 1-3 libraries, mostly one name),
-  `chime`/`chimes`/`windchimes` (wind chimes and synth chimes, not bells; 13-20 libraries, mixed, open question), `tubular` (always next to
-  `bell` anyway), `glockenspiel` (2 libraries), `glock` (a gun), `agogo` (stays generic `percussion`, `agogo bell` reads bell).
+- **`bell` is a Perc kind (own vocabulary round; label `Bell`).** Words `bell bells agogo agogos`; `bell(s)` are whole tokens only
+  (`WHOLE_TOKEN_ONLY`: glued, `bell` reads belly, bella, bellows, Campbell, Isabella), plus the phrase `cow bell(s)` (also what camelCase
+  `CowBell` tokenises to) as `cowbell`. Evidence over both owner dumps and the archive.org listings: `bell` 90 packs / 245 distinct names
+  (dump 1), 18 folders / 61 names (dump 2), 4 libraries (archive.org); `bells` 25 packs / 28 names. Rules: it sits after the other groups in
+  `PERC_KINDS`, so `cowbell`, `triangle`, any kick, snare, clap, hat and crash word win (`Ride Bell` stays a ride, `Bell Kick` a kick). Perc
+  is checked before the bare-`808` fallback, so `808 Bell` is a Perc bell. `bell` and `chime` are the WEAK words (`WEAK_WORDS`; everything
+  else, `agogo` included, is strong and gets none of the guards below). Weak-word guards, all in `weakWordBlocked` (the dropped word falls
+  back to whatever else the name or folder says):
+  - a melodic or non-drum word in the name (`BELL_BLOCKERS`: the `NON_DRUM_WORDS` except fx/sfx/efx, plus chord/chords: `Bell Pad`, `Melody Bell`);
+  - the NEAREST folder naming tones (same blockers plus `MELODIC_FOLDERS`: patches, waveforms, soundbanks, tags, akwf, presets,
+    instruments, melodies, melodic; `Bell 01.wav` in `Synth Pads` or `Melodic`). Not `FX`, `Extras`, `Misc`, `Imported`: **owner decision,
+    bells and chimes in FX/Extras folders stay usable Perc** (392 former non-drum bells became usable). Only the nearest folder counts: outer
+    folders are pack names (`Some Chop Crew & ...` holds `chop`), and `FX AND RISERS/FX` is an FX folder;
+  - the name's bell dropped by its own guard is not given back by a folder of bells (`Bell Pad.wav` in `Bells`);
+  - `camp` + `bell` (`CampBell` is Campbell split at the capital; no real file in the data, a guard against a surname);
+  - a whole-song file name (`looksLikeSongName`, below).
+  Folder precedence (`classifySample`): the nearest folder naming another drum category wins over a weak word (`Bell Choke.wav` in an
+  open-hat folder stays OHH, `Big Bell.wav` in a ride folder stays Crash), except a folder that itself holds a bell/chime word (`Hats & Bells`)
+  or a bare `808s` folder; a Perc folder of a specific kind gives the kind (`Bell.wav` in `Cowbells` is a cowbell, no category moves); an
+  `agogo` name is never demoted by a folder. `looksLikeRoleFolder` (sub-pack detection in `packSplit.ts`) reads a bell or chime word as a
+  role only when it is the whole name (`Bells`, `Wind Chimes 2`), so a pack called `Bell Boy Beats` or `Bells of Atlantis` still splits out;
+  across the 2,161 folder names of the three sources only three sub-packs named `<bell phrase> One Shots (<vendor tag>)` changed, role -> pack.
+  Change measured when `bell` landed, on both dumps: 579 files Other -> Perc (392 of them non-drum files in FX/Extras folders, now usable), 25
+  loops stay loops, 6 `RS_CowBell`-style files Snare -> Perc (correct), 1 Kick -> Perc; zero change on the 6,276 labelled files (name-only and
+  name+folder identical). Known noise, accepted ("never 100%"): tonal one-shots of melodic bell patches (`IN Bells-000-036-c1`, trap bells) sit
+  in Perc; the two whole-song files named after a Bell that this noise once listed are now caught by the song guard.
+  Rejected: glued compounds (`sleighbell`, `jinglebell`, `glasbell`, `metbell`, `sonnydbell`: each 1-3 libraries, mostly one name),
+  `tubular` (always next to `bell` anyway), `glockenspiel` (2 libraries), `glock` (a gun), `agog` (the truncated drum-machine spelling:
+  1 library, and an English word), note-name and `pluck/arp/tone/fm` blockers (zero cross-library evidence in the data; a note-name rule
+  would also undo the accepted tonal bells).
+- **`chime` is a Perc kind (label `Chime`), same mechanics as `bell`.** Words `chime chimes windchime windchimes`, whole tokens only (glued,
+  `chime` reads `chimera`, `Chimerz`; `chimney`, `chimp` never match). Evidence over both dumps and archive.org: `chime` 20 libraries / 24
+  names, `chimes` 13 / 30, `windchimes` 5 / 7 (`windchimez`: 1 library, left out). Mostly wind chimes and synth chimes, and the owner accepted
+  them as usable Perc (FX-folder chimes included). Same weak-word guards as bell, same folder precedence (`Chimes` in a cymbals folder stays a
+  cymbal, `Chime Snare` a snare, `Bell Chime` a bell). Together with the agogo and guard changes below, 100 files change their result over both dumps and the
+  archive.org listing (45 Other -> Perc chime, 51 generic percussion -> chime or bell kind only, 4 bell -> Other), and none of
+  the 6,276 labelled files, name-only or name+folder.
+- **`agogo` reads as kind `bell`** (also `agogos`, `agogô`: `tokenize` rewrites `agogô` to `agogo` because the accent would split it). 28 names
+  in 12 libraries, all drum-machine or percussion kits, previously generic `percussion`; the category is unchanged.
+- **Song guard (`looksLikeSongName`): a whole-song file named after a bell is never a bell.** Only consulted for a weak word, so it moves no
+  other category (a song-like name with a kick word is still a kick; `Hat (Artist - Song).wav` is still a hat). Tested on the raw name with `_`
+  as space and bracketed text removed (`Bell (Artist - Song)` is a one-shot sampled from a song, as kits name them): a band connector (`and
+  the`, `& the`, `vs the`, `presents the`, `feat`, `featuring`); `_-_` between words with at least three words (475 files in the dumps, 0 drum
+  one-shots, all songs and acapellas); or a spaced hyphen/tilde/dash with at least two words each side, no digit in the artist part and five
+  words in all. Not used, because they hit drum kits: name length (2,016 files with 8+ words, mostly `Kick (Artist - Song Title)`), a
+  leading track number (`01 Some Producer Bell`), any spaced hyphen (`Bell - Alpha`, `ZQ - Bell`, `Little bell 2 - Small bell`). Residual
+  misses, accepted: a short two-word artist-title like `Jimmy Bell - Song`. Measured on dump 2's song folder (780 files): 500 match
+  the pattern (the rest have no separator or a one-word artist). Of the 902 files with a bell/chime word over both dumps and the archive.org
+  listing, 3 match the song pattern (the two named after a Bell, plus one loop); the guard changes those three (two songs, one loop that stays a loop), and
+  every other file keeps its result.
 - **`classifySample(name, dir)` returns `{ category, kind }`; `categorizeSample` is a one-line wrapper returning the category.** The
   kind is read from the SAME rule that chose the category (`classifyKind`), never a second pass: inside a category the word groups
   `SNARE_KINDS`, `CLAP_KINDS`, `CRASH_KINDS` and `PERC_KINDS` are tried most specific first (`sidestick` before `rim`, `crash`
@@ -745,7 +780,7 @@ driven over CDP: `Runtime.evaluate` dispatches a synthetic `drop` with stubbed `
 on `#root`'s first element child (not `window`: React listens at the root, below it), then `Page.captureScreenshot`. It is the only
 way to see a filled grid without a real sample folder, and the empty grid hides most of what the theme does.
 
-**Suite coverage:** `test/packs.test.ts` covers collection detection (fixtures from real pack structures), the parent-aware prefix and duplicate key, tri-state and the multi-id toggle/remove plans. `test/kit.test.ts` (Node-only, via `tsx`, no components) covers kit generation, bundle building, sample
+**Suite coverage:** `test/packs.test.ts` covers collection detection (fixtures from real pack structures), the parent-aware prefix and duplicate key, tri-state and the multi-id toggle/remove plans. `test/kit.test.ts` (Node-only, via `tsx`, no components) covers the kinds (bell, chime, agogo, the weak-word folder guards and the song guard with its legitimate-one-shot counterexamples, all with invented names), kit generation, bundle building, sample
 detection, preset shape, pad-to-note mapping, choke grouping, kit naming, batch building, WAV handling and the lazy dedupe (call counts, same-pool replacement, locked pads, progress, the visibility helper). The generation races in `App` (`isGenerating`, superseding) are not reachable from Node and are confirmed by reading only; `test/io.test.ts` covers
 drop handling and trimming with fakes for `FileSystemEntry` and `OfflineAudioContext`.
 

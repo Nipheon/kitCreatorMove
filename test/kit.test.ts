@@ -35,7 +35,7 @@ import {
   REVOKE_DELAY_MS
 } from '../src/utils/exporter';
 import {
-  categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum
+  categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum, looksLikeSongName
 } from '../src/utils/fileReader';
 import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
@@ -2898,6 +2898,7 @@ await test('kinds: exact real names from the owner libraries', () => {
     ['Tom_05.wav', 'Perc', 'tom'], ['JMX_Toms_72.wav', 'Perc', 'tom'], ['CONGA 6.wav', 'Perc', 'conga'], ['808MC2_Orig.wav', 'Perc', 'conga'],
     ['bongos_13.wav', 'Perc', 'bongo'], ['220 COWBELL.wav', 'Perc', 'cowbell'], ['808O56CB11.wav', 'Perc', 'cowbell'],
     ['Church Bell.wav', 'Perc', 'bell'], ['Tubular Bells 2.wav', 'Perc', 'bell'], ['Sleigh_Bell.wav', 'Perc', 'bell'],
+    ['727 Agogo High.wav', 'Perc', 'bell'], ['Wind_Chime.wav', 'Perc', 'chime'], ['prc-chimes_down.wav', 'Perc', 'chime'],
     ['Shaker Afr_104.WAV', 'Perc', 'shaker'], ['EA-Tamb 01.aif', 'Perc', 'tambourine'], ['Plastic Tambourine One shots-9.wav', 'Perc', 'tambourine'],
     ['Triangle (5).wav', 'Perc', 'triangle'], ['Harmonic Clave.wav', 'Perc', 'woodblock'], ['AOW CL.WAV', 'Perc', 'woodblock'],
     ['PERCUSSION_1334.wav', 'Perc', 'percussion'], ['Djembe Open Slap Low.wav', 'Perc', 'percussion'],
@@ -2959,6 +2960,87 @@ await test('kinds: bell is a Perc kind from whole tokens, keeps every other drum
   const fx = classifySample('Church Bell.wav', '/Pack/FX');
   assert.equal(looksNonDrum(fx.category, 'Church Bell.wav', '/Pack/FX'), false);
   assert.equal(padLabel('Perc', 'bell', 'Perc'), 'Bell');
+});
+
+await test('kinds: chime is its own Perc kind, same mechanics as bell', () => {
+  const chime = { category: 'Perc', kind: 'chime' };
+  for (const name of ['Chime.wav', 'CHIMES_3.WAV', 'Wind Chimes.wav', 'windchimes_C3.wav', 'Glass Chime Perc 2.wav', 'ShinyChimes.wav', 'Producer Chime 01.wav'])
+    assert.deepEqual(classifySample(name), chime, name);
+  // whole tokens only: chimera, chimney, chimp and the like are not chimes
+  for (const name of ['Chimera-000-036-c1.wav', 'Chimney.wav', 'Chimp.wav', 'Chimerz.wav', 'wrenchimpact01.wav'])
+    assert.notEqual(classifySample(name).kind, 'chime', name);
+  // another drum word wins, a bell word beats a chime word, a tone or a synth is no hit
+  assert.deepEqual(classifySample('Chime Snare.wav'), { category: 'Snare', kind: 'snare' });
+  assert.deepEqual(classifySample('Bell Chime.wav'), { category: 'Perc', kind: 'bell' });
+  for (const name of ['Chime Pad.wav', 'Synth Chime.wav', 'Melody Chimes 140.wav', 'Chime Vox.wav'])
+    assert.deepEqual(classifySample(name), { category: 'Other', kind: 'other' }, name);
+  // folders: another drum category wins (a chimes file in a cymbals folder stays a cymbal), a chimes folder names the kind, FX folders stay usable
+  assert.deepEqual(classifySample('Chimes (2).wav', '/Pack/Trap Cymbals'), { category: 'Crash', kind: 'cymbal' });
+  assert.deepEqual(classifySample('hit_01.wav', '/Pack/Chimes'), chime);
+  assert.deepEqual(classifySample('Wind Chimes.wav', '/Pack/FX'), chime);
+  assert.equal(looksNonDrum('Perc', 'Wind Chimes.wav', '/Pack/FX'), false);
+  assert.deepEqual(classifySample('Chime.wav', '/Pack/Shakers'), { category: 'Perc', kind: 'shaker' });
+  assert.equal(padLabel('Perc', 'chime', 'Perc'), 'Chime');
+});
+
+await test('kinds: agogo (agogô, agogos) reads as a bell and keeps its own strength', () => {
+  const bell = { category: 'Perc', kind: 'bell' };
+  for (const name of ['Agogo.wav', 'Agogô Hi.wav', 'agogos.wav', 'Hiagogo.wav', 'BoxAgogoLo.wav', 'agogo_bell_hi.wav', '727 Agogo High.wav'])
+    assert.deepEqual(classifySample(name), bell, name);
+  // strong evidence: no tone or folder guard applies
+  assert.deepEqual(classifySample('Agogo Pad.wav'), bell);
+  assert.deepEqual(classifySample('agogo.wav', '/Pack/Hats'), bell);
+  // a bell still yields to folders, an agogo does not
+  assert.deepEqual(classifySample('Big Bell.wav', '/Pack/Hats'), { category: 'Hat', kind: 'hat' });
+});
+
+await test('kinds: whole-song files named after a bell are never a bell (song guard)', () => {
+  const other = { category: 'Other', kind: 'other' };
+  // artist - title and band connectors, with underscores or spaces, with or without a folder of bells
+  for (const name of [
+    'Sammy_Bell_And_The_Rockets_-_Some_Title.wav', 'Jimmy_Bell_&_The_Rovers_-_The_Funky_Title.wav',
+    'Sammy Bell & The Rockets - Some Title.wav', 'Jimmy Bell - Some Long Song Title.wav', 'Ted_Bell_-_Some_Title.wav',
+    'Sammy_Bell_feat_Someone_Else.wav', 'Chime_Sisters_And_The_Band_-_Title.wav'
+  ]) {
+    assert.ok(looksLikeSongName(name), name);
+    assert.deepEqual(classifySample(name, '/Pack/dnb'), other, name);
+    assert.deepEqual(classifySample(name, '/Pack/Bells'), other, `${name} in a bell folder`);
+  }
+  // legitimate one-shots keep their bell, including ones with separators, a track number, brackets or a song reference
+  const bell = { category: 'Perc', kind: 'bell' };
+  for (const name of [
+    'Sleigh Bell 1.wav', 'Church Bell Hit Dry 120bpm.wav', 'Ceramic Bell FX Samples-10.wav', 'Bell - Alpha.wav', 'ZQ - Bell.wav', 'QQ - Bell (Name).wav',
+    'Little bell 2 - Small bell.wav', '01 Some Producer Bell.wav', 'Bell (Some Artist - Some Song).wav', 'Bell (Anna And The Band).wav', 'Tag- TUBULAR BELL 2.wav',
+    'Bell_-_Alpha.wav', 'TAG_trap_church_bell_01_G.wav'
+  ]) {
+    assert.equal(looksLikeSongName(name), false, name);
+    assert.deepEqual(classifySample(name, '/Pack/FX'), bell, name);
+  }
+  // the guard only drops bell and chime words: every other category reads the same song-like name as before
+  assert.deepEqual(classifySample('Some_Artist_And_The_Band_-_Kick_Title.wav'), { category: 'Kick', kind: 'kick' });
+  assert.deepEqual(classifySample('Hat (Some Artist - Some Song Title).wav'), { category: 'Hat', kind: 'hat' });
+  assert.deepEqual(classifySample('Some Artist And The Band - Perc Title.wav'), { category: 'Perc', kind: 'percussion' });
+});
+
+await test('kinds: bell and chime yield to the folder around them as well as to their own name', () => {
+  const bell = { category: 'Perc', kind: 'bell' };
+  // melodic folders: the nearest folder says tones, FX and Extras stay usable, outer pack names do not count
+  for (const dir of ['/Pack/Synth Pads', '/Pack/Melodic', '/Pack/Vox']) assert.deepEqual(classifySample('Bell 01.wav', dir), { category: 'Other', kind: 'other' }, dir);
+  assert.deepEqual(classifySample('Bell 01.wav', '/Chop Shop Drumkit/FX'), bell);
+  assert.deepEqual(classifySample('Bell 01.wav', '/Pack/Extras'), bell);
+  // a name that dropped its own bell word does not get it back from a folder of bells
+  assert.deepEqual(classifySample('Bell Pad.wav', '/Pack/Bells'), { category: 'Other', kind: 'other' });
+  assert.deepEqual(classifySample('Bell 01.wav', '/Pack/Bells/Melodic'), { category: 'Other', kind: 'other' });
+  // CampBell is a surname split at the capital; SleighBell stays a bell
+  assert.notEqual(classifySample('CampBell.wav').kind, 'bell');
+  assert.deepEqual(classifySample('SleighBell.wav'), bell);
+  // folder precedence: a folder naming bells does not demote, a bare 808 folder does not either, a specific Perc folder gives the kind
+  assert.deepEqual(classifySample('Bell.wav', '/Pack/Hats & Bells'), bell);
+  assert.deepEqual(classifySample('Bell.wav', '/Pack/808s'), bell);
+  assert.deepEqual(classifySample('Bell.wav', '/Pack/Cowbells'), { category: 'Perc', kind: 'cowbell' });
+  assert.deepEqual(classifySample('Bell.wav', '/Pack/Congas'), { category: 'Perc', kind: 'conga' });
+  assert.deepEqual(classifySample('Bell.wav', '/Pack/Triangles'), { category: 'Perc', kind: 'triangle' });
+  assert.deepEqual(classifySample('Chime.wav', '/Pack/Shakers'), { category: 'Perc', kind: 'shaker' });
 });
 
 await test('kinds: a folder gives the kind when it decided the category, or sharpens a weak name', () => {

@@ -130,11 +130,11 @@ test('role vocabulary: role folder names are role-like, pack names are not', () 
   for (const name of [
     'Kicks', 'Snares', 'Claps', 'Percs', 'Closed Hats', 'Open Hats', '808s', 'FX', 'Vox', 'Loops', 'Extras',
     'Misc', 'Toms', 'Cymbals', 'Layer', 'Perc_Electronic', 'HatsOpen', 'SD', 'BD', 'HIHAT', 'Hits',
-    'P E R C [BOUNCE]', 'S N A R E S', 'Drums', 'Instrument one-shot', 'Other samples'
+    'P E R C [BOUNCE]', 'S N A R E S', 'Drums', 'Instrument one-shot', 'Other samples', 'Bells', 'Wind Chimes 2', 'Agogo', 'Bell Kicks'
   ]) assert.ok(isRoleLikeName(name), name);
   for (const name of [
     'Kit 1', 'Pots And Pans Drum Kit', 'Coca Cola Drum Kit', 'Home Made Drum Kit #1', 'WAV MONO', 'WAV STEREO',
-    'Zampler Ultimate Drums', 'Best Of OZ', 'Friday Witchez', 'Kit_03_Amin_122'
+    'Zampler Ultimate Drums', 'Best Of OZ', 'Friday Witchez', 'Kit_03_Amin_122', 'Bell Boy Beats', 'Bells of Atlantis'
   ]) assert.ok(!isRoleLikeName(name), name);
 });
 
