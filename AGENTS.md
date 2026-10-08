@@ -138,10 +138,11 @@ path with more than three segments means you are in the wrong place.
 - **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
   export (it remains in `wavStripper.ts` and is tested **on purpose**: the owner has not decided whether stripping should return, so
   do not delete it as dead code); do not re-introduce stripping on the untrimmed path.
-- **Trimming only re-encodes a 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
-  nothing to trim, decode failure) is passed through as the original file; AIFF is never forced through the WAV parser
+- **Trimming only re-encodes a mono or stereo 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
+  more than two channels (`encodeWav` writes a plain 16-byte `fmt `, which is only valid up to stereo), nothing to trim, decode failure) is passed through as the original file; AIFF is never forced through the WAV parser
   (`readWavFormat` returns `null` for `FORM`/`AIFF`). Failures and skips are counted in the export report and surfaced as notices.
-  Re-encoded files carry no metadata chunks.
+  Re-encoded files carry no metadata chunks. `encodeWav` scales by 2^(bits-1), what decoders divide by, and clamps to the maximum code, so a
+  decode and re-encode is sample-exact (it used 2^(bits-1)-1, which moved every full-scale value by one code); pinned against known bytes.
 - **Trimming preserves source rate and bit depth**, read from the `fmt ` chunk before decoding. `decodeAudioData` resamples to the
   context rate, so reading it afterwards is circular.
 - **Trimmer contexts are `OfflineAudioContext`, one per distinct source rate, created inside `createTrimmer`.** Not `AudioContext`

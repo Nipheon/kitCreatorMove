@@ -173,7 +173,7 @@ function decodePcm(bytes: ArrayBuffer) {
   const dataSize = view.getUint32(40, true);
   const bps = bits / 8;
   const length = dataSize / (bps * numberOfChannels);
-  const peak = (1 << (bits - 1)) - 1;
+  const scale = 2 ** (bits - 1); // what browsers divide by
   const data = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
   let o = 44;
   for (let i = 0; i < length; i++) {
@@ -184,7 +184,7 @@ function decodePcm(bytes: ArrayBuffer) {
         v = view.getUint8(o) | (view.getUint8(o + 1) << 8) | (view.getUint8(o + 2) << 16);
         if (v & 0x800000) v -= 0x1000000;
       }
-      data[c][i] = v / peak;
+      data[c][i] = v / scale;
       o += bps;
     }
   }
@@ -278,6 +278,39 @@ await test('trim marks 8-bit, 32-bit and out-of-range rates unsupported without 
     assert.equal(result.trimmed, false);
     assert.equal(result.blob, file);
   }
+  assert.equal(fakeState.decodes, before);
+});
+
+await test('encodeWav writes known bytes: full scale clamps, -1 is the minimum code', async () => {
+  const bytes = async (bits: number) =>
+    new Uint8Array(await encodeWav([Float32Array.of(-1, 1, 0, 0.5, -0.5, 2)], 44100, bits).arrayBuffer()).subarray(44);
+  assert.deepEqual(Array.from(await bytes(16)), [
+    0x00, 0x80,  // -32768
+    0xff, 0x7f,  // +1.0 clamps to 32767
+    0x00, 0x00,
+    0x00, 0x40,  // 16384
+    0x00, 0xc0,  // -16384
+    0xff, 0x7f   // above full scale clamps
+  ]);
+  assert.deepEqual(Array.from((await bytes(24)).subarray(0, 6)), [0x00, 0x00, 0x80, 0xff, 0xff, 0x7f]);
+});
+
+await test('encodeWav then decode is sample-exact for every 16-bit code that a decoder can produce', async () => {
+  const codes = [-32768, -32767, -16384, -1, 0, 1, 12345, 32766, 32767];
+  const input = Float32Array.from(codes, v => v / 32768);
+  const out = decodePcm(await encodeWav([input], 44100, 16).arrayBuffer());
+  assert.deepEqual(Array.from(out.getChannelData(0), v => Math.round(v * 32768)), codes);
+});
+
+await test('trim leaves a file with more than two channels unchanged and counts it unsupported', async () => {
+  const header = new Uint8Array(await encodeWav([new Float32Array(8)], 44100, 16).arrayBuffer());
+  new DataView(header.buffer).setUint16(22, 6, true);
+  const file = new File([header], 'x.wav');
+  const before = fakeState.decodes;
+  const result = await createTrimmer().trim(file);
+  assert.equal(result.unsupported, true);
+  assert.equal(result.trimmed, false);
+  assert.equal(result.blob, file);
   assert.equal(fakeState.decodes, before);
 });
 

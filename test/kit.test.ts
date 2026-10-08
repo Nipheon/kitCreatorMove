@@ -1905,8 +1905,8 @@ await test('encodeWav writes 16-bit samples the browser can read back', async ()
   assert.equal(view.getUint32(40, true), input.length * 2, 'data chunk size');
   assert.equal(bytes.length, 44 + input.length * 2);
 
-  const peak = 32767;
-  const expected = [0, Math.round(0.5 * peak), Math.round(-0.5 * peak), peak, -peak, peak, -peak];
+  // Scale is 2^15 (what decoders divide by); +1.0 and overshoot clamp to the maximum code.
+  const expected = [0, 16384, -16384, 32767, -32768, 32767, -32768];
   expected.forEach((want, i) => {
     assert.equal(view.getInt16(44 + i * 2, true), want, `sample ${i}`);
   });
@@ -1923,8 +1923,7 @@ await test('encodeWav writes 24-bit samples, including negatives', async () => {
   const view = new DataView(bytes.buffer);
   assert.equal(view.getUint32(40, true), input.length * 3, 'data chunk size');
 
-  const peak = 8388607;
-  const expected = [0, Math.round(0.25 * peak), Math.round(-0.25 * peak), peak, -peak];
+  const expected = [0, 2097152, -2097152, 8388607, -8388608];
   expected.forEach((want, i) => {
     const at = 44 + i * 3;
     // Reassemble little-endian 24-bit two's complement.
@@ -1948,7 +1947,7 @@ await test('encodeWav interleaves stereo channels', async () => {
   assert.equal(view.getInt16(44, true), 32767);
   assert.equal(view.getInt16(46, true), 0);
   assert.equal(view.getInt16(48, true), 0);
-  assert.equal(view.getInt16(50, true), -32767);
+  assert.equal(view.getInt16(50, true), -32768);
 });
 
 await test('shuffle never hands back the pad\'s own sample', async () => {

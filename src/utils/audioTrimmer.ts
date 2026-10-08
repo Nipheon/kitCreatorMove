@@ -44,6 +44,8 @@ export function createTrimmer() {
       if (
         !format ||
         !SUPPORTED_BIT_DEPTHS.includes(format.bitsPerSample) ||
+        // encodeWav writes a plain 16-byte fmt header, which is only valid for mono and stereo.
+        format.numChannels < 1 || format.numChannels > 2 ||
         format.sampleRate < MIN_RATE ||
         format.sampleRate > MAX_RATE
       ) {
@@ -143,13 +145,14 @@ export function encodeWav(channels: Float32Array[], sampleRate: number, bitsPerS
   writeFourCC(36, 'data');
   view.setUint32(40, dataSize, true);
 
-  const peak = (1 << (bitsPerSample - 1)) - 1;
+  // Decoders divide by 2^(n-1), so this scale gives sample-exact roundtrips; +1.0 has no code and clamps to the max.
+  const scale = 2 ** (bitsPerSample - 1);
   let offset = 44;
 
   for (let i = 0; i < frames; i++) {
     for (let c = 0; c < numChannels; c++) {
       const clamped = Math.max(-1, Math.min(1, channels[c][i]));
-      const value = Math.round(clamped * peak);
+      const value = Math.min(scale - 1, Math.round(clamped * scale));
       if (bitsPerSample === 16) {
         view.setInt16(offset, value, true);
       } else {
