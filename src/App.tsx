@@ -1646,20 +1646,21 @@ export default function App() {
 
             {/* Modal Content Body */}
             <div className='p-6 sm:p-8 overflow-y-auto space-y-7 text-sm sm:text-base text-text-lighter leading-relaxed'>
+              <div className='text-xs font-bold uppercase tracking-[0.25em] text-text-subtle border-b border-border-dark pb-1.5'>Using the app</div>
+
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>1. Overview</h3>
                 <p>
-                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export a bundle you can upload to your hardware.
+                  Kit Creator for Ableton Move automatically turns your drum sample collections into hardware-ready Ableton Move preset bundles (<code className='bg-surface-code px-2 py-0.5 rounded text-accent-yellow font-mono text-sm'>.ablpresetbundle</code>). Drop sample folders, customize pad mappings, and export a bundle you can upload to your hardware. Sections 2 to 4 explain how to use the page; sections 5 and 6 explain how kits are made and which samples are used.
                 </p>
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding & Scanning Sample Folders</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding Sample Folders</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
                   <li><strong className='text-text-bright'>Pick folders / Pick files:</strong> No drag and drop, for instance on a phone? Use the buttons above the folder list. Pick folders opens your system's folder picker and loads the folder you choose, with its subfolders, exactly like a drop. If your browser only lets you pick files, use Pick files: loose files are grouped into one Dropped Files folder.</li>
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
-                  <li><strong className='text-text-bright'>Loop Filtering:</strong> Audio loops (detected by tempo or loop keywords) are automatically excluded from drum kit generation.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> A folder whose name is already in your list is skipped, even if it comes from a different pack, and a notice names what was skipped.</li>
                   <li><strong className='text-text-bright'>Collections:</strong> A folder that holds several separate packs (Kit 1, Kit 2, ...) is listed as a parent with its sub-packs underneath. Tick the parent to use all of them, or tick only the sub-packs you want to mix. The parent's eye looks half-filled when only some are on; clicking it then turns all on. The cross on the parent removes the whole collection, on a sub-pack just that one. A folder made of Kicks, Snares, FX and similar folders is one pack and is not split.</li>
                   <li><strong className='text-text-bright'>Hide a Folder:</strong> The eye icon next to a loaded folder takes it out of the pool without unloading it. The kit re-rolls immediately without those samples, the folder dims in the list, and the eye brings it straight back — handy for auditioning one pack against another. Locked pads keep what they are holding even if its folder is hidden.</li>
@@ -1670,7 +1671,6 @@ export default function App() {
               <section className='space-y-2.5'>
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>3. 4×4 Pad Grid & Controls</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
                   <li><strong className='text-text-bright'>Keyboard Hotkeys:</strong> Play pads instantly with row keys:
                     <div className='grid grid-cols-4 gap-1.5 max-w-sm text-sm font-mono text-accent-yellow mt-2 bg-surface-pad p-3 rounded-lg border border-border-main text-center font-bold'>
                       <div>1 2 3 4</div>
@@ -1680,7 +1680,6 @@ export default function App() {
                     </div>
                   </li>
                   <li><strong className='text-text-bright'>Space:</strong> Generates a new kit from anywhere on the page, except while you are typing in a field, another button or link has focus (Space then activates it) or the manual is open.</li>
-                  <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>Split Bottom Bar:</strong> Click the left side (<code className='text-accent-yellow font-mono'>Lock</code>) to hold a sample across re-rolls. Click the right side (<code className='text-accent-yellow font-mono'>Refresh</code>) to randomize only that single pad.</li>
                   <li><strong className='text-text-bright'>Exclude Sample:</strong> Click the ban icon in the sample name row to exclude a sample from future kit rolls.</li>
                   <li><strong className='text-text-bright'>Preview Kit:</strong> Plays every pad in order, 750ms apart (350ms with the Quick switch, which also cuts each pad off at the next), so you can hear the whole kit without clicking sixteen times. Clicking anywhere, pressing any key, or hitting the button again stops it.</li>
@@ -1690,33 +1689,47 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Presets & Batch Exporting</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>4. Settings & Downloading</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>Preset Naming:</strong> Kit names are a folder prefix, the Grid ID, and a random suffix — <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKT-ksho-Vibe</code>. Custom typed prefixes and suffixes are preserved.</li>
-                  <li><strong className='text-text-bright'>Grid ID:</strong> A short fingerprint of the pad layout, one letter per column: <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>k</code> kick, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>s</code> snare, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>c</code> clap, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>h</code> closed hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>o</code> open hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>p</code> percussion, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>x</code> other. Two kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device without relearning where anything sits. The panel shows the full ID, including the shared top row after an underscore; the exported name carries the column half, which is what fits on the Move's display.</li>
+                  <li><strong className='text-text-bright'>Preset Name:</strong> The name is a folder prefix, the Grid ID, and a random suffix — <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>MKT-ksho-Vibe</code>. Type your own prefix or suffix and it is kept; Randomize Suffix rolls a new one.</li>
+                  <li><strong className='text-text-bright'>Skip Loops / Skip Non-Drums:</strong> Two tick boxes in the Usable Samples card. They leave files out of the next kit; how they decide is in section 6.</li>
+                  <li><strong className='text-text-bright'>When Filters Apply:</strong> Skip Loops and Skip Non-Drums change what the <em>next</em> kit is built from. The counts above them update straight away, but the kit on screen is left alone — nothing is taken off a pad you are listening to. Hit Generate to apply them.</li>
+                  <li><strong className='text-text-bright'>Disable a Type:</strong> Each row of the Breakdown by Type card has an eye icon. Switching a type off leaves every sample of it out of generation, exactly like disabling a source folder, and the grid drops that column. Closed hats take generic hats with them, and percussion takes crashes.</li>
+                  <li><strong className='text-text-bright'>Disable a Kind:</strong> Kick, snare, clap and percussion rows open a list of the finer sound types the library holds (toms, shakers, bells, chimes, rimshots, rides and so on), each with its own eye icon, so "no toms" is one click. The lists stay closed until you open them. Switching a kind off regenerates the unlocked pads straight away; locked pads keep their sample.</li>
+                  <li><strong className='text-text-bright'>Trim Silence:</strong> Tick box above the download buttons, on by default. Turn it off to keep every sample's audio exactly as it is. <strong>It only happens on export</strong> — the pads always play your original files untouched, so what you hear while building a kit is the untrimmed sample and nothing on disk is ever modified. What it does to the audio is in section 6.</li>
                   <li><strong className='text-text-bright'>Download Kit / Batch Download:</strong> Download Kit saves the kit on screen. Batch Download opens a dialog where you pick 2 to 10 kits: the kit on screen plus new randomized ones. A library with few samples per role yields similar kits. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Choose One zip to get a single zip archive instead.</li>
                   <li><strong className='text-text-bright'>Device Transfer:</strong> Each exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> is a single file, not a folder: upload it to your Ableton Move. If you chose One zip, unzip it first.</li>
                 </ul>
               </section>
 
+              <div className='text-xs font-bold uppercase tracking-[0.25em] text-text-subtle border-b border-border-dark pb-1.5'>How kits are made</div>
+
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. Sample Filters & Processing</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>5. How a Kit Is Built</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
-                  <li><strong className='text-text-bright'>When Filters Apply:</strong> Skip Loops and Skip Non-Drums change what the <em>next</em> kit is built from. The counts above them update straight away, but the kit on screen is left alone — nothing is taken off a pad you are listening to. Hit Generate to apply them.</li>
-                  <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm. A file that says "break" or "breakbeat" in its own name also counts, but only if it could not be categorised — a snare called "Break Snare" is still a snare, and a pack named "Breaks Vol 2" keeps all of its one-shots.</li>
-                  <li><strong className='text-text-bright'>Disable a Type:</strong> Each row of the Breakdown by Type card has an eye icon. Switching a type off leaves every sample of it out of generation, exactly like disabling a source folder, and the grid drops that column. Closed hats take generic hats with them, and percussion takes crashes.</li>
-                  <li><strong className='text-text-bright'>Disable a Kind:</strong> Kick, snare, clap and percussion rows open a list of the finer sound types the library holds (toms, shakers, bells, chimes, rimshots, rides and so on), each with its own eye icon, so "no toms" is one click. The lists stay closed until you open them. Switching a kind off regenerates the unlocked pads straight away; locked pads keep their sample.</li>
-                  <li><strong className='text-text-bright'>Variety:</strong> Percussion and crash pads hold at most two of the same kind (two shakers, not five) while other kinds are available. It is a preference only: a library with nothing else still fills every pad.</li>
-                  <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
+                  <li><strong className='text-text-bright'>Hardware Note Mapping:</strong> Pad 1 (bottom-left) to Pad 16 (top-right) map to MIDI notes 36–51, matching Ableton Move hardware.</li>
+                  <li><strong className='text-text-bright'>Grid ID:</strong> A short fingerprint of the pad layout, one letter per column: <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>k</code> kick, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>s</code> snare, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>c</code> clap, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>h</code> closed hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>o</code> open hat, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>p</code> percussion, <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>x</code> other. Two kits sharing an ID lay their pads out identically, so one drum rack can replace another on the device without relearning where anything sits. The panel shows the full ID, including the shared top row after an underscore; the exported name carries the column half, which is what fits on the Move's display.</li>
+                  <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>When a Pool Runs Dry:</strong> A pad whose own category is exhausted takes the nearest sound rather than the next one down some list. Snares and claps cover for each other, the two hats cover for each other, percussion and other cover for each other, and a kick is the last resort for every role but its own. An open-hat pad reaches for closed hats first.</li>
                   <li><strong className='text-text-bright'>Percussion &amp; Other:</strong> These keep separate columns and separate rows, but a pad asking for either draws from both, weighted by how much of each is left — so a library heavy on unclassified samples still fills its percussion pads.</li>
+                  <li><strong className='text-text-bright'>Variety:</strong> Percussion and crash pads hold at most two of the same kind (two shakers, not five) while other kinds are available. It is a preference only: a library with nothing else still fills every pad.</li>
                   <li><strong className='text-text-bright'>Hat Pairs:</strong> When a closed hat and an open hat share a name apart from the hat words and numbers (<code>BlockPatrol-Hat</code> and <code>BlockPatrol-HatOpn</code>), a closed hat drawn onto a pad puts its open partner on the open-hat pad directly to its right. Closed hats are still drawn at random, and a locked open-hat pad is left alone. Shared prefixes such as <code>DJP_</code> on many files do not count as pairs.</li>
-                  <li><strong className='text-text-bright'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Turn it off to keep every sample's audio exactly as it is. Either way, WAV metadata chunks (tags, loop points, embedded notes) are removed on export, since the Move cannot use them. <strong className='text-text-bright'>It only happens on export</strong> — the pads always play your original files untouched, so what you hear while building a kit is the untrimmed sample and nothing on disk is ever modified.</li>
                 </ul>
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. Privacy</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>6. How Samples Are Sorted & Filtered</h3>
+                <ul className='list-disc pl-6 space-y-2 text-text-light'>
+                  <li><strong className='text-text-bright'>Skip Loops:</strong> Leaves out files whose name or folder marks them as a loop — "loop", a bar count, or a tempo like 128bpm. A file that says "break" or "breakbeat" in its own name also counts, but only if it could not be categorised — a snare called "Break Snare" is still a snare, and a pack named "Breaks Vol 2" keeps all of its one-shots.</li>
+                  <li><strong className='text-text-bright'>Skip Non-Drums:</strong> Leaves out uncategorised files that look like effects, vocals, scratches or melodic material, and anything sitting in an Extras, Imported or Misc folder. Only ever applies to files the app could not categorise, so a sample called "Bass Kick" is unaffected.</li>
+                  <li><strong className='text-text-bright'>Trim Silence:</strong> Trims leading and trailing silence (&lt; -60 dBFS) and re-encodes at the original sample rate and bit depth. Whether trimming is on or off, WAV metadata chunks (tags, loop points, embedded notes) are removed on export, since the Move cannot use them.</li>
+                </ul>
+              </section>
+
+              <div className='text-xs font-bold uppercase tracking-[0.25em] text-text-subtle border-b border-border-dark pb-1.5'>About</div>
+
+              <section className='space-y-2.5'>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Privacy</h3>
                 <p>
                   <strong className='text-text-bright'>Your samples never leave your computer.</strong> There is no
                   server and no upload: the files are read, categorised, trimmed and packaged
@@ -1733,7 +1746,7 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>7. Source Code &amp; Contact</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>8. Source Code &amp; Contact</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li>
                     <strong className='text-text-bright'>Repository:</strong>{' '}
@@ -1775,7 +1788,7 @@ export default function App() {
               </section>
 
               <section className='space-y-2.5'>
-                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>8. Thank You</h3>
+                <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>9. Thank You</h3>
                 <p className='text-text-light'>
                   Special thanks to{' '}
                   <a

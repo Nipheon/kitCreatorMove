@@ -787,13 +787,11 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   `public/` holds `robots.txt`, `sitemap.xml`, `og-image.png` (1200x630, a real screenshot), which Vite copies to the build root.
 - **Icon:** header icon and favicon are the same drum image (`public/icon.png`, 32px and 180px copies). Header `<img>` has empty
   `alt` (decoration beside a heading) and explicit width/height (no layout shift). **It is third-party work under an attribution
-  licence**, credited in help section 8 and the README as *Drum icon by iconfromus from Magnific*, linking both the designer's profile and
-  the icon (attribution confirmed by the owner; magnific.com 403s automated requests). The README and help section 7 state that the 0BSD licence does
+  licence**, credited in help section 9 (Thank You) and the README as *Drum icon by iconfromus from Magnific*, linking both the designer's profile and
+  the icon (attribution confirmed by the owner; magnific.com 403s automated requests). The README and help section 8 (Source Code & Contact) state that the 0BSD licence does
   not cover `public/icon.png` nor its derivatives `icon-32.png`, `icon-180.png` and `og-image.png` (which shows the drum); keep that list in step. Do not drop either credit, and do not let the 0BSD `LICENSE` be read as covering it.
   Replacing the icon means removing the credits with it, not before.
-- **Help modal** (header `HelpCircle`; eight sections: 1 Overview, 2 Adding & Scanning, 3 4x4 Pad Grid (Preview Kit, Auto Preview,
-  pad tint), 4 Presets & Batch (Grid IDs, `PREFIX-gridid-Suffix` naming, batch, device transfer), 5 Sample Filters (filters,
-  fallbacks, Perc/Other draw, Trim Silence), 6 Privacy, 7 Source Code & Contact, 8 Thank You (drum-kit-generator, the drum icon)).
+- **Help modal** (header `HelpCircle`; nine sections in three groups, **owner decision 2026-10-08: how to use the page and how kits are made are kept apart, usage first**. *Using the app*: 1 Overview, 2 Adding Sample Folders, 3 4x4 Pad Grid & Controls (hotkeys, Space, lock/reroll/exclude, Preview Kit, Auto, Quick, pad tint), 4 Settings & Downloading (name, filter and type toggles, Trim Silence toggle, Download Kit / Batch Download, device transfer). *How kits are made*: 5 How a Kit Is Built (note mapping, Grid ID, choke, fallbacks, Perc/Other draw, variety, hat pairs), 6 How Samples Are Sorted & Filtered (Skip Loops, Skip Non-Drums, what Trim Silence does to audio). *About*: 7 Privacy, 8 Source Code & Contact, 9 Thank You (drum-kit-generator, the drum icon). A new help entry goes into the group it belongs to: what you click or see is 2 to 4, how a decision is made is 5 or 6, and the usage entry points at the explanation instead of repeating it).
   Bundles are single files you upload to the Move, and the batch wording must match the code (separate files by default, optional
   one zip; Download Kit saves the on-screen kit, Batch Download opens the dialog). **A user-visible rule needs
   a help entry, not only an AGENTS.md entry** (Preview and Grid IDs shipped without one). **The contact address is a relay mask**
