@@ -951,8 +951,8 @@ export default function App() {
       if (batch) {
         emptyNote = emptyPadsNotice(batch);
         if (batchAsZip) {
-          names.push(...batch.map(entry => entry.name));
           report = await exportBatchKits(batch, kitPrefix, { trimSilence, onProgress });
+          names.push(...batch.map(entry => entry.name));
         } else {
           const result = await exportBatchSeparately(batch, { trimSilence, onProgress });
           names.push(...result.downloaded);
@@ -965,8 +965,8 @@ export default function App() {
         }
       } else {
         const single = uniqueKitName(exportName, exportedNames.current);
-        names.push(single);
         report = await exportKitZip(kit, single, { trimSilence, onProgress });
+        names.push(single);
         if (single !== exportName) {
           setNotice(`"${exportName}" was already exported this session, so this kit was saved as "${single}".`);
         }
@@ -989,9 +989,9 @@ export default function App() {
       }
     } catch (err) {
       console.error('Export failed:', err);
-      // Files already downloaded by a failed separate export are real, so their names are taken.
-      if (err instanceof ExportError) names.push(...err.downloaded);
-      names.forEach(name => exportedNames.current.add(name));
+      // Files already downloaded by a failed separate export are real, so their names are taken;
+      // a failed single or zip export wrote nothing and burns no name.
+      if (err instanceof ExportError) err.downloaded.forEach(name => exportedNames.current.add(name));
       setError(
         err instanceof ExportError
           ? err.userMessage
