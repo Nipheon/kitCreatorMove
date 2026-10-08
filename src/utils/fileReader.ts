@@ -52,6 +52,18 @@ export function parseFormatFromHead(head: ArrayBuffer, fileSize: number): WavFor
 }
 
 /**
+ * Why a WAV holds no audio, judged from bytes that start at the top of the file: no `data` chunk in
+ * a file read in full, or a `data` chunk whose header is the last thing in the file. null when it
+ * has audio or this much of the file cannot say (a `data` chunk beyond the bytes read). A declared
+ * size of 0 with bytes after it is not judged: streaming recorders write that placeholder.
+ */
+function missingAudio(head: ArrayBuffer, fileSize: number): string | null {
+  const data = readChunks(head)?.find(c => c.id === 'data');
+  if (data) return data.offset >= fileSize ? 'WAV with an empty data chunk' : null;
+  return head.byteLength >= fileSize ? 'WAV without a data chunk' : null;
+}
+
+/**
  * Decides what to do with a WAV. PCM and float pass through as the very same File: they
  * are never re-encoded. MS ADPCM is converted to PCM16; every other format is rejected.
  * A file with no readable `fmt ` chunk is left alone, as before.
@@ -59,15 +71,18 @@ export function parseFormatFromHead(head: ArrayBuffer, fileSize: number): WavFor
 async function prepareWav(file: File, report: DropReport): Promise<File | null> {
   let buffer: ArrayBuffer | null = null;
   let format = null;
+  let seen: ArrayBuffer | null = null; // the bytes `format` was read from
   try {
     for (const bytes of HEAD_STEPS) {
       const head = await file.slice(0, bytes).arrayBuffer();
       format = parseFormatFromHead(head, file.size);
+      if (format !== null) seen = head;
       if (format !== null || head.byteLength >= file.size) break;
     }
     if (format === null && file.size > HEAD_STEPS[HEAD_STEPS.length - 1]) {
       buffer = await file.arrayBuffer();
       format = parseWavFormat(buffer);
+      seen = buffer;
     }
   } catch (err) {
     console.warn(`Could not inspect ${file.name}:`, err);
@@ -75,8 +90,21 @@ async function prepareWav(file: File, report: DropReport): Promise<File | null> 
   }
   if (format === null) return file;
 
-  const tag = format.audioFormat === 0xfffe && format.subFormat !== undefined ? format.subFormat : format.audioFormat;
-  if (tag === 1 || tag === 3) return file;
+  // An extensible header too short to hold its sub-format cannot say what the audio is: refuse it
+  // rather than guess PCM from the bit depth (a guessed file would be copied into the bundle as is).
+  if (format.audioFormat === 0xfffe && format.subFormat === undefined) {
+    report.rejected.push({ name: file.name, reason: 'extensible WAV without a sub-format (fmt chunk too short)' });
+    return null;
+  }
+  const tag = format.audioFormat === 0xfffe ? format.subFormat! : format.audioFormat;
+  if (tag === 1 || tag === 3) {
+    const empty = seen && missingAudio(seen, file.size);
+    if (empty) {
+      report.rejected.push({ name: file.name, reason: empty });
+      return null;
+    }
+    return file;
+  }
 
   if (format.audioFormat === 2) {
     try {

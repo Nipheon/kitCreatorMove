@@ -133,7 +133,10 @@ path with more than three segments means you are in the wrong place.
   16-bit PCM WAV (same rate and channels, no resampling, exact samples; the output is cut to the `fact` frame count when that is smaller than the decoded blocks, which are padded) because browsers cannot play it and the Move does not
   either. Any other tag (IMA ADPCM, mu-law, A-law, MP3, GSM, unknown) or undecodable ADPCM is skipped and listed in the `DropReport`
   (`converted`/`rejected`); `processFiles` does not show `rejected` in the UI, it logs it with one `console.warn` per drop (a converted ADPCM file is silent too; the owner wants no notice for either); one bad file never discards the rest of the drop. A WAV
-  with no readable `fmt ` chunk is left alone. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
+  with no readable `fmt ` chunk is left alone. An extensible (0xFFFE) `fmt ` too short to hold its sub-format is rejected, not guessed as
+  PCM from the bit depth (a guess would copy a file of unknown content into the bundle). A PCM/float WAV with no `data` chunk (judged only
+  when the whole file was read) or a `data` chunk whose header ends the file is rejected as empty; a declared size of 0 with bytes after
+  it is accepted (streaming recorders write that placeholder), and a `data` chunk beyond the bytes read is not judged. `fileSignature` runs on the converted file. `WavFormat` carries `audioFormat` and,
   for extensible, `subFormat`.
 - **With trimming off, the original `File` is written unchanged**, WAV metadata included. `stripWavMetadata` is no longer used by
   export (it remains in `wavStripper.ts` and is tested **on purpose**: the owner has not decided whether stripping should return, so

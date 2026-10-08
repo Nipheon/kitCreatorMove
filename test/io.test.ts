@@ -559,15 +559,15 @@ await test('collectAudioFiles converts ADPCM, rejects other formats, passes PCM 
 
 await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is rejected otherwise', async () => {
   const ext = (sub: number) => {
-    const b = new Uint8Array(68);
+    const b = new Uint8Array(70);
     const v = new DataView(b.buffer);
-    b.set(ascii('RIFF'), 0); v.setUint32(4, 60, true);
+    b.set(ascii('RIFF'), 0); v.setUint32(4, 62, true);
     b.set(ascii('WAVE'), 8);
     b.set(ascii('fmt '), 12); v.setUint32(16, 40, true);
     v.setUint16(20, 0xfffe, true); v.setUint16(22, 1, true); v.setUint32(24, 44100, true);
     v.setUint32(28, 88200, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
     v.setUint16(36, 22, true); v.setUint16(38, 16, true); v.setUint16(44, sub, true);
-    b.set(ascii('data'), 60); v.setUint32(64, 0, true);
+    b.set(ascii('data'), 60); v.setUint32(64, 2, true);
     return b;
   };
   assert.equal((await readWavFormat(new Blob([ext(1)])))?.subFormat, 1);
@@ -576,6 +576,47 @@ await test('WAVE_FORMAT_EXTENSIBLE passes through with a PCM sub-format and is r
   const got = await quiet(() => collectAudioFiles(root, report));
   assert.deepEqual(names(got), ['a.wav']);
   assert.deepEqual(report.rejected.map(r => r.name), ['b.wav']);
+});
+
+/** A PCM WAV built from parts, so a test can leave out or empty the data chunk. */
+const pcmWavParts = (opts: { data?: number[] | null; declared?: number; fmtExtra?: number[]; tag?: number }) => {
+  const fmt = [...le16(opts.tag ?? 1), ...le16(1), ...le32(44100), ...le32(88200), ...le16(2), ...le16(16), ...(opts.fmtExtra ?? [])];
+  const data = opts.data === null ? [] : [...ascii('data'), ...le32(opts.declared ?? (opts.data ?? []).length), ...(opts.data ?? [])];
+  const body = [...ascii('WAVE'), ...chunk('fmt ', fmt), ...data];
+  return new Uint8Array([...ascii('RIFF'), ...le32(body.length), ...body]);
+};
+
+await test('a WAV with no data chunk or an empty one is rejected; a declared size of 0 with bytes after it is not judged', async () => {
+  const root = dirEntry('', 'P', p => [
+    entryFor(p, 'ok.wav', pcmWavParts({ data: [1, 2, 3, 4] })),
+    entryFor(p, 'nodata.wav', pcmWavParts({ data: null })),
+    entryFor(p, 'empty.wav', pcmWavParts({ data: [] })),
+    entryFor(p, 'stream.wav', pcmWavParts({ data: [1, 2, 3, 4], declared: 0 }))
+  ]);
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(root, report));
+  assert.deepEqual(names(got), ['ok.wav', 'stream.wav']);
+  assert.deepEqual(report.rejected.map(r => r.name).sort(), ['empty.wav', 'nodata.wav']);
+  assert.match(report.rejected.find(r => r.name === 'nodata.wav')!.reason, /without a data chunk/);
+  assert.match(report.rejected.find(r => r.name === 'empty.wav')!.reason, /empty data chunk/);
+});
+
+await test('a data chunk beyond the bytes read is not judged missing', async () => {
+  const junk = chunk('JUNK', Array(6000).fill(0));
+  const body = [...ascii('WAVE'), ...chunk('fmt ', [...le16(1), ...le16(1), ...le32(44100), ...le32(88200), ...le16(2), ...le16(16)]), ...junk, ...chunk('data', [1, 2])];
+  const wav = new Uint8Array([...ascii('RIFF'), ...le32(body.length), ...body]);
+  const report = emptyReport();
+  const got = await collectAudioFiles(dirEntry('', 'P', p => [entryFor(p, 'late.wav', wav)]), report);
+  assert.deepEqual(names(got), ['late.wav']);
+  assert.deepEqual(report.rejected, []);
+});
+
+await test('an extensible fmt chunk too short to hold its sub-format is rejected with its own reason', async () => {
+  const wav = pcmWavParts({ tag: 0xfffe, fmtExtra: le16(0), data: [1, 2, 3, 4] }); // 18-byte fmt, cbSize 0
+  const report = emptyReport();
+  const got = await quiet(() => collectAudioFiles(dirEntry('', 'P', p => [entryFor(p, 'short.wav', wav)]), report));
+  assert.deepEqual(got, []);
+  assert.match(report.rejected[0].reason, /without a sub-format/);
 });
 
 // ── Scan progress ─────────────────────────────────────────────────────────────
