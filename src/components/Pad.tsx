@@ -311,7 +311,7 @@ export const Pad: React.FC<PadProps> = ({
           disabled={!sample || isBusy}
           onClick={onToggleLock}
           aria-pressed={isLocked}
-          aria-label={isLocked ? `Unlock pad ${index + 1}` : `Lock pad ${index + 1}`}
+          aria-label={`Lock pad ${index + 1}`}
           className={`w-1/2 flex items-center justify-center gap-1.5 transition-colors ${
             !sample
               ? 'text-border-main cursor-not-allowed'

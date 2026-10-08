@@ -36,10 +36,10 @@ const KindRow: React.FC<{ entry: KindCount; isOff: boolean; busy: boolean; onTog
         type='button'
         onClick={onToggle}
         disabled={busy}
-        aria-pressed={isOff}
+        aria-pressed={!isOff}
         className='text-text-subtle hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
         title={isOff ? `Use ${entry.label} samples again` : `Leave ${entry.label} samples out of every kit`}
-        aria-label={isOff ? `Enable ${entry.label}` : `Disable ${entry.label}`}
+        aria-label={`Include ${entry.label}`}
       >
         {isOff ? <EyeOff size={13} /> : <Eye size={13} />}
       </button>
@@ -369,6 +369,13 @@ export default function App() {
 
   const samples = useMemo(() => enabledSamples(sourceFolders), [sourceFolders]);
   const kit = kitResult.kit;
+  // An emptied library hides the whole breakdown card, so a switched-off type or kind would stay
+  // off with no eye left to turn it back on. A fresh library starts with everything on.
+  useEffect(() => {
+    if (sourceFolders.length > 0) return;
+    setDisabledTypes(prev => (prev.size === 0 ? prev : new Set()));
+    setDisabledKinds(prev => (prev.size === 0 ? prev : new Set()));
+  }, [sourceFolders.length]);
   const chokeGroups = chokeGroupsFor(kit);
 
   /**
@@ -1217,11 +1224,11 @@ export default function App() {
                             <button
                               type='button'
                               onClick={() => toggleType(cat)}
-                              disabled={total === 0 || isGenerating}
-                              aria-pressed={isOff}
+                              disabled={(total === 0 && !isOff) || isGenerating}
+                              aria-pressed={!isOff}
                               className='text-text-subtle hover:text-text-bright transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer'
                               title={isOff ? `Use ${label} samples again` : `Leave ${label} samples out of every kit`}
-                              aria-label={isOff ? `Enable ${label}` : `Disable ${label}`}
+                              aria-label={`Include ${label}`}
                             >
                               {isOff ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>

@@ -755,6 +755,10 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   A pointerdown on the Preview button while a preview runs stops it (the global capture handler) and sets `stoppedByPointerdown`, so the click
   that follows is a no-op however slow it is; the flag is cleared right after pointerup/pointercancel.
   Ticking Auto Preview previews the current kit immediately (`toggleAutoPreview`); unticking leaves a running preview alone.
+- **Toggle buttons keep a fixed `aria-label` and carry state in `aria-pressed`** (pad Lock: `Lock pad N`, pressed = locked; type and kind
+  eyes: `Include <label>`, pressed = included, i.e. not switched off). A label that flips together with `aria-pressed` reads inverted. The
+  visuals and `title` tooltips are unchanged. Emptying the library (no source folders) resets `disabledTypes`/`disabledKinds`, since the
+  breakdown card with their eyes is hidden then; a switched-off type row with no samples keeps an enabled eye.
 - **Known gap, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
   `pointer-events-none` layer.
 
