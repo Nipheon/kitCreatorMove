@@ -385,6 +385,23 @@ await test('"rider", "pride" and "bride" are not rides, "cymbalium" is not a cym
   assert.equal(categorizeSample('illride.wav', '/Pack/Samples'), 'Crash');
 });
 
+await test('"hollywood", "bollywood", "snapchat" and "percussive" do not match a listed word glued', async () => {
+  // wood (block), snap (clap) and perc (percussion) inside ordinary words; the whole words still match
+  for (const name of ['Hollywood Strings.wav', 'BollywoodVox.wav', 'Snapchat 01.wav', 'Percussive Bass.wav'])
+    assert.equal(categorizeSample(name, '/Pack/Extras'), 'Other', name);
+  assert.deepEqual(classifySample('Hollywood Perc.wav'), { category: 'Perc', kind: 'percussion' });
+  assert.equal(categorizeSample('Wood.wav'), 'Perc');
+  assert.equal(categorizeSample('Snap.wav'), 'Clap');
+  assert.equal(categorizeSample('Perc.wav'), 'Perc');
+});
+
+await test('a drum name that states a length is not a loop, a percussion or unnamed phrase still is', async () => {
+  for (const name of ['Snare 2 Bar.wav', 'Kick 1 Bar.wav', 'Hat 2 Bars.wav', 'Clap 4 Bars.wav'])
+    assert.equal(looksLikeLoop(name, '', categorizeSample(name)), false, name);
+  for (const name of ['Drum Loop 4 Bars.wav', 'Kick Loop 2 Bars.wav', 'Bell 4 Bars.wav', '4 bars perc.wav', 'Groove 8 Bars.wav', 'Snare 120bpm.wav'])
+    assert.equal(looksLikeLoop(name, '', categorizeSample(name)), true, name);
+});
+
 await test('"shaking" is a shaker sound', async () => {
   for (const name of [
     'Shaking A Full Unopened Soda Can-24.wav',
@@ -2993,6 +3010,27 @@ await test('kinds: agogo (agogô, agogos) reads as a bell and keeps its own stre
   assert.deepEqual(classifySample('Big Bell.wav', '/Pack/Hats'), { category: 'Hat', kind: 'hat' });
 });
 
+await test('kinds: agog (truncated drum-machine spelling) is a bell as a whole token only', () => {
+  const bell = { category: 'Perc', kind: 'bell' };
+  for (const name of ['Machine L AGOG.wav', 'agog_h.wav', 'agog.wav']) assert.deepEqual(classifySample(name), bell, name);
+  // glued to other letters it stays what it was
+  for (const name of ['626hagog.wav', 'agogue.wav']) assert.notDeepEqual(classifySample(name), bell, name);
+});
+
+await test('kinds: a two-word artist ending in bell with a title is a song, one-word artists and descriptors are one-shots', () => {
+  const other = { category: 'Other', kind: 'other' };
+  for (const name of ['Jimmy Bell - Song.wav', 'Jimmy_Bell_-_Song.wav', 'Jimmy Chime - Song.wav', 'Ted Bells - Alpha.wav']) {
+    assert.ok(looksLikeSongName(name), name);
+    assert.deepEqual(classifySample(name, '/Pack/FX'), other, name);
+  }
+  const bell = { category: 'Perc', kind: 'bell' };
+  for (const name of ['Bell - Alpha.wav', 'Bell - 01.wav', 'Sleigh Bell - Hit.wav', 'Church Bell - Dry.wav', 'Jimmy Bell - 01.wav', 'Sleigh Bell 1.wav', 'Church Bell Hit Dry 120bpm.wav']) {
+    assert.equal(looksLikeSongName(name), false, name);
+    assert.equal(classifySample(name, '/Pack/FX').kind, 'bell', name);
+    assert.deepEqual({ category: classifySample(name, '/Pack/FX').category }, { category: bell.category }, name);
+  }
+});
+
 await test('kinds: whole-song files named after a bell are never a bell (song guard)', () => {
   const other = { category: 'Other', kind: 'other' };
   // artist - title and band connectors, with underscores or spaces, with or without a folder of bells
@@ -3082,7 +3120,7 @@ await test('kinds: the kind always belongs to the category (word lists, pairs, f
   const V = VOCABULARY;
   const words = [...new Set([...V.KICK, ...V.SNARE, ...V.CLAP, ...V.CRASH, ...V.PERC, ...V.HAT, ...V.CLOSED, ...V.OPEN,
     '808', 'shaking', 'chat', 'ohat', 'openhat', 'ophh', 'clhh', 'bda', 'sdb', 'op', 'hi', 'side', 'stick', 'cross', 'wood', 'block', 'finger', 'hand',
-    'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox'])];
+    'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox', 'hollywood', 'snapchat', 'percussive', 'agog'])];
   let n = 0;
   const check = (name: string, dir = '') => {
     const c = classifySample(name, dir);

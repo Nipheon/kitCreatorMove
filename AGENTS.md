@@ -255,7 +255,9 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **`GLUE_FALSE_FRIENDS` never match glued**: `whats thats chats` (`whats` ends in `hats`, so every `GetWhatsHere-*` file that
   was not a kick or snare filed as a hat) and `rider riders bride pride strider cymbalium` (`ride` is four characters and glues:
   `night_rider` melodies and `Horse Rider` patches read as cymbals, 67 files, and with rides now choking that would be a wrong
-  choke). Whole-token matching of a listed word is unchanged.
+  choke). Whole-token matching of a listed word is unchanged. Added later: `hollywood bollywood snapchat percussive` (`wood`, `snap` and `perc`
+  glued: Hollywood/Bollywood read as woodblock, Snapchat as a snap, `Percussive Lead` as percussion; 3+ libraries each). 76 files changed over
+  both corpora and the public listing, mostly one 50-file beatbox folder named `Percussive` (Perc -> Other, accepted). Test: `"hollywood", ... do not match a listed word glued`.
 - **`shaking` is Perc, checked after the `808` rule** (`Shaking A Full Unopened Soda Can`, 74 files; `808 Shaking` stays a kick). Deliberately NOT added after measuring on the ~120k-file
   private corpus: `hit shot shots stomp thud hiss pot pan can cola tap click` (`bell` was on this list and has since moved to Perc, see the bell entry). Most of their files sit in `FX`/`Vox`/`Extras` folders
   and are correctly non-drum; promoting them to Perc would bypass `looksNonDrum` (it only runs for `Other`) and `Perc` and `Other`
@@ -320,8 +322,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   name+folder identical). Known noise, accepted ("never 100%"): tonal one-shots of melodic bell patches (`IN Bells-000-036-c1`, trap bells) sit
   in Perc; the two whole-song files named after a Bell that this noise once listed are now caught by the song guard.
   Rejected: glued compounds (`sleighbell`, `jinglebell`, `glasbell`, `metbell`, `sonnydbell`: each 1-3 libraries, mostly one name),
-  `tubular` (always next to `bell` anyway), `glockenspiel` (2 libraries), `glock` (a gun), `agog` (the truncated drum-machine spelling:
-  1 library, and an English word), note-name and `pluck/arp/tone/fm` blockers (zero cross-library evidence in the data; a note-name rule
+  `tubular` (always next to `bell` anyway), `glockenspiel` (2 libraries), `glock` (a gun), note-name and `pluck/arp/tone/fm` blockers (zero cross-library evidence in the data; a note-name rule
   would also undo the accepted tonal bells).
 - **`chime` is a Perc kind (label `Chime`), same mechanics as `bell`.** Words `chime chimes windchime windchimes`, whole tokens only (glued,
   `chime` reads `chimera`, `Chimerz`; `chimney`, `chimp` never match). Evidence over both private corpora and public listings: `chime` 20 libraries / 24
@@ -332,6 +333,8 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   the 6,276 labelled files, name-only or name+folder.
 - **`agogo` reads as kind `bell`** (also `agogos`, `agogô`: `tokenize` rewrites `agogô` to `agogo` because the accent would split it). 28 names
   in 12 libraries, all drum-machine or percussion kits, previously generic `percussion`; the category is unchanged.
+  **`agog`** (the truncated drum-machine spelling, `DR550 L AGOG`, `agog_h`) is a bell too, **whole token only** (`WHOLE_TOKEN_ONLY`): owner
+  decision despite the evidence (1 library, 5 names, all previously Other) and the English word (`All Agog` reads as a bell, accepted).
 - **Song guard (`looksLikeSongName`): a whole-song file named after a bell is never a bell.** Only consulted for a weak word, so it moves no
   other category (a song-like name with a kick word is still a kick; `Hat (Artist - Song).wav` is still a hat). Tested on the raw name with `_`
   as space and bracketed text removed (`Bell (Artist - Song)` is a one-shot sampled from a song, as kits name them): a band connector (`and
@@ -339,7 +342,12 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   one-shots, all songs and acapellas); or a spaced hyphen/tilde/dash with at least two words each side, no digit in the artist part and five
   words in all. Not used, because they hit drum kits: name length (2,016 files with 8+ words, mostly `Kick (Artist - Song Title)`), a
   leading track number (`01 Some Producer Bell`), any spaced hyphen (`Bell - Alpha`, `ZQ - Bell`, `Little bell 2 - Small bell`). Residual
-  misses, accepted: a short two-word artist-title like `Jimmy Bell - Song`. Measured on a song folder of corpus 2 (780 files): 500 match
+  misses, accepted: no separator, or a one-word artist. Closed later (owner decision): **a two-word artist ending in the bell word, any
+  title with a word** (`Jimmy Bell - Song`, `Jimmy Chime - Song`) is a song, unless the first word describes a bell (`BELL_DESCRIPTORS`:
+  `Sleigh Bell - Hit`, `Church Bell - Dry`) or the artist part has a digit. A one-word artist is NOT a song: `Bell - Alpha` and
+  `ZQ - Bell` are one-shot naming (14 files in 3 libraries, plus 8 `Bell - <word>` in one pack); over all 235,576 files the new rule changes
+  0 files (the data has no such song), so its cost is hypothetical: a one-shot named `<Producer> Bell - <Word>` (producer tags such as `Some Producer Bell`
+  are common in trap kits, `Some Producer Bell - Hit` would now be Other). Measured on a song folder of corpus 2 (780 files): 500 match
   the pattern (the rest have no separator or a one-word artist). Of the 902 files with a bell/chime word over both corpora and the public
   listing, 3 match the song pattern (the two named after a Bell, plus one loop); the guard changes those three (two songs, one loop that stays a loop), and
   every other file keeps its result.
@@ -431,6 +439,9 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **`loop` never matches as a prefix** ("Loopworks" stands for a vendor name in ordinary one-shots), and **a glued `loop` needs three or
   more characters before it** (`bloop` stays a one-shot).
 - **A tempo must say `bpm`**; a bare bracketed number (`[120]`) is as likely an index.
+- **`\d+ bars?` is loop evidence only when the name does not already say kick, snare, clap, hat or cymbal** (`Snare 2 Bar.wav`,
+  `Kick 1 Bar.wav` are hits that state a length). Percussion and unnamed phrases keep it (`Bell 4 Bars`, `4 bars perc`, `Groove 8 Bars`);
+  `Drum Loop 4 Bars` is a loop by its `loop` word. 7 files in the corpora carry a bar count, all `Other` loops: none changes.
 - **A tempo is loop evidence in a filename, never in a folder name** (same for the `bpm` token). Folders like `Construction Kit (135
   bpm)/Dry/` hold one-shots; three packs in a 214-pack survey produced an empty grid, silently. Folders that mean loops say so in
   words.

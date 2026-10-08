@@ -448,7 +448,8 @@ const PERC_KINDS: [SampleKind, string[]][] = [
   // cowbell, a triangle or a ride bell keeps its own word. `bell` and `bells` are weak evidence (WEAK_WORDS):
   // dropped for a name with a melodic or non-drum word (BELL_BLOCKERS: `Bell Pad`, `Melody Bell` are tones, not
   // hits) or a whole-song name (`looksLikeSongName`). `agogo` (agogô, a double bell) is strong: it needs no guard.
-  ['bell', ['bell', 'bells', 'agogo', 'agogos']],
+  // `agog` is the truncated drum-machine spelling (`DR550 L AGOG`; 1 library, added on an owner decision): whole token only.
+  ['bell', ['bell', 'bells', 'agogo', 'agogos', 'agog']],
   // Wind, door and synth chimes. Same mechanics as bell (whole tokens, same guards); `windchimes` is one
   // word in 5 libraries (`windchimez`, 1 library, is left out).
   ['chime', ['chime', 'chimes', 'windchime', 'windchimes']]
@@ -499,11 +500,12 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = {
  */
 const GLUE_FALSE_FRIENDS = [
   'whats', 'thats', 'chats',
-  'rider', 'riders', 'bride', 'pride', 'strider', 'cymbalium'
+  'rider', 'riders', 'bride', 'pride', 'strider', 'cymbalium',
+  'hollywood', 'bollywood', 'snapchat', 'percussive'
 ];
 
 /** Four-character words that must not glue to a neighbouring word, only match as a token. */
-const WHOLE_TOKEN_ONLY = ['snar', 'klap', ...WEAK_WORDS];
+const WHOLE_TOKEN_ONLY = ['snar', 'klap', 'agog', ...WEAK_WORDS];
 
 /**
  * A drum code plus one variant letter: a drum sampler's multi-mic kit ("BDaEXT", "SDbOH"), a
@@ -712,7 +714,7 @@ const LOOP_WORDS = ['loop', 'loops', 'bpm'];
  * before a glued "loop" must be at least three characters so "bloop" stays a one-shot.
  * A tempo must be spelled out as bpm; a bare bracketed number is not evidence.
  */
-function textLooksLikeLoop(text: string, tempoCounts = true, isFile = false): boolean {
+function textLooksLikeLoop(text: string, tempoCounts = true, isFile = false, barsCount = true): boolean {
   const tokens = tokenize(text, isFile);
   const joined = tokens.join(' ');
 
@@ -726,7 +728,8 @@ function textLooksLikeLoop(text: string, tempoCounts = true, isFile = false): bo
   // empty grid, with nothing said. A folder that means loops nearly always says so in
   // words, and those still count below.
   if (tempoCounts && /\b\d{2,3} ?bpm\b/.test(joined)) return true;
-  if (tempoCounts && /\b\d+ bars?\b/.test(joined)) return true;
+  // `barsCount` is false for a name that already names a drum (`Snare 2 Bar.wav`, `Kick 1 Bar`: a length, not a loop).
+  if (tempoCounts && barsCount && /\b\d+ bars?\b/.test(joined)) return true;
 
   return tokens.some(t => {
     // `bpm` is tempo evidence like the patterns above, so it follows the same rule:
@@ -796,6 +799,18 @@ function folderBlocksWeakWords(directory: string): boolean {
  */
 const BAND_CONNECTOR = /(?:^|\s)(?:and|vs\.?|presents|ft\.?|feat\.?|featuring)\s+the(?![a-z])|\s&\s*the(?![a-z])|(?:^|[\s(\[])(?:feat|featuring)(?![a-z])/;
 const ARTIST_TITLE_SEPARATOR = /\s[-–~]\s/;
+/**
+ * Words that describe a bell or chime (the word before `bell` in the data, most frequent first, plus the obvious
+ * kinds). `Sleigh Bell - Hit` is a one-shot, `Jimmy Bell - Song` a song: the first word of a two-word artist decides.
+ */
+const BELL_DESCRIPTORS = [
+  'ceramic', 'tubular', 'tub', 'church', 'chuch', 'sleigh', 'trap', 'wind', 'glass', 'warm', 'acid', 'school', 'fx',
+  'dirty', 'bright', 'perc', 'body', 'harmonic', 'ring', 'deep', 'dissonant', 'effected', 'shiny', 'crystal', 'dinner',
+  'war', 'star', 'crunk', 'house', 'thin', 'abstract', 'brash', 'chunky', 'classic', 'electro', 'fuzz', 'grubby', 'high',
+  'hollow', 'mid', 'low', 'hi', 'lo', 'big', 'small', 'little', 'hand', 'door', 'temple', 'jingle', 'tiny', 'soft', 'hard',
+  'dark', 'metal', 'metallic', 'brass', 'steel', 'silver', 'gold', 'golden', 'synth', 'long', 'short', 'ding', 'tibetan',
+  'cow', 'bar', 'alert', 'hotel', 'bike', 'bicycle', 'service', 'desk', 'ship', 'shop', 'wedding', 'christmas', 'xmas'
+];
 
 export function looksLikeSongName(name: string): boolean {
   // Brackets are dropped first: `Bell (Some Artist - Some Song)` is a one-shot sampled from a song, as kits name them.
@@ -809,6 +824,10 @@ export function looksLikeSongName(name: string): boolean {
   if (parts.length < 2) return false;
   const artist = parts[0];
   const title = parts.slice(1).join(' ');
+  // A two-word artist ending in the bell word and a title of any length: `Jimmy Bell - Song`. The one-word artist
+  // (`Bell - Alpha`) and a descriptor in front (`Sleigh Bell - Hit`) stay one-shots; no digit, and the title needs a word.
+  const artistWords = artist.split(/[^a-z]+/).filter(Boolean);
+  if (!/\d/.test(artist) && artistWords.length === 2 && WEAK_WORDS.includes(artistWords[1]) && !BELL_DESCRIPTORS.includes(artistWords[0]) && words(title) >= 1) return true;
   return !/\d/.test(artist) && words(artist) >= 2 && words(title) >= 2 && words(artist) + words(title) >= 5;
 }
 
@@ -891,7 +910,10 @@ function nameHasLoopAbbreviation(name: string): boolean {
  * app passes it.
  */
 export function looksLikeLoop(name: string, directory = '', category: Category = 'Other'): boolean {
-  if (textLooksLikeLoop(name, true, true)) return true;
+  // A name that says kick, snare, clap, hat or cymbal is a hit even when it states a length (`Snare 2 Bar.wav`);
+  // percussion keeps the rule (`Perc 4 Bars`, `Bell 4 Bars` can be a phrase).
+  const named = classify(name, true);
+  if (textLooksLikeLoop(name, true, true, named === null || named === 'Perc')) return true;
   if (category === 'Other' && nameLooksLikeBreak(name)) return true;
   if ((category === 'Other' || category === 'Perc') && nameHasLoopAbbreviation(name)) return true;
   return folderCandidates(directory).some(folder => textLooksLikeLoop(folder, false));
