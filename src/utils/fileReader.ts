@@ -495,6 +495,8 @@ const CLAP = [
 const CRASH = [
   'crash', 'crashes', 'crsh', 'splash', 'china', 'cc', 'csh',
   'ride', 'rides', 'rd', 'cymbal', 'cymbals', 'cym', 'cymb', 'cy',
+  // "Rid1", "Rid1pp" (ride, 7 drum-machine makers).
+  'rid',
   // "Bld_Crs", "jkbcym_crs_15" (8 packs).
   'crs'
 ];
@@ -506,19 +508,25 @@ const CRASH = [
  */
 const PERC_KINDS: [SampleKind, string[]][] = [
   // "Hi_Shk3", "Vb_Shk8" (6 packs). Maracas and cabasa are shaken too.
-  ['shaker', ['shaker', 'shk', 'maraca', 'maracas', 'cabasa']],
+  // `shak`, `shkr`, `caba` (the 'Shak1', 'Shkr', 'CabaUp' of drum-machine sets) and the African and Latin shakers
+  // `shekere` and `caxixi`. (`shake` is a weak word, see FALLBACK_WORDS.)
+  ['shaker', ['shaker', 'shk', 'maraca', 'maracas', 'cabasa', 'shak', 'shkr', 'caba', 'shekere', 'caxixi']],
   // "DJPR_TMB_002", "88 HAT+TMB": tambourine, with the shakers.
   ['tambourine', ['tamb', 'tambourine', 'tmb']],
-  ['cowbell', ['cowbell', 'cb']],
+  // `cowb` and `cowbel` are truncations ('626_cowb', 'Cowbel'). (`cow` is a weak word, see FALLBACK_WORDS.)
+  ['cowbell', ['cowbell', 'cb', 'cowb', 'cowbel']],
   // High/mid/low congas. "HC00" is a conga; "HHCD0" is a closed hat, and the
   // leading hh in the filename is what tells them apart — see isHat below.
-  ['conga', ['conga', 'congas', 'hc', 'mc', 'lc']],
-  ['bongo', ['bongo', 'bongos']],
+  // `cong`, `cng` and `cg` are drum-machine spellings ('Cong', 'Cng H M', 'M H Cg'), `quinto` and `tumba` conga sizes.
+  ['conga', ['conga', 'congas', 'hc', 'mc', 'lc', 'cong', 'cng', 'cg', 'quinto', 'tumba']],
+  // `bng` is the consonant skeleton ('Hi Bng').
+  ['bongo', ['bongo', 'bongos', 'bng']],
   // TR-808 style: high/mid/low toms.
   ['tom', ['tom', 'toms', 'ht', 'mt', 'lt']],
   // `cl` and `clv` are the 808 claves.
-  ['woodblock', ['woodblock', 'block', 'wood', 'clave', 'claves', 'clv', 'cl']],
-  ['triangle', ['triangle']],
+  // `clav` is the clave of drum-machine sets (whole token only: clavinet, clavicle).
+  ['woodblock', ['woodblock', 'block', 'wood', 'clave', 'claves', 'clv', 'cl', 'clav']],
+  ['triangle', ['triangle', 'trian']],
   // Sleigh, church, tubular, ceramic and hand bells, and "bell" alone. Whole tokens only (WHOLE_TOKEN_ONLY):
   // glued, `bell` would read belly, bella, bellows, Campbell and Isabella. Tried after the other words, so a
   // cowbell, a triangle or a ride bell keeps its own word. `bell` and `bells` are weak evidence (WEAK_WORDS):
@@ -536,6 +544,9 @@ const PERC_GENERIC = [
   'djembe', 'cajon', 'castanet', 'castanets', 'tabla', 'udu',
   // 'timp' is four characters, so the glue rule covers timpani and timpanies too.
   'timp', 'timpani',
+  // Latin and drum-machine percussion that has no kind of its own: cuica, surdo, taiko, vibraslap, quijada; `timb` and
+  // `timbal` are timbale spellings; `per` is "Per1" (percussion, 9 libraries).
+  'cuica', 'surdo', 'taiko', 'vibraslap', 'quijada', 'timb', 'timbal', 'per',
   // "Lst_Prc9", "PRC-F1_S" (14 packs).
   'prc'
 ];
@@ -565,7 +576,10 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = {
   chat: 'CHH', ohat: 'OHH',
   // Lower-case "openhat (7ab)" (40 packs; `hat` is three characters, so the glue rule never
   // sees it), "ophh" and "clhh" (drum-machine sets: CR-78, RM50, 606).
-  openhat: 'OHH', ophh: 'OHH', clhh: 'CHH'
+  openhat: 'OHH', ophh: 'OHH', clhh: 'CHH',
+  // Round 4, hat first or glued ("HatOpen", "ClosedHat", "OpenHH", "ClHat01"; 3-4 libraries each, drum-machine sets
+  // and kits); `phh` is the pedal hat, a closed hat (owner to confirm).
+  hatopen: 'OHH', openhh: 'OHH', closedhat: 'CHH', clhat: 'CHH', phh: 'CHH'
 };
 
 /**
@@ -580,8 +594,20 @@ const GLUE_FALSE_FRIENDS = [
   'hollywood', 'bollywood', 'snapchat', 'percussive'
 ];
 
+/**
+ * Tom spellings written as one token: a size letter or word in front ("htom", "ltom", "mtom", "hitom", "lotom", "midtom",
+ * "lowtom", "hightom", "floortom", "etom") or after ("tomh", "toml", "tomhi", "tomlo", "tomtom"). Left out for lack of
+ * evidence: `tomm` (five files of one library, in a closed-hat folder), `mdtom`, `bigtom`, `deeptom` (one name each, 2-3 libraries). `tom` is three characters, so the glue rule never sees them; an anchored pattern, not prefix/suffix matching,
+ * so tommy, phantom, atom, bottom and custom stay out. Read as the whole token `tom`.
+ */
+const TOM_COMPOUND = /^(?:h|m|l|hi|mid|lo|low|high|floor|e)tom$|^tom(?:h|l|hi|lo|tom)$/;
+
 /** Four-character words that must not glue to a neighbouring word, only match as a token. */
-const WHOLE_TOKEN_ONLY = ['snar', 'klap', 'agog', ...WEAK_WORDS];
+const WHOLE_TOKEN_ONLY = [
+  'snar', 'klap', 'agog', ...WEAK_WORDS,
+  // Round 4: glued they read cowboy, congratulations/congo, clavinet/clavicle, shaky/shakira, timbaland.
+  'cowb', 'cong', 'clav', 'trian', 'shak', 'shkr', 'caba', 'timb', 'timbal'
+];
 
 /**
  * A drum code plus one variant letter: a drum sampler's multi-mic kit ("BDaEXT", "SDbOH"), a
@@ -613,6 +639,20 @@ function nameHasOpHat(name: string): boolean {
   return OP_BEFORE_HAT.test(text) || OP_AFTER_HAT.test(text);
 }
 
+/**
+ * Weak words: ambiguous in a name, so they only fill what nothing else placed. Used when neither the name nor any folder
+ * names a category, and the file is not non-drum or a loop: `Shake` in a `Kicks` folder is a kick, `Stick` in `Snares` a
+ * snare, `FX/Cow.wav` stays non-drum, `trunk shake 808` stays an 808. Tried as strong words, `stick`/`stik`/`stk`, `shake` and
+ * `cow` moved 53 + 25 + 10 categorised files (snare, kick and hat folders) and pulled 27 non-drum files onto pads. Evidence (usable `Other` files they now
+ * place): `cow` the cowbell of drum-machine sets ("Cow1", 23 libraries), `shake` ("Shake1", 11), `stick`/`stik`/`stk` the
+ * stick click (a sidestick on some machines, a plain click on others, so percussion, not Snare: 25 libraries).
+ */
+const FALLBACK_WORDS: [string[], Category, SampleKind][] = [
+  [['cow'], 'Perc', 'cowbell'],
+  [['shake'], 'Perc', 'shaker'],
+  [['stick', 'sticks', 'stik', 'stk'], 'Perc', 'percussion']
+];
+
 /** Multi-word names that only make sense as a phrase. */
 const PHRASES: [RegExp, Category, SampleKind][] = [
   // Plural included: a folder called "Bass Drums" used to match nothing here, fall
@@ -641,7 +681,7 @@ const CLAP_KINDS: [SampleKind, string[]][] = [['snap', ['snap', 'snaps']]];
 const CLAP_NOT_SNAP = CLAP.filter(w => !CLAP_KINDS[0][1].includes(w));
 const CRASH_KINDS: [SampleKind, string[]][] = [
   ['crash', ['crash', 'crashes', 'crsh', 'cc', 'csh', 'crs']],
-  ['ride', ['ride', 'rides', 'rd']]
+  ['ride', ['ride', 'rides', 'rd', 'rid']]
   // splash, china, cymbal(s), cym, cymb, cy: the category default `cymbal`.
 ];
 
@@ -684,7 +724,7 @@ function nameBlocksWeak(name: string, folderBlocksWeak: boolean): boolean {
 }
 
 function classifyKind(text: string, isFile = false, folderBlocksWeak = false): Classified | null {
-  const tokens = tokenize(text, isFile);
+  const tokens = tokenize(text, isFile).map(t => (TOM_COMPOUND.test(t) ? 'tom' : t));
   if (tokens.length === 0) return null;
   // Short abbreviations must be whole tokens — "tom" inside "custom" is not a tom.
   // Words of four characters or more are also matched glued to a prefix or suffix,
@@ -841,6 +881,21 @@ const NON_DRUM_WORDS = [
 ];
 
 /**
+ * Round 4: tonal, synthetic and field-recording words that mark a FILENAME as not a drum hit. A separate list from
+ * `NON_DRUM_WORDS` on purpose: added there, a word also reaches `BELL_BLOCKERS` (92 bell and 6 chime hits across the
+ * test corpora dropped out of Perc), `looksLikeRoleFolder` (pack splitting) and the folder scan (a folder called
+ * `Orchestra` turned 280 files non-drum). Here it is read from the filename only, and only for `Other`, like the rest of
+ * `looksNonDrum`, so it can never move a categorised file. Each word has 3+ libraries and 3+ names among the usable
+ * `Other` files it moves. Musical-key tags (`min`, `Fmin`, ...) mark the construction-kit stems of tonal packs.
+ */
+const NON_DRUM_NAME_WORDS = [
+  'chord', 'chords', 'pluck', 'arp', 'arpeggio', 'sine', 'saw', 'glitch', 'bleep', 'blip', 'beep', 'laser', 'lazer', 'siren',
+  'orch', 'voice', 'applause', 'talking', 'metronome', 'vinyl', 'crackle', 'ambience', 'reverse', 'sweep', 'wind', 'bird',
+  'dog', 'thunder', 'scream', 'kalimba', 'marimba', 'xylophone', 'xylo',
+  'min', 'amin', 'cmin', 'dmin', 'emin', 'fmin'
+];
+
+/**
  * Words that stop `bell` counting as a percussion hit: the non-drum words (melody, pad, lead, synth,
  * vox ...) plus chord(s), without the fx words (`Ceramic Bell FX Samples` is a bell hit).
  */
@@ -934,7 +989,7 @@ export function looksNonDrum(category: Category, name: string, directory = ''): 
   const hasWord = (text: string, list: string[], isFile = false) =>
     tokenize(text, isFile).some(t => list.includes(t));
 
-  if (hasWord(name, NON_DRUM_WORDS, true)) return true;
+  if (hasWord(name, NON_DRUM_WORDS, true) || hasWord(name, NON_DRUM_NAME_WORDS, true)) return true;
 
   return folderCandidates(directory).some(folder => {
     // A folder that names a drum category outranks any marker word inside it. Without
@@ -1071,6 +1126,9 @@ export function classifySample(name: string, directory = ''): Classified {
     const fromFolder = classifyKind(folder);
     if (fromFolder && !(nameWeakDropped && WEAK_KINDS.includes(fromFolder.kind))) return fromFolder;
   }
+  const nameTokens = tokenize(name, true);
+  const weak = FALLBACK_WORDS.find(([words]) => nameTokens.some(t => words.includes(t)));
+  if (weak && !looksNonDrum('Other', name, directory) && !looksLikeLoop(name, directory, 'Other')) return { category: weak[1], kind: weak[2] };
   return withDefault('Other');
 }
 

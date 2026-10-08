@@ -35,7 +35,7 @@ import {
   REVOKE_DELAY_MS
 } from '../src/utils/exporter';
 import {
-  categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum, looksLikeSongName
+  categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum, looksLikeSongName, looksLikeRoleFolder
 } from '../src/utils/fileReader';
 import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
@@ -937,6 +937,99 @@ await test('tmb is a tambourine, but a hat word in the name still wins', async (
   assert.equal(categorizeSample('88 HAT+TMB.wav', '/drums/hat closed'), 'CHH');
   // Whole token only: no glue for three letters.
   assert.equal(categorizeSample('b06_ac2ftmbsh_01.wav'), 'Other');
+});
+
+await test('round 4: drum-machine percussion spellings place a kind, and their false friends stay Other', async () => {
+  const cases: [string, Category, SampleKind][] = [
+    ['Cuica Hi.wav', 'Perc', 'percussion'], ['Surdo_1.wav', 'Perc', 'percussion'], ['Taiko 02.wav', 'Perc', 'percussion'],
+    ['Vibraslap.wav', 'Perc', 'percussion'], ['Quijada.wav', 'Perc', 'percussion'], ['Per1.wav', 'Perc', 'percussion'],
+    ['Timb Hi.wav', 'Perc', 'percussion'], ['Timbal 1h.wav', 'Perc', 'percussion'],
+    ['Quinto 1.wav', 'Perc', 'conga'], ['Tumba Open.wav', 'Perc', 'conga'], ['Cng H M.wav', 'Perc', 'conga'], ['Cong-Lo.wav', 'Perc', 'conga'], ['M H Cg.wav', 'Perc', 'conga'],
+    ['Hi Bng.wav', 'Perc', 'bongo'],
+    ['Shak 3.wav', 'Perc', 'shaker'], ['Shkr_01.wav', 'Perc', 'shaker'], ['Caba Up.wav', 'Perc', 'shaker'], ['Shekere 2.wav', 'Perc', 'shaker'], ['Caxixi.wav', 'Perc', 'shaker'],
+    ['Cowb 1.wav', 'Perc', 'cowbell'], ['Cowbel.wav', 'Perc', 'cowbell'], ['Hicowbel.wav', 'Perc', 'cowbell'],
+    ['Clav 1.wav', 'Perc', 'woodblock'], ['Trian Mute.wav', 'Perc', 'triangle'], ['Rid1.wav', 'Crash', 'ride'],
+    // The 808-style spelling beats the bare-808 kick rule, like every other percussion word.
+    ['808cowb.wav', 'Perc', 'cowbell'], ['808hCong.wav', 'Perc', 'conga']
+  ];
+  for (const [name, category, kind] of cases) {
+    const c = classifySample(name);
+    assert.deepEqual([c.category, c.kind], [category, kind], name);
+    assert.ok(kindBelongsTo(c.kind, c.category), name);
+  }
+  // Glued they would read cowboy, congratulations, clavinet, shaky, timbaland: whole tokens only.
+  for (const name of ['Cowboy 1.wav', 'Congratulations.wav', 'Clavinet 2.wav', 'Shaky Tone.wav', 'Timbaland Beat.wav', 'Trianon.wav', 'Perfect.wav'])
+    assert.equal(categorizeSample(name), 'Other', name);
+  // Longer, distinctive words glue like the older ones (`quintoop`, `hicowbel`).
+  assert.equal(categorizeSample('quintoop.wav'), 'Perc');
+});
+
+await test('round 4: tom spellings written as one token read as toms, and only those', async () => {
+  for (const name of ['htom.wav', 'LTom1.wav', 'mtom 2.wav', 'Hitom.wav', 'lotom.wav', 'midtom.wav', 'Lowtom 001.wav', 'hightom.wav', 'Floortom.wav', 'Etom_H.wav', 'tomh.wav', 'Toml.wav', 'Tomhi.wav', 'tomlo.wav', 'Tomtom High.wav', '808hitom.wav']) {
+    const c = classifySample(name);
+    assert.deepEqual([c.category, c.kind], ['Perc', 'tom'], name);
+  }
+  // Ordinary words around "tom" stay as they were; `tomm` is left out on purpose.
+  for (const name of ['Tommy 1.wav', 'Atom.wav', 'Bottom 1.wav', 'Custom 3.wav', 'Tomato.wav', 'Phantom.wav', 'tomm.wav', 'bigtom.wav']) assert.equal(categorizeSample(name), 'Other', name);
+  // A hat word in the name still wins over the tom spelling.
+  assert.equal(categorizeSample('Hitom Closed Hat.wav'), 'CHH');
+});
+
+await test('round 4: hat spellings written as one token', async () => {
+  for (const [name, expected] of [['hatopen.wav', 'OHH'], ['OpenHH 2.wav', 'OHH'], ['ClosedHat01.wav', 'CHH'], ['Clhat1.wav', 'CHH'], ['PHH 2.wav', 'CHH']] as [string, Category][])
+    assert.equal(categorizeSample(name), expected, name);
+  // Whole tokens only: no glue.
+  for (const name of ['closedhatch.wav', 'phhx.wav', 'hatopened.wav']) assert.equal(categorizeSample(name), 'Other', name);
+});
+
+await test('round 4: shake, stick(s) and cow are weak words: they fill an unplaced file, and nothing else', async () => {
+  const filled: [string, Category, SampleKind][] = [
+    ['Cow1.wav', 'Perc', 'cowbell'], ['Shake 2.wav', 'Perc', 'shaker'], ['Stick 02.wav', 'Perc', 'percussion'], ['Sticks.wav', 'Perc', 'percussion'],
+    ['Sr-Stik.wav', 'Perc', 'percussion'], ['Stk 1.wav', 'Perc', 'percussion']
+  ];
+  for (const [name, category, kind] of filled) {
+    const c = classifySample(name, '/Pack/Samples');
+    assert.deepEqual([c.category, c.kind], [category, kind], name);
+  }
+  // A folder that names a category wins; the weak word never overrules it.
+  assert.equal(categorizeSample('Stick 1.wav', '/Pack/Snares'), 'Snare');
+  assert.equal(categorizeSample('Shake.wav', '/Pack/Kicks'), 'Kick');
+  assert.equal(categorizeSample('Shake That.wav', '/Pack/Claps'), 'Clap');
+  // A categorised name keeps its meaning (the bare-808 rule runs before the weak words).
+  assert.deepEqual(classifySample('trunk shake 808.wav', '/Pack/808s'), { category: 'Kick', kind: '808' });
+  assert.equal(categorizeSample('Closed Hat Stick.wav'), 'CHH');
+  // Non-drum and loop files stay out of the percussion pool.
+  for (const [name, dir] of [['Cow.wav', '/Pack/Vox'], ['Shake.wav', '/Pack/FX'], ['Stick Hit.wav', '/Pack/Vocals'], ['Voice Stick 1.wav', '/Pack/Samples']] as [string, string][]) {
+    assert.equal(categorizeSample(name, dir), 'Other', `${dir}/${name}`);
+    assert.ok(looksNonDrum('Other', name, dir), `${dir}/${name}`);
+  }
+  assert.equal(categorizeSample('Stick Loop.wav', '/Pack/Samples'), 'Other');
+  assert.ok(looksLikeLoop('Stick Loop.wav', '/Pack/Samples', 'Other'));
+  assert.equal(categorizeSample('Shake 4 Bars.wav', '/Pack/Samples'), 'Other');
+  // Whole tokens: sticky, lipstick, shaken, cowl stay as they were.
+  for (const name of ['Sticky 1.wav', 'Lipstick.wav', 'Shaken.wav', 'Cowl.wav', 'Stickers.wav']) assert.equal(categorizeSample(name, '/Pack/Samples'), 'Other', name);
+});
+
+await test('round 4: NON_DRUM_NAME_WORDS mark an unplaced FILENAME as non-drum, never a categorised file, never through a folder', async () => {
+  const nonDrum = ['Sine 2.wav', 'Fmin Chords 1.wav', 'Dark Pluck.wav', 'Arp 03.wav', 'Glitch 12.wav', 'Bleep A1.wav', 'Laser 1.wav', 'Orch Hit.wav', 'Voice 3.wav',
+    'Vinyl Crackle.wav', 'Reverse 4.wav', 'Wind Gust.wav', 'Marimba C2.wav', 'Pad Chord Cmin.wav', '120 Fmin.wav', 'Big Sweep.wav', 'Thunder 1.wav', 'Applause.wav'];
+  for (const name of nonDrum) {
+    assert.equal(categorizeSample(name), 'Other', name);
+    assert.ok(looksNonDrum('Other', name, ''), name);
+  }
+  // Consulted only for Other: a categorised file is never non-drum.
+  for (const name of ['Kick Sine.wav', 'Snare Glitch.wav', 'Reverse Cymbal.wav', 'Hat Wind.wav', 'Clap Laser 2.wav', 'Tom Arp.wav']) {
+    assert.notEqual(categorizeSample(name), 'Other', name);
+    assert.ok(!looksNonDrum(categorizeSample(name), name, ''), name);
+  }
+  // The folder scan, the bell blockers and the role-folder list are not widened.
+  assert.ok(!looksNonDrum('Other', 'Hit 1.wav', '/Pack/Glitch'));
+  assert.ok(!looksNonDrum('Other', 'Take 1.wav', '/Pack/Orchestra'));
+  assert.equal(categorizeSample('Bell Wind.wav'), 'Perc');
+  assert.equal(classifySample('Metronome Bell.wav').kind, 'bell');
+  assert.ok(!looksLikeRoleFolder('Glitch') && !looksLikeRoleFolder('Reverse'));
+  // Percussion names are role folders now, like Congas and Bongos.
+  for (const folder of ['Cuica', 'Surdo', 'Taiko', 'Vibraslap']) assert.ok(looksLikeRoleFolder(folder), folder);
 });
 
 await test('op next to a hat word is an open hat, even in a closed-hat folder', async () => {
@@ -3292,7 +3385,8 @@ await test('kinds: the kind always belongs to the category (word lists, pairs, f
   const V = VOCABULARY;
   const words = [...new Set([...V.KICK, ...V.SNARE, ...V.CLAP, ...V.CRASH, ...V.PERC, ...V.HAT, ...V.CLOSED, ...V.OPEN,
     '808', 'shaking', 'chat', 'ohat', 'openhat', 'ophh', 'clhh', 'bda', 'sdb', 'op', 'hi', 'side', 'stick', 'cross', 'wood', 'block', 'finger', 'hand',
-    'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox', 'hollywood', 'snapchat', 'percussive', 'agog'])];
+    'bass', 'drum', 'drums', 'whats', 'rider', 'custom', 'loop', 'fx', 'vox', 'hollywood', 'snapchat', 'percussive', 'agog',
+    'shake', 'cow', 'stick', 'stk', 'timb', 'htom', 'hitom', 'clhat', 'hatopen', 'phh', 'cowb', 'clav', 'rid', 'cong', 'per'])];
   let n = 0;
   const check = (name: string, dir = '') => {
     const c = classifySample(name, dir);
