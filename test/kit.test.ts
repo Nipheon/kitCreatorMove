@@ -1695,6 +1695,28 @@ await test('with trimming off a wav is exported without its metadata chunks, aud
   assert.ok(out.length < new Uint8Array(bytes).length, 'the file shrank');
 });
 
+await test('an AIFF is exported as a WAV with the same sound and the .wav name in the preset', async () => {
+  const be32 = (n: number) => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const chunk = (id: string, body: number[]) => [...[...id].map(c => c.charCodeAt(0)), ...be32(body.length), ...body, ...(body.length % 2 ? [0] : [])];
+  // 16-bit mono, 44.1 kHz (80-bit extended 0x400E AC44 0...), samples 0x1234 and 0xFFFE (-2), big-endian
+  const comm = [0, 1, ...be32(2), 0, 16, 0x40, 0x0e, 0xac, 0x44, 0, 0, 0, 0, 0, 0];
+  const body = [...[...'AIFF'].map(c => c.charCodeAt(0)), ...chunk('COMM', comm), ...chunk('SSND', [...be32(0), ...be32(0), 0x12, 0x34, 0xff, 0xfe])];
+  const aiff = new Uint8Array([...[...'FORM'].map(c => c.charCodeAt(0)), ...be32(body.length), ...body]);
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  kit[0] = { id: 'a', file: new File([aiff], 'Kick.AIFF'), name: 'Kick.AIFF', category: 'Kick' as Category, isLoop: false, isNonDrum: false, url: '' } as Sample;
+  const zip = await JSZip.loadAsync(await (await createPresetBundle(kit, 'Keep', NO_TRIM)).arrayBuffer());
+  assert.equal(zip.file('Samples/00_Kick.AIFF'), null, 'no AIFF entry is written');
+  const out = new Uint8Array(await zip.file('Samples/00_Kick.wav')!.async('uint8array'));
+  const chunks = readChunks(out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer)!;
+  assert.deepEqual(chunks.map(c => c.id), ['fmt ', 'data']);
+  const format = (await readWavFormat(new Blob([out])))!;
+  assert.deepEqual([format.numChannels, format.sampleRate, format.bitsPerSample, format.audioFormat], [1, 44100, 16, 1]);
+  const data = chunks.find(c => c.id === 'data')!;
+  assert.deepEqual(Array.from(out.subarray(data.offset, data.offset + data.size)), [0x34, 0x12, 0xfe, 0xff], 'little-endian samples');
+  const preset = JSON.parse(await zip.file('Preset.ablpreset')!.async('string'));
+  assert.equal(preset.chains[0].devices[0].chains[0].devices[0].deviceData.sampleUri, 'Samples/00_Kick.wav');
+});
+
 await test('a non-WAV or unparsable file is exported as it is, even with stripping', async () => {
   const aiff = new Uint8Array([70, 79, 82, 77, 0, 0, 0, 4, 65, 73, 70, 70]);
   const junk = new Uint8Array([1, 2, 3, 4, 5]);

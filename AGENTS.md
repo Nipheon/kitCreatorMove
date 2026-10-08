@@ -74,8 +74,8 @@ path with more than three segments means you are in the wrong place.
   Firefox answer `canPlayType('audio/aiff')` with `''`, so an AIFF pad used to be silent and stalled Preview Kit for the 2 s ceiling. `Pad`
   starts such an `Audio` without a `src`, sets the converted blob URL when ready (cached per `File` like `sampleUrl`, released by
   `revokeSampleUrl`) and, when conversion is impossible or any `<audio>` raises `error`, announces `pad-ready` at once so the preview does
-  not wait. The conversion (big-endian to little-endian PCM, 8-bit made unsigned, `sowt` copied) is for audition only: the EXPORT writes the
-  original AIFF bytes, as before. Confirmed in a browser (Playwright, Chromium 1248 and Firefox 157, generated 16-bit AIFF and AIFF-C `sowt`
+  not wait. The same conversion (big-endian to little-endian PCM, 8-bit made unsigned, `sowt` copied) is used by the EXPORT: an AIFF is written as a
+  `.wav` (entry and URI name end in `.wav`; owner decision 2026-10-08) and then trimmed like any WAV. Confirmed in a browser (Playwright, Chromium 1248 and Firefox 157, generated 16-bit AIFF and AIFF-C `sowt`
   packs): every clicked pad fires `playing`, and Preview Kit's first pad plays about 30-70 ms after the click; the pure parts are pinned in `test/io.test.ts`.
 - **`newId()` keeps its non-secure-context fallback.** `crypto.randomUUID` is secure-context only and the dev server binds
   `0.0.0.0`, so the app is routinely opened over plain http. For the same reason `crypto.subtle` is unavailable (relevant to dedupe,
@@ -152,10 +152,10 @@ path with more than three segments means you are in the wrong place.
   for extensible, `subFormat`.
 - **WAV metadata is stripped on export (owner decision 2026-10-08: the Move cannot use it and the originals stay with the user).**
   Every sample the trimmer did not re-encode (trim off, nothing to cut, unsupported or failed trim) goes through `stripWavMetadata`
-  (only `fmt ` and `data` kept, audio bytes identical, smaller file); a re-encoded one is already clean. AIFF, anything that is not
+  (only `fmt ` and `data` kept, audio bytes identical, smaller file); a re-encoded one is already clean. An AIFF is first converted to a WAV (`aiffToWav`, written as `.wav`; one that cannot be converted, which import rejects in practice, is written unchanged). Anything that is not
   RIFF/WAVE and anything without both chunks comes back unchanged, and a strip failure falls back to the original file. This reverses
   the 2026-10-07 'copy byte-for-byte' state (the Move also accepted unstripped files, hardware-verified then).
-- **Trimming only re-encodes a mono or stereo 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (AIFF, 8/32-bit, odd rates,
+- **Trimming only re-encodes a mono or stereo 16- or 24-bit WAV, 8-192 kHz, that has silence to cut.** Everything else (8/32-bit, odd rates,
   more than two channels (`encodeWav` writes a plain 16-byte `fmt `, which is only valid up to stereo), nothing to trim, decode failure) is passed through as the original file; AIFF is never forced through the WAV parser
   (`readWavFormat` returns `null` for `FORM`/`AIFF`). Failures and skips are counted in the export report and surfaced as notices.
   Re-encoded files carry no metadata chunks. `encodeWav` scales by 2^(bits-1), what decoders divide by, and clamps to the maximum code, so a

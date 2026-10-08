@@ -4,6 +4,7 @@ import { Sample } from '../types';
 import { generateAblPreset } from './ablPresetTemplate';
 import { safeFileName } from './kitNaming';
 import { createTrimmer } from './audioTrimmer';
+import { aiffToWav } from './aiff';
 import { stripWavMetadata } from './wavStripper';
 
 export interface ExportOptions {
@@ -20,9 +21,9 @@ export interface ExportReport {
 }
 
 /** Sample packs reuse names like "Kick.wav", so pad-prefix every entry to keep them distinct. */
-export function zipEntryName(sample: Sample, index: number): string {
+export function zipEntryName(sample: Sample, index: number, name = sample.name): string {
   // A backslash in a zip entry name is read as a path separator by some extractors.
-  return `${index.toString().padStart(2, '0')}_${sample.name.replace(/\\/g, '-')}`;
+  return `${index.toString().padStart(2, '0')}_${name.replace(/\\/g, '-')}`;
 }
 
 export function kitSizeBytes(kit: (Sample | null)[]): number {
@@ -132,11 +133,28 @@ export async function createPresetBundle(
     names[index] = sample ? sample.name : null;
     if (!sample) continue;
 
-    let audio: Blob = sample.file;
+    // An AIFF is exported as a WAV (same sound, PCM): the Move plays WAV for certain, and a WAV can be trimmed.
+    // One that cannot be converted (rejected at import in practice) is written as it is.
+    let source: File = sample.file;
+    let entryName = sample.name;
+    if (/\.aiff?$/i.test(sample.file.name)) {
+      let wav: Blob | null;
+      try {
+        wav = aiffToWav(await sample.file.arrayBuffer());
+      } catch (err) {
+        throw new ExportError('read', { sampleName: sample.name, kitName }, err);
+      }
+      if (wav) {
+        entryName = sample.name.replace(/\.aiff?$/i, '.wav');
+        source = new File([wav], entryName, { type: 'audio/wav' });
+      }
+    }
+
+    let audio: Blob = source;
     if (options.trimSilence) {
       let result;
       try {
-        result = await trimmer.trim(sample.file);
+        result = await trimmer.trim(source);
       } catch (err) {
         throw new ExportError('trim', { sampleName: sample.name, kitName }, err);
       }
@@ -147,9 +165,9 @@ export async function createPresetBundle(
     // A file that was not re-encoded still carries its metadata chunks (LIST, bext, iXML, ID3 ...): the
     // Move cannot use them and the originals stay with the user. Non-WAV files and anything the stripper
     // cannot parse come back unchanged.
-    if (audio === sample.file) audio = await stripWavMetadata(sample.file);
+    if (audio === source) audio = await stripWavMetadata(source);
 
-    const filename = zipEntryName(sample, index);
+    const filename = zipEntryName(sample, index, entryName);
     // Read here, not lazily inside JSZip, so a failure can name the sample. JSZip would
     // read the same bytes into memory at generate time anyway.
     let bytes: ArrayBuffer;

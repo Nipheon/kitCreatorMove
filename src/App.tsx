@@ -1018,7 +1018,7 @@ export default function App() {
         trimNotes.push(`${report.trimFailures} sample(s) could not be trimmed and were exported unchanged.`);
       }
       if (report.trimSkipped > 0) {
-        trimNotes.push(`${report.trimSkipped} sample(s) are in a format that cannot be trimmed (AIFF, 8-bit, 32-bit, more than two channels or unusual sample rate) and were exported unchanged.`);
+        trimNotes.push(`${report.trimSkipped} sample(s) are in a format that cannot be trimmed (8-bit, 32-bit, more than two channels or unusual sample rate) and were exported unchanged.`);
       }
       if (emptyNote) trimNotes.push(emptyNote);
       if (trimNotes.length > 0) {
