@@ -95,7 +95,7 @@ path with more than three segments means you are in the wrong place.
 
 - **Format of a bundle:** `Samples/`, `Preset.ablpreset`, `BundleInfo.json`, one file per kit named `<kit>.ablpresetbundle`.
   `compression: 'STORE'` everywhere: audio barely compresses and DEFLATE burns CPU.
-- **A batch downloads each kit as its own `.ablpresetbundle` by default** (`exportBatchSeparately`: one bundle in memory at a time,
+- **A batch downloads each kit as its own `.ablpresetbundle` by default** (`exportBatchSeparately`: bundles are built and handed to the browser one at a time, but `downloadBlob` keeps each object URL, and so its blob, alive for `REVOKE_DELAY_MS`, so up to about N bundles can be held at once in a long batch (60 s covers about 200 downloads at the 300 ms gap, i.e. practically all of them),
   `DOWNLOAD_GAP_MS` = 300 between downloads because browsers drop or prompt on back-to-back ones; the browser may ask once to allow
   multiple downloads and the app says to choose Allow, in the notice shown only after the FIRST separate batch of a session: `allowHintShown` ref in `App.tsx`, not persisted, reset on reload). The "Download as one zip" checkbox (`batchAsZip`) switches to
   `exportBatchKits`, one `<prefix>_Batch.zip` wrapping the bundles. `downloadBlob` revokes its object URL after `REVOKE_DELAY_MS`
@@ -104,7 +104,7 @@ path with more than three segments means you are in the wrong place.
   sample or kit involved and a `userMessage`; a separate batch that fails part-way says "N of M files were downloaded before it
   failed", and `exportedNames` records only names that were actually downloaded (`ExportError.downloaded` on failure). Samples are
   read eagerly with `arrayBuffer()` inside `createPresetBundle`, not lazily by JSZip, so a read failure names the sample.
-- **The size guard follows what is held in memory:** the largest kit for separate downloads, the sum of all kits for the zip. It is
+- **The size guard follows what is held in memory:** the largest kit for separate downloads (a floor, not a ceiling: see the revoke delay above), the sum of all kits for the zip. It is
   computed from the real kits 2..n (`buildBatch` runs before the confirm), not the on-screen kit times the batch size.
 - **The error and notice boxes stay short.** Never shown: files the app cannot read (one console.warn per drop), locked pads holding the
   same audio. A drop adding nothing shows only "No .wav or .aiff files found..." (or the skipped-folders notice when everything was

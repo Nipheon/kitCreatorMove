@@ -31,7 +31,7 @@ import { Category, Sample, SourceFolder } from '../src/types';
 import { encodeWav } from '../src/utils/audioTrimmer';
 import { defaultKind, KIND_LABELS, kindBelongsTo, kindsOf, KINDS_BY_CATEGORY, SampleKind } from '../src/utils/kinds';
 import {
-  createPresetBundle, DOWNLOAD_GAP_MS, zipEntryName, ExportError, exportBatchKits, exportBatchSeparately, isOutOfMemory,
+  createPresetBundle, DOWNLOAD_GAP_MS, zipEntryName, ExportError, exportBatchKits, exportBatchSeparately, exportKitZip, isOutOfMemory,
   REVOKE_DELAY_MS
 } from '../src/utils/exporter';
 import {
@@ -2383,6 +2383,41 @@ await test('separate batch downloads: order, names, gap, partial failure; zip pa
   }
   assert.deepEqual(clicked.map(a => a.download), ['Pre_Batch.zip']);
   assert.deepEqual(timers, [REVOKE_DELAY_MS]);
+});
+
+await test('build and download failures in the single and zip exports are ExportErrors with their stage', async () => {
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  // A lone surrogate makes encodeURIComponent throw a URIError.
+  kit[0] = makeSample('Bad\ud800.wav', 'Kick');
+  const single = await createPresetBundle(kit, 'K', NO_TRIM).catch(e => e);
+  assert.ok(single instanceof ExportError, String(single));
+  assert.equal(single.stage, 'build');
+  const viaZip = await exportBatchKits([{ kit, name: 'K' }], 'B', NO_TRIM).catch(e => e);
+  assert.equal(viaZip.stage, 'build');
+  assert.equal(viaZip.detail.kitName, 'K');
+
+  const good: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  good[0] = makeSample('Kick.wav', 'Kick');
+  const g = globalThis as any;
+  const realDoc = g.document;
+  g.document = { createElement: () => { throw new Error('no anchor'); } };
+  try {
+    const one = await exportKitZip(good, 'K', NO_TRIM).catch(e => e);
+    assert.ok(one instanceof ExportError, String(one));
+    assert.equal(one.stage, 'download');
+    const batch = await exportBatchKits([{ kit: good, name: 'K' }], 'B', NO_TRIM).catch(e => e);
+    assert.equal(batch.stage, 'download');
+  } finally {
+    g.document = realDoc;
+  }
+});
+
+await test('BundleInfo.json content is pinned', async () => {
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  const zip = await JSZip.loadAsync(await (await createPresetBundle(kit, 'K', NO_TRIM)).arrayBuffer());
+  assert.deepEqual(JSON.parse(await zip.file('BundleInfo.json')!.async('string')), {
+    schemaVersion: '1.0', type: 'preset', format: 'instrumentRack'
+  });
 });
 
 await test('kitNameFor includes the grid id, and drops it when empty or no samples', async () => {

@@ -94,6 +94,18 @@ async function generateArchive(zip: JSZip, kitName?: string): Promise<Blob> {
   }
 }
 
+/** The whole of `BundleInfo.json`; pinned by a test. */
+export const BUNDLE_INFO = { schemaVersion: '1.0', type: 'preset', format: 'instrumentRack' } as const;
+
+/** Starts one download; whatever throws (the name, the click) is reported at the download stage. */
+function startDownload(blob: Blob, filename: () => string, kitName: string | undefined, download: (blob: Blob, filename: string) => void = downloadBlob) {
+  try {
+    download(blob, filename());
+  } catch (err) {
+    throw new ExportError('download', { kitName }, err);
+  }
+}
+
 /** Pure: builds one bundle in memory. No DOM, so this is what the tests exercise. */
 export async function createPresetBundle(
   kit: (Sample | null)[],
@@ -143,21 +155,20 @@ export async function createPresetBundle(
     }
     try {
       samplesFolder.file(filename, bytes);
+      // Encoding left as-is: verified on hardware (AGENTS.md); do not touch.
+      sampleUris[index] = `Samples/${encodeURIComponent(filename)}`;
     } catch (err) {
       throw new ExportError('build', { kitName }, err);
     }
-    // Encoding left as-is: unverified against what Ableton actually parses.
-    sampleUris[index] = `Samples/${encodeURIComponent(filename)}`;
   }
 
-  const presetJson = generateAblPreset(kitName, sampleUris, chokeGroups, categories, names);
-  zip.file('Preset.ablpreset', JSON.stringify(presetJson, null, 2));
-
-  zip.file('BundleInfo.json', JSON.stringify({
-    schemaVersion: '1.0',
-    type: 'preset',
-    format: 'instrumentRack'
-  }, null, 2));
+  try {
+    const presetJson = generateAblPreset(kitName, sampleUris, chokeGroups, categories, names);
+    zip.file('Preset.ablpreset', JSON.stringify(presetJson, null, 2));
+    zip.file('BundleInfo.json', JSON.stringify(BUNDLE_INFO, null, 2));
+  } catch (err) {
+    throw new ExportError('build', { kitName }, err);
+  }
 
   return generateArchive(zip, kitName);
 }
@@ -185,8 +196,13 @@ export async function exportKitZip(
 ): Promise<ExportReport> {
   const report: ExportReport = { trimFailures: 0, trimSkipped: 0 };
   options.onProgress?.(0, 1);
-  const blob = await createPresetBundle(kit, kitName, options, createTrimmer(), report);
-  downloadBlob(blob, `${safeFileName(kitName)}.ablpresetbundle`);
+  let blob: Blob;
+  try {
+    blob = await createPresetBundle(kit, kitName, options, createTrimmer(), report);
+  } catch (err) {
+    throw err instanceof ExportError ? err : new ExportError('build', { kitName }, err);
+  }
+  startDownload(blob, () => `${safeFileName(kitName)}.ablpresetbundle`, kitName);
   options.onProgress?.(1, 1);
   return report;
 }
@@ -202,8 +218,12 @@ export async function exportBatchKits(
 
   for (const [index, entry] of kits.entries()) {
     options.onProgress?.(index, kits.length);
-    const bundle = await createPresetBundle(entry.kit, entry.name, options, trimmer, report);
-    masterZip.file(`${safeFileName(entry.name)}.ablpresetbundle`, bundle);
+    try {
+      const bundle = await createPresetBundle(entry.kit, entry.name, options, trimmer, report);
+      masterZip.file(`${safeFileName(entry.name)}.ablpresetbundle`, bundle);
+    } catch (err) {
+      throw err instanceof ExportError ? err : new ExportError('build', { kitName: entry.name }, err);
+    }
   }
   options.onProgress?.(kits.length, kits.length);
 
@@ -215,7 +235,7 @@ export async function exportBatchKits(
   // needs a hand-written store-only zip assembled from Blob parts, which would change
   // the writer; left alone. The size guard in App is the mitigation.
   const blob = await generateArchive(masterZip);
-  downloadBlob(blob, `${safeFileName(batchName)}_Batch.zip`);
+  startDownload(blob, () => `${safeFileName(batchName)}_Batch.zip`, undefined);
   return report;
 }
 
@@ -249,11 +269,7 @@ export async function exportBatchSeparately(
       } catch (err) {
         throw err instanceof ExportError ? err : new ExportError('build', { kitName: entry.name }, err);
       }
-      try {
-        download(bundle, `${safeFileName(entry.name)}.ablpresetbundle`);
-      } catch (err) {
-        throw new ExportError('download', { kitName: entry.name }, err);
-      }
+      startDownload(bundle, () => `${safeFileName(entry.name)}.ablpresetbundle`, entry.name, download);
       bundle = null;
     } catch (err) {
       const failure = err as ExportError;
