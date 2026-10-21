@@ -9,6 +9,24 @@ export const folderKey = (f: Keyed): string =>
   (f.parent ? `${f.parent.name}/${f.name}` : f.name).toLowerCase();
 
 /**
+ * A name for a group of loose files that no loaded folder already uses: `base`, then `base 2`, `base 3` ...
+ * Loose files from a later drop are different files, so they join the list as a group of their own rather
+ * than being skipped as a folder of the same name.
+ */
+export function uniqueLooseName(current: readonly Keyed[], base: string): string {
+  const taken = new Set(current.map(folderKey));
+  if (!taken.has(base.toLowerCase())) return base;
+  for (let n = 2; ; n++) {
+    const candidate = `${base} ${n}`;
+    if (!taken.has(candidate.toLowerCase())) return candidate;
+  }
+}
+
+/** True for `base` itself and the numbered names `uniqueLooseName` gives it. */
+export const isLooseGroupName = (name: string, base: string): boolean =>
+  name === base || (name.startsWith(`${base} `) && /^\d+$/.test(name.slice(base.length + 1)));
+
+/**
  * Decides which scanned folders join the folder list as it is NOW. A scan can take a
  * while, so the list it was started against may have changed; callers pass the current
  * list. Keys (`folderKey`) match case-insensitively; a key repeated within one drop counts once.

@@ -37,6 +37,11 @@ export function readChunks(buffer: ArrayBuffer): RiffChunk[] | null {
     const id = readFourCC(view, offset);
     const declared = view.getUint32(offset + 4, true);
     const available = buffer.byteLength - (offset + 8);
+    // A recorder that streams writes 0 as the data size and never goes back to fix it: the audio runs to the end.
+    if (id === 'data' && declared === 0 && available > 0) {
+      chunks.push({ id, size: available, offset: offset + 8 });
+      break;
+    }
     const size = Math.min(declared, available);
 
     chunks.push({ id, size, offset: offset + 8 });
