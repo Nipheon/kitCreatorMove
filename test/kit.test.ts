@@ -37,7 +37,8 @@ import {
 import {
   categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum, looksLikeSongName, looksLikeRoleFolder
 } from '../src/utils/fileReader';
-import { BATCH_MAX, recordKit, uniqueKitCount } from '../src/utils/freshness';
+import { recordKit, uniqueKitCount } from '../src/utils/freshness';
+import { BATCH_MAX } from '../src/utils/storedSettings';
 import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
 } from '../src/utils/kitGenerator';

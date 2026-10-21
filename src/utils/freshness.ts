@@ -1,9 +1,8 @@
 import { drawGroupFor, PadLayout, pooledCategory, poolCategoryFor } from '../padLayout';
 import { Category, Sample } from '../types';
 import { isUsableSample, KitOptions } from './kitGenerator';
+import { BATCH_MAX } from './storedSettings';
 
-/** Most kits one batch holds, however large the library. */
-export const BATCH_MAX = 10;
 
 /**
  * Adds a kit's samples to the used-sample history. When every usable sample of a pool

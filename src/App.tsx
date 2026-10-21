@@ -20,7 +20,7 @@ import { expandCollections } from './utils/packSplit';
 import { recordKit, uniqueKitCount } from './utils/freshness';
 import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitOptions, KitResult, rerollSinglePad } from './utils/kitGenerator';
 import { SampleKind } from './utils/kinds';
-import { loadQuickPreview, saveQuickPreview } from './utils/storedSettings';
+import { BATCH_MAX, BATCH_MIN, loadBatchSize, loadQuickPreview, saveBatchSize, saveQuickPreview } from './utils/storedSettings';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
 import { revokeSampleUrl } from './utils/sampleUrl';
@@ -152,6 +152,8 @@ export default function App() {
   const [kitSuffix, setKitSuffix] = useState('KIT');
   /** True once the suffix was rolled (first drop) or touched by the user; from then on folder changes never reroll it. */
   const suffixSettled = useRef(false);
+  /** The most kits a batch download produces, the on-screen kit included; fewer when the samples run out first. */
+  const [batchSize, setBatchSize] = useState(loadBatchSize);
   const [batchAsZip, setBatchAsZip] = useState(false);
   const [isBatchOpen, setIsBatchOpen] = useState(false);
   const batchButtonRef = useRef<HTMLButtonElement>(null);
@@ -997,10 +999,11 @@ export default function App() {
     });
   };
 
-  /** Kits a batch holds: as many as the library fills before samples repeat, the on-screen kit included. */
-  const batchCount = isBatchOpen
+  /** Kits the library fills before samples repeat, the on-screen kit included. */
+  const fittingKits = isBatchOpen
     ? uniqueKitCount(samples, kitResult.layout, lockedFrom(kit), kitOptions)
     : 1;
+  const batchCount = Math.min(batchSize, fittingKits);
 
   const buildBatch = async (batchSize: number) => {
     const batch = await runGeneration(report => buildBatchFor({
@@ -1588,13 +1591,24 @@ export default function App() {
             <div className='p-6 space-y-5'>
               <div className='space-y-2'>
                 <div className='flex justify-between items-center'>
-                  <span className='text-sm text-text-muted uppercase'>Amount of kits</span>
-                  <span className='text-sm text-accent-yellow font-bold'>{batchCount} Kit{batchCount !== 1 ? 's' : ''}</span>
+                  <label htmlFor='batch-size' className='text-sm text-text-muted uppercase'>Most kits</label>
+                  <span className='text-sm text-accent-yellow font-bold'>{batchSize} Kit{batchSize !== 1 ? 's' : ''}</span>
                 </div>
+                <input
+                  id='batch-size'
+                  type='range'
+                  min={BATCH_MIN}
+                  max={BATCH_MAX}
+                  value={batchSize}
+                  disabled={isExporting}
+                  onChange={(e) => { const n = parseInt(e.target.value); setBatchSize(n); saveBatchSize(n); }}
+                  className='w-full accent-accent-yellow'
+                />
                 <p className='text-sm leading-snug text-text-subtle'>
                   {batchCount > 1
-                    ? `Your samples fill ${batchCount} kits before they have to repeat. Downloads the kit on screen, then ${batchCount - 1} new random kit${batchCount - 1 !== 1 ? 's' : ''}. Locked pads stay the same in all.`
-                    : 'Your samples fill one kit before they have to repeat, so only the kit on screen is downloaded.'}
+                    ? `Downloads the kit on screen, then ${batchCount - 1} new random kit${batchCount - 1 !== 1 ? 's' : ''}. Locked pads stay the same in all.`
+                    : 'Downloads only the kit on screen.'}
+                  {fittingKits < batchSize && ` Your samples fill ${fittingKits} kit${fittingKits !== 1 ? 's' : ''} before they have to repeat, so no more are made.`}
                 </p>
               </div>
               <fieldset className='space-y-2' disabled={isExporting}>
@@ -1711,7 +1725,7 @@ export default function App() {
                   <li><strong className='text-text-bright'>Disable a Type:</strong> Each row of the Breakdown by Type card has an eye icon. Switching a type off leaves every sample of it out of generation, exactly like disabling a source folder, and the grid drops that column. Closed hats take generic hats with them, and percussion takes crashes.</li>
                   <li><strong className='text-text-bright'>Disable a Kind:</strong> Kick, snare, clap and percussion rows open a list of the finer sound types the library holds (toms, shakers, bells, chimes, rimshots, rides and so on), each with its own eye icon, so "no toms" is one click. The lists stay closed until you open them. Switching a kind off regenerates the unlocked pads straight away; locked pads keep their sample.</li>
                   <li><strong className='text-text-bright'>Trim Silence:</strong> Tick box above the download buttons, on by default. Turn it off to keep every sample's audio exactly as it is. <strong>It only happens on export</strong> — the pads always play your original files untouched, so what you hear while building a kit is the untrimmed sample and nothing on disk is ever modified. What it does to the audio is in section 6.</li>
-                  <li><strong className='text-text-bright'>Download Kit / Batch Download:</strong> Download Kit saves the kit on screen. Batch Download opens a dialog that downloads as many kits as your samples fill before they have to repeat (at most 10): the kit on screen plus new randomized ones, with every sample used in one kit only. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Choose One zip to get a single zip archive instead.</li>
+                  <li><strong className='text-text-bright'>Download Kit / Batch Download:</strong> Download Kit saves the kit on screen. Batch Download opens a dialog where you pick up to 10 kits: the kit on screen plus new randomized ones. You get fewer if your samples run out: it stops at the number of kits they fill before any sample has to repeat. By default each kit downloads as its own <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> file, one after another; your browser may ask once to allow multiple downloads, so choose Allow. Choose One zip to get a single zip archive instead.</li>
                   <li><strong className='text-text-bright'>Device Transfer:</strong> Each exported <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.ablpresetbundle</code> is a single file, not a folder: upload it to your Ableton Move. If you chose One zip, unzip it first.</li>
                 </ul>
               </section>
@@ -1726,7 +1740,7 @@ export default function App() {
                   <li><strong className='text-text-bright'>Choke Groups:</strong> When a kit has both closed and open hats, all its hats cut each other (Choke 1). Crashes and rides never choke.</li>
                   <li><strong className='text-text-bright'>When a Pool Runs Dry:</strong> A pad whose own category is exhausted takes the nearest sound rather than the next one down some list. Snares and claps cover for each other, the two hats cover for each other, percussion and other cover for each other, and a kick is the last resort for every role but its own. An open-hat pad reaches for closed hats first.</li>
                   <li><strong className='text-text-bright'>Percussion &amp; Other:</strong> These keep separate columns and separate rows, but a pad asking for either draws from both, weighted by how much of each is left — so a library heavy on unclassified samples still fills its percussion pads.</li>
-                  <li><strong className='text-text-bright'>Fresh Samples First:</strong> Each new kit draws samples that earlier kits on this page have not used before it reuses one, per category. With 12 kicks and 4 kick pads, three kits in a row have different kicks and the fourth starts over. The page forgets this when you close it. Batch Download counts the kits that fit before any category has to repeat, using the category with the most samples, so a category with fewer samples reuses some in later kits of the batch.</li>
+                  <li><strong className='text-text-bright'>Fresh Samples First:</strong> Each new kit draws samples that earlier kits on this page have not used before it reuses one, per category. With 12 kicks and 4 kick pads, three kits in a row have different kicks and the fourth starts over. The page forgets this when you close it. Batch Download stops at the number of kits that fit before every category has to repeat (set by the category with the most samples), so a category with fewer samples reuses some in the later kits of the batch.</li>
                   <li><strong className='text-text-bright'>Variety:</strong> Percussion and crash pads hold at most two of the same kind (two shakers, not five) while other kinds are available. It is a preference only: a library with nothing else still fills every pad.</li>
                   <li><strong className='text-text-bright'>Hat Pairs:</strong> When a closed hat and an open hat share a name apart from the hat words and numbers (<code>BlockPatrol-Hat</code> and <code>BlockPatrol-HatOpn</code>), a closed hat drawn onto a pad puts its open partner on the open-hat pad directly to its right. Closed hats are still drawn at random, and a locked open-hat pad is left alone. A partner already used in an earlier kit is skipped, so no open hat plays twice while others are unheard. Shared prefixes such as <code>DJP_</code> on many files do not count as pairs.</li>
                 </ul>
@@ -1750,7 +1764,7 @@ export default function App() {
                   server and no upload: the files are read, categorised, trimmed and packaged
                   into a zip by your browser, and the finished bundle is handed straight back to
                   your downloads folder. Closing the tab is all it takes to clear it — nothing
-                  was stored anywhere else except one interface setting (the Quick preview tick), which your browser keeps in its local storage.
+                  was stored anywhere else except two interface settings (the Quick preview tick and the batch amount), which your browser keeps in its local storage.
                 </p>
                 <p className='text-text-subtle'>
                   The one exception is ordinary web analytics: Cloudflare Web Analytics and Vercel
