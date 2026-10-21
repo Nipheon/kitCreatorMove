@@ -7,14 +7,16 @@ import { BATCH_MAX } from './storedSettings';
 /**
  * Adds a kit's samples to the used-sample history. When every usable sample of a draw group
  * (a pool category; Perc and Other together) has been used, that group starts a fresh round:
- * its entries are dropped so the next kit draws from all of them again. Each group rounds on
+ * its entries are dropped so the next kit draws from the others first. The samples of the kit just
+ * recorded stay in the history, or the next kit could be the identical set. Each group rounds on
  * its own, so closed and open hats never wait on each other.
  */
 export function recordKit(
   history: ReadonlySet<string>, kit: readonly (Sample | null)[], samples: readonly Sample[], options: KitOptions = {}
 ): Set<string> {
   const next = new Set(history);
-  kit.forEach(sample => { if (sample) next.add(sample.id); });
+  const justUsed = new Set<string>();
+  kit.forEach(sample => { if (sample) { next.add(sample.id); justUsed.add(sample.id); } });
 
   // Perc and Other are drawn as one group, so they also start a new round together.
   const byGroup = new Map<string, Sample[]>();
@@ -25,7 +27,7 @@ export function recordKit(
     if (list) list.push(sample); else byGroup.set(key, [sample]);
   }
   byGroup.forEach(list => {
-    if (list.every(sample => next.has(sample.id))) list.forEach(sample => next.delete(sample.id));
+    if (list.every(sample => next.has(sample.id))) list.forEach(sample => { if (!justUsed.has(sample.id)) next.delete(sample.id); });
   });
   return next;
 }

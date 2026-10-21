@@ -3639,7 +3639,10 @@ await test('recordKit starts a new round for a category once all of it was used,
   const kits = await sessionKits(library, 3);
   let history: ReadonlySet<string> = new Set();
   for (const kit of kits) history = recordKit(history, kit, library, {});
-  assert.ok(library.filter(s => s.category === 'Kick').every(s => !history.has(s.id)), 'kicks reset');
+  const lastKicks = new Set(kits[2].filter(s => s?.category === 'Kick').map(s => s!.id));
+  const kicks = library.filter(s => s.category === 'Kick');
+  assert.ok(kicks.filter(s => !lastKicks.has(s.id)).every(s => !history.has(s.id)), 'the other kicks reset');
+  assert.ok(kicks.filter(s => lastKicks.has(s.id)).every(s => history.has(s.id)), 'the kicks of the kit just recorded stay');
   assert.ok(library.filter(s => s.category === 'Snare').some(s => history.has(s.id)), 'snares keep their history');
 });
 
@@ -3769,7 +3772,7 @@ await test('recordKit starts a new round for Perc and Other together, not each a
   const history = recordKit(new Set(), kit, library, { skipNonDrums: false });
   assert.ok(perc.every(s => history.has(s.id)), 'Perc is used up but Other still has a fresh sample: no reset yet');
   const reset = recordKit(history, [other[1]], library, { skipNonDrums: false });
-  assert.equal(reset.size, 0, 'the whole group was used: new round');
+  assert.deepEqual([...reset], [other[1].id], 'the whole group was used: new round, only the kit just recorded stays');
 });
 
 await test('rerolling a closed hat swaps in its partner from another open pad of the shown kit', async () => {
@@ -3824,6 +3827,34 @@ await test('later loose files get a group of their own instead of being skipped'
   assert.equal(uniqueLooseName([...loaded, { name: 'dropped files 2' }], 'Dropped Files'), 'Dropped Files 3');
   assert.ok(isLooseGroupName('Dropped Files', 'Dropped Files') && isLooseGroupName('Dropped Files 12', 'Dropped Files'));
   assert.ok(!isLooseGroupName('Dropped Files Pack', 'Dropped Files'));
+});
+
+await test('fresh first: the kit after a round end is never the identical set (5 kicks, 4 pads)', async () => {
+  const library = [...numbered('kick', 'Kick', 5), ...numbered('snare', 'Snare', 16), ...numbered('hat', 'CHH', 16)];
+  for (let run = 0; run < 40; run++) {
+    const kits = await sessionKits(library, 6);
+    kits.slice(1).forEach((kit, i) => {
+      const before = new Set(namesOf([kits[i]], 'Kick'));
+      assert.ok(namesOf([kit], 'Kick').some(id => !before.has(id)), `kit ${i + 2} is not the kicks of kit ${i + 1} again`);
+    });
+  }
+});
+
+await test('fresh first: a fresh sample beats the variety cap', async () => {
+  const fresh = Array.from({ length: 20 }, (_, i) => kinded(`sh${i}.wav`, 'Perc', 'shaker'));
+  const old = [
+    ...Array.from({ length: 3 }, (_, i) => kinded(`tom${i}.wav`, 'Perc', 'tom')),
+    ...Array.from({ length: 3 }, (_, i) => kinded(`conga${i}.wav`, 'Perc', 'conga'))
+  ];
+  const usedBefore = new Set(old.map(s => s.id));
+  for (let run = 0; run < 50; run++) {
+    const { kit } = await generateRandomKit([...fresh, ...old], [], { usedBefore }, undefined, { identityOf: idByName });
+    assert.ok(kit.every(s => s && !usedBefore.has(s.id)), 'no used sample while fresh shakers remain');
+  }
+  for (let run = 0; run < 50; run++) {
+    const { kit } = await generateRandomKit([...fresh, ...old], [], {}, undefined, { identityOf: idByName });
+    assert.ok(countKind(kit, 'tom') >= 2 && countKind(kit, 'conga') >= 2, 'without a history the cap still pulls in the other kinds');
+  }
 });
 
 if (failures > 0) {

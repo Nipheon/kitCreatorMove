@@ -146,10 +146,25 @@ export function preferNewKinds(pads: () => readonly (Sample | null)[]): Preferen
  * pools are shuffled, so the last welcome candidate is uniform among the welcome ones. When
  * none is welcome the normal pop happens, so variety can never empty a pad. The pick still
  * goes through the caller's identity check.
+ *
+ * Fresh beats variety: a pool holds the samples of `usedBefore` at the front and the rest at the
+ * back, so while a fresh sample is left only the fresh tail is scanned, and when none of it is
+ * welcome the fresh end is taken anyway (the cap may be exceeded). Only a pool with nothing
+ * fresh left runs the variety scan over the used part.
  */
-function popPreferred(pool: Sample[], prefer?: Preference): Sample {
+function popPreferred(pool: Sample[], prefer?: Preference, usedBefore?: ReadonlySet<string>): Sample {
   if (prefer) {
-    for (let i = pool.length - 1; i >= 0; i--) {
+    let from = 0;
+    if (usedBefore && usedBefore.size > 0) {
+      let lo = 0;
+      let hi = pool.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (usedBefore.has(pool[mid].id)) lo = mid + 1; else hi = mid;
+      }
+      from = lo < pool.length ? lo : 0;
+    }
+    for (let i = pool.length - 1; i >= from; i--) {
       if (prefer(pool[i])) return pool.splice(i, 1)[0];
     }
   }
@@ -162,10 +177,10 @@ function popPreferred(pool: Sample[], prefer?: Preference): Sample {
  * candidate comes from the SAME pool, so the pad's role and the pass order are untouched.
  */
 async function claimFrom(
-  pool: Sample[], used: Set<string>, identity: IdentityFn, prefer?: Preference
+  pool: Sample[], used: Set<string>, identity: IdentityFn, prefer?: Preference, usedBefore?: ReadonlySet<string>
 ): Promise<Sample | null> {
   while (pool.length > 0) {
-    const candidate = popPreferred(pool, prefer);
+    const candidate = popPreferred(pool, prefer, usedBefore);
     const id = await identity(candidate);
     if (!used.has(id)) {
       used.add(id);
@@ -182,7 +197,7 @@ async function drawRole(
   prefer?: Preference, usedBefore?: ReadonlySet<string>
 ): Promise<Sample | null> {
   for (let pool = pickGroupPool(pools, category, usedBefore); pool; pool = pickGroupPool(pools, category, usedBefore)) {
-    const found = await claimFrom(pool, used, identity, prefer);
+    const found = await claimFrom(pool, used, identity, prefer, usedBefore);
     if (found) return found;
   }
   return null;
@@ -190,14 +205,15 @@ async function drawRole(
 
 /** Nothing in the preference list: whichever pool is deepest, until one yields a distinct sample. */
 async function drawDeepest(
-  pools: Record<Category, Sample[]>, used: Set<string>, identity: IdentityFn, prefer?: Preference
+  pools: Record<Category, Sample[]>, used: Set<string>, identity: IdentityFn, prefer?: Preference,
+  usedBefore?: ReadonlySet<string>
 ): Promise<Sample | null> {
   for (;;) {
     const deepest = (Object.keys(pools) as Category[])
       .sort((a, b) => pools[b].length - pools[a].length)
       .find(cat => pools[cat].length > 0);
     if (!deepest) return null;
-    const found = await claimFrom(pools[deepest], used, identity, prefer);
+    const found = await claimFrom(pools[deepest], used, identity, prefer, usedBefore);
     if (found) return found;
   }
 }
@@ -478,7 +494,7 @@ export async function generateRandomKit(
       const found = await drawRole(pools, cat, used, identity, prefer, options.usedBefore);
       if (found) return found;
     }
-    return drawDeepest(pools, used, identity, prefer);
+    return drawDeepest(pools, used, identity, prefer, options.usedBefore);
   };
 
   /**
@@ -603,7 +619,7 @@ export async function rerollSinglePad(
     if (chosenSample) break;
   }
 
-  if (!chosenSample) chosenSample = await drawDeepest(pools, used, identity, prefer);
+  if (!chosenSample) chosenSample = await drawDeepest(pools, used, identity, prefer, options.usedBefore);
   onProgress?.(1, 1);
 
   // Nothing else in the whole library: keep what is there rather than emptying the pad.
