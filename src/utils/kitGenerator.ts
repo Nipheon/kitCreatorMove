@@ -179,9 +179,9 @@ async function claimFrom(
 /** One draw for a role: re-picks a group pool whenever the picked one ran dry on duplicates. */
 async function drawRole(
   pools: Record<Category, Sample[]>, category: Category, used: Set<string>, identity: IdentityFn,
-  prefer?: Preference
+  prefer?: Preference, usedBefore?: ReadonlySet<string>
 ): Promise<Sample | null> {
-  for (let pool = pickGroupPool(pools, category); pool; pool = pickGroupPool(pools, category)) {
+  for (let pool = pickGroupPool(pools, category, usedBefore); pool; pool = pickGroupPool(pools, category, usedBefore)) {
     const found = await claimFrom(pool, used, identity, prefer);
     if (found) return found;
   }
@@ -246,7 +246,8 @@ function holdsPartner(ctx: PartnerContext, [left, right]: [number, number]): boo
  *
  * A partner an earlier kit already used (`usedBefore`) is not usable: pulling it would play an
  * open hat twice while others are still unheard, so that pad keeps its fresh draw and the pair
- * is split for this kit.
+ * is split for this kit. A partner already on a pad of this kit stays usable: moving it plays
+ * nothing twice (the shown kit is always in `usedBefore`, so a reroll would otherwise never swap).
  */
 async function applyPartnerRule(ctx: PartnerContext, pair: [number, number]): Promise<void> {
   const [left, right] = pair;
@@ -257,7 +258,7 @@ async function applyPartnerRule(ctx: PartnerContext, pair: [number, number]): Pr
   const partners = index.get(closed.id);
   if (!partners || partners.length === 0 || holdsPartner(ctx, pair)) return;
 
-  const candidates = partners.filter(p => !usedBefore?.has(p.id));
+  const candidates = partners.filter(p => !usedBefore?.has(p.id) || kit.some(s => s?.id === p.id));
   shuffle(candidates);
   const previous = kit[right];
   const previousIdentity = previous ? await identity(previous) : null;
@@ -341,8 +342,16 @@ function summarisePads(kit: (Sample | null)[], layout: PadLayout, available: Set
  * Returns the pool rather than the sample so the caller decides whether to pop it (a full
  * generate, where pools deplete) or read it (a single-pad reroll, which rebuilds them).
  */
-function pickGroupPool(pools: Record<Category, Sample[]>, category: Category): Sample[] | null {
-  const candidates = drawGroupFor(category).map(c => pools[c]).filter(pool => pool.length > 0);
+function pickGroupPool(
+  pools: Record<Category, Sample[]>, category: Category, usedBefore?: ReadonlySet<string>
+): Sample[] | null {
+  let candidates = drawGroupFor(category).map(c => pools[c]).filter(pool => pool.length > 0);
+  // Pools end in their unused samples, so a pool whose last sample was used has nothing fresh left:
+  // while another pool of the group still has fresh samples, the draw stays with those.
+  if (usedBefore && usedBefore.size > 0) {
+    const fresh = candidates.filter(pool => !usedBefore.has(pool[pool.length - 1].id));
+    if (fresh.length > 0) candidates = fresh;
+  }
   const total = candidates.reduce((sum, pool) => sum + pool.length, 0);
   if (total === 0) return null;
 
@@ -466,7 +475,7 @@ export async function generateRandomKit(
 
   const take = async (index: number): Promise<Sample | null> => {
     for (const cat of layout.preferences[index]) {
-      const found = await drawRole(pools, cat, used, identity, prefer);
+      const found = await drawRole(pools, cat, used, identity, prefer, options.usedBefore);
       if (found) return found;
     }
     return drawDeepest(pools, used, identity, prefer);
@@ -486,7 +495,7 @@ export async function generateRandomKit(
       kit[i] = lockedSamples[i];
       continue;
     }
-    kit[i] = await drawRole(pools, layout.preferences[i][0], used, identity, prefer);
+    kit[i] = await drawRole(pools, layout.preferences[i][0], used, identity, prefer, options.usedBefore);
     if (kit[i]) tick();
   }
 
@@ -590,7 +599,7 @@ export async function rerollSinglePad(
   const prefer = preferNewKinds(() => nextKit.filter((_, i) => i !== targetIndex));
 
   for (const cat of preferences) {
-    chosenSample = await drawRole(pools, cat, used, identity, prefer);
+    chosenSample = await drawRole(pools, cat, used, identity, prefer, options.usedBefore);
     if (chosenSample) break;
   }
 

@@ -14,7 +14,7 @@ import {
   classifySample, getFilesFromDataTransfer, getFilesFromFileList, LOOSE_FILES_FOLDER, looksLikeLoop, looksNonDrum,
   newDropReport, ScanProgress
 } from './utils/fileReader';
-import { mergeScannedFolders, skippedFoldersNotice } from './utils/folderMerge';
+import { isLooseGroupName, mergeScannedFolders, skippedFoldersNotice, uniqueLooseName } from './utils/folderMerge';
 import { planRemove, planToggle } from './utils/folderGroups';
 import { expandCollections } from './utils/packSplit';
 import { recordKit, uniqueKitCount } from './utils/freshness';
@@ -463,11 +463,11 @@ export default function App() {
   }, [kitResult]);
 
   // Help and batch dialogs: focus moves in on open and back to the opener on close; Escape
-  // closes; Tab cycles inside the dialog. The batch dialog ignores Escape while exporting.
+  // closes; Tab cycles inside the dialog. The batch dialog ignores Escape while building or exporting.
   const isExportingRef = useRef(false);
   isExportingRef.current = isExporting;
   useDialogKeys(isHelpOpen, helpButtonRef, helpDialogRef, () => setIsHelpOpen(false));
-  useDialogKeys(isBatchOpen, batchButtonRef, batchDialogRef, () => setIsBatchOpen(false), () => !isExportingRef.current);
+  useDialogKeys(isBatchOpen, batchButtonRef, batchDialogRef, () => setIsBatchOpen(false), () => !isExportingRef.current && !generating.current);
 
   // The key handler below is registered once, so it reaches the newest randomizeKit and
   // help state through these refs rather than closing over stale values.
@@ -697,9 +697,15 @@ export default function App() {
       const { folders: candidates, splits } = expandCollections(
         topLevel, LOOSE_FILES_FOLDER, name => loadedParents.get(name.toLowerCase()) ?? newId('collection')
       );
-      const { accepted } = mergeScannedFolders(current.sourceFolders, candidates);
+      // Loose files of a later drop are other files: they get a group of their own instead of being skipped.
+      const looseGroups = candidates.map(folder =>
+        folder.name === LOOSE_FILES_FOLDER && !folder.parent
+          ? { ...folder, name: uniqueLooseName(current.sourceFolders, LOOSE_FILES_FOLDER) }
+          : folder
+      );
+      const { accepted } = mergeScannedFolders(current.sourceFolders, looseGroups);
       // Counted per dropped entry, so a collection dropped twice reads as one folder, not seven.
-      const acceptedNames = new Set(accepted.map(f => f.parent?.name ?? f.name));
+      const acceptedNames = new Set(accepted.map(f => f.parent?.name ?? (isLooseGroupName(f.name, LOOSE_FILES_FOLDER) ? LOOSE_FILES_FOLDER : f.name)));
       const skippedNames = topLevel.filter(t => !acceptedNames.has(t.name)).map(t => t.name);
       const skippedNote = skippedFoldersNotice(skippedNames);
       // Visible even when other folders were added: a same-named folder from another pack is not loaded.
@@ -1005,16 +1011,12 @@ export default function App() {
     : 1;
   const batchCount = Math.min(batchSize, fittingKits);
 
-  const buildBatch = async (batchSize: number) => {
-    const batch = await runGeneration(report => buildBatchFor({
+  const buildBatch = (batchSize: number) =>
+    runGeneration(report => buildBatchFor({
       kit, layout: kitResult.layout, exportName, exportedNames: exportedNames.current,
       samples, kitOptions, batchSize, prefix: kitPrefix, lockedPads,
       onKit: (done, total) => report(done, total, 'kits')
     }));
-    // Exported kits count as heard: the next Generate starts from what the batch left unused.
-    batch?.forEach(entry => { usedHistory.current = recordKit(usedHistory.current, entry.kit, samples, kitOptions); });
-    return batch;
-  };
 
   /** `count` kits: the on-screen one, then count - 1 new ones. 1 is the plain single download. */
   const exportKit = async (count: number, asZip: boolean) => {
@@ -1036,6 +1038,9 @@ export default function App() {
       );
       if (!proceed) return;
     }
+
+    // Exported kits count as heard (not before the confirm: a cancelled batch was never shown).
+    batch?.forEach(entry => { usedHistory.current = recordKit(usedHistory.current, entry.kit, samples, kitOptions); });
 
     setIsExporting(true);
     setError(null);
@@ -1581,7 +1586,7 @@ export default function App() {
               <button
                 type='button'
                 onClick={() => setIsBatchOpen(false)}
-                disabled={isExporting}
+                disabled={isExporting || isGenerating}
                 className='text-text-muted hover:text-text-bright p-1.5 rounded-lg hover:bg-surface-btn-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
                 aria-label='Close batch download'
               >
@@ -1687,7 +1692,7 @@ export default function App() {
                 <h3 className='text-sm sm:text-base font-bold uppercase tracking-wider text-accent-yellow'>2. Adding Sample Folders</h3>
                 <ul className='list-disc pl-6 space-y-2 text-text-light'>
                   <li><strong className='text-text-bright'>Drag & Drop:</strong> Drag any sample folder directly onto the app window.</li>
-                  <li><strong className='text-text-bright'>Pick folders / Pick files:</strong> No drag and drop, for instance on a phone? Use the buttons above the folder list. Pick folders opens your system's folder picker and loads the folder you choose, with its subfolders, exactly like a drop. If your browser only lets you pick files, use Pick files: loose files are grouped into one Dropped Files folder.</li>
+                  <li><strong className='text-text-bright'>Pick folders / Pick files:</strong> No drag and drop, for instance on a phone? Use the buttons above the folder list. Pick folders opens your system's folder picker and loads the folder you choose, with its subfolders, exactly like a drop. If your browser only lets you pick files, use Pick files: loose files are grouped into a Dropped Files folder (a later pick or drop of other loose files becomes Dropped Files 2).</li>
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> A folder whose name is already in your list is skipped, even if it comes from a different pack, and a notice names what was skipped.</li>
                   <li><strong className='text-text-bright'>Collections:</strong> A folder that holds several separate packs (Kit 1, Kit 2, ...) is listed as a parent with its sub-packs underneath. Tick the parent to use all of them, or tick only the sub-packs you want to mix. The parent's eye looks half-filled when only some are on; clicking it then turns all on. The cross on the parent removes the whole collection, on a sub-pack just that one. A folder made of Kicks, Snares, FX and similar folders is one pack and is not split.</li>

@@ -593,7 +593,9 @@ const GLUED_HAT_QUALIFIERS: Record<string, Category> = {
 const GLUE_FALSE_FRIENDS = [
   'whats', 'thats', 'chats',
   'rider', 'riders', 'bride', 'pride', 'strider', 'cymbalium',
-  'hollywood', 'bollywood', 'snapchat', 'percussive'
+  'hollywood', 'bollywood', 'snapchat', 'percussive',
+  'override', 'stride', 'hayride', 'blockbuster', 'roadblock', 'woodstock', 'driftwood', 'wooden',
+  'snapshot', 'clapton', 'trims', 'brims', 'chinatown', 'percent'
 ];
 
 /**
@@ -1086,6 +1088,19 @@ export function categorizeSample(name: string, directory = ''): Category {
 const isWeakKind = (c: Classified) => c.kind === defaultKind(c.category) && (c.category === 'Perc' || c.category === 'Crash');
 
 /**
+ * A folder named only "Open" or "Closed" (`Hats/Open/`) sets the hat's qualifier when a hat folder sits
+ * on its path (above it or below). Only whole words of three letters or more count, so a folder called `C` or
+ * `O` does not. `others` are the other folders of the path.
+ */
+function bareHatQualifier(folder: string, others: readonly string[]): Category | null {
+  const tokens = tokenize(folder);
+  if (tokens.length === 0 || tokens.some(t => t.length < 3)) return null;
+  const qualifier = tokens.every(t => OPEN.includes(t)) ? 'OHH' : tokens.every(t => CLOSED.includes(t)) ? 'CHH' : null;
+  if (!qualifier) return null;
+  return others.some(f => ['Hat', 'CHH', 'OHH'].includes(classify(f) ?? '')) ? qualifier : null;
+}
+
+/**
  * The category (see `categorizeSample`) together with the finer kind. The kind comes from the same
  * rule that chose the category: the matched word group of the name, or of the folder when the folder
  * decided. The one refinement: a name that only says "percussion" or "cymbal" takes the kind of the
@@ -1101,6 +1116,12 @@ export function classifySample(name: string, directory = ''): Classified {
     const nameClass = classified?.category === 'CHH' ? classify(name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' '), true) : classified?.category ?? null;
     if (nameClass === null || nameClass === 'Hat') return withDefault('OHH');
   }
+  // "Open Hat C" / "Hat Open Cl.wav": with an open word in the name a bare c or cl is a key letter or a level,
+  // not the closed qualifier. Only when nothing else in the name says closed does the name read open.
+  if (classified?.category === 'CHH') {
+    const withoutC = name.replace(/(?<![A-Za-z])c(?![a-z])/gi, ' ').replace(/(?<![A-Za-z])cl(?![a-z])/gi, ' ');
+    if (withoutC !== name && classify(withoutC, true) === 'OHH') return withDefault('OHH');
+  }
   const fromName = classified;
 
   /**
@@ -1114,8 +1135,9 @@ export function classifySample(name: string, directory = ''): Classified {
    * folder that disagrees — `closed hat.wav` in `Open Hats/` stays CHH.
    */
   if (fromName?.category === 'Hat') {
-    for (const folder of folderCandidates(directory)) {
-      const fromFolder = classify(folder);
+    const folders = folderCandidates(directory);
+    for (let i = 0; i < folders.length; i++) {
+      const fromFolder = classify(folders[i]) ?? bareHatQualifier(folders[i], folders.filter((_, j) => j !== i));
       if (fromFolder === 'CHH' || fromFolder === 'OHH') return withDefault(fromFolder);
     }
   }
@@ -1146,9 +1168,17 @@ export function classifySample(name: string, directory = ''): Classified {
 
   // A bell word the name's own guards dropped (`Bell Pad.wav`, a song) is not given back by a folder of bells.
   const nameWeakDropped = nameBlocksWeak(name, folderBlocksWeak);
-  for (const folder of folderCandidates(directory)) {
-    const fromFolder = classifyKind(folder);
-    if (fromFolder && !(nameWeakDropped && WEAK_KINDS.includes(fromFolder.kind))) return fromFolder;
+  const folders = folderCandidates(directory);
+  for (let i = 0; i < folders.length; i++) {
+    const fromFolder = classifyKind(folders[i]);
+    if (fromFolder && !(nameWeakDropped && WEAK_KINDS.includes(fromFolder.kind))) {
+      // `Hats/Open/01.wav`: a generic hat folder is sharpened by a bare Open or Closed folder below it.
+      if (fromFolder.category === 'Hat') {
+        const qualifier = folders.slice(0, i).map(f => bareHatQualifier(f, [folders[i]])).find(Boolean);
+        if (qualifier) return withDefault(qualifier);
+      }
+      return fromFolder;
+    }
   }
   const nameTokens = tokenize(name, true);
   const weak = FALLBACK_WORDS.find(([words]) => nameTokens.some(t => words.includes(t)));

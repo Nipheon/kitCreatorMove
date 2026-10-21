@@ -48,7 +48,7 @@ import {
   uniqueKitName
 } from '../src/utils/kitNaming';
 import { buildPartnerIndex, hatStem, partnerPads } from '../src/utils/hatPartner';
-import { mergeScannedFolders } from '../src/utils/folderMerge';
+import { isLooseGroupName, mergeScannedFolders, uniqueLooseName } from '../src/utils/folderMerge';
 import { FULL_HASH_MAX_BYTES, fileSignature, identityOf, sampleIdentity } from '../src/utils/sampleSignature';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from '../src/utils/progressVisibility';
 import { readChunks, readWavFormat, stripWavMetadata } from '../src/utils/wavStripper';
@@ -3722,6 +3722,108 @@ await test('hat pairs: 10 closed and 16 open hats, every closed hat partnered, n
     assert.equal(new Set(namesOf(kits, 'OHH')).size, 16, 'every open hat used within four kits, partnered or not');
     assert.equal(new Set(namesOf(kits.slice(0, 3), 'CHH')).size, 10, 'every closed hat used within three kits');
   }
+});
+
+// --- review fixes ---------------------------------------------------------------------------
+
+await test('a WAV whose data chunk declares size 0 keeps its audio through the metadata strip', async () => {
+  const audio = new Uint8Array(100).map((_, i) => (i % 250) + 1);
+  const header = new Uint8Array(44);
+  const view = new DataView(header.buffer);
+  const text = (offset: number, s: string) => [...s].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  text(0, 'RIFF'); view.setUint32(4, 36 + audio.length, true); text(8, 'WAVE'); text(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, 44100, true); view.setUint32(28, 88200, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, 'data'); view.setUint32(40, 0, true); // streaming recorder placeholder
+  const out = new Uint8Array(await (await stripWavMetadata(new Blob([header, audio]))).arrayBuffer());
+  const chunks = readChunks(out.buffer.slice(0) as ArrayBuffer)!;
+  const data = chunks.find(c => c.id === 'data')!;
+  assert.equal(data.size, audio.length);
+  assert.deepEqual(Array.from(out.subarray(data.offset, data.offset + data.size)), Array.from(audio));
+});
+
+await test('uniqueKitCount counts pads a missing role hands to other samples', () => {
+  const library = [...numbered('kick', 'Kick', 12), ...numbered('hat', 'CHH', 4)];
+  const none = new Array(PAD_COUNT).fill(null);
+  assert.equal(uniqueKitCount(library, chooseLayout(library), none), 1, 'snare pads draw kicks, 12 kicks fill one kit');
+});
+
+await test('Perc and Other: fresh samples are drawn before a used sample of the other pool', async () => {
+  const perc = numbered('shaker', 'Perc', 10);
+  const other = numbered('thing', 'Other', 10);
+  const library = [...numbered('kick', 'Kick', 16), ...numbered('snare', 'Snare', 16), ...numbered('hat', 'CHH', 8), ...perc, ...other];
+  const usedBefore = new Set(perc.slice(0, 9).map(s => s.id));
+  for (let run = 0; run < 30; run++) {
+    const r = await generateRandomKit(library, [], { usedBefore, skipNonDrums: false });
+    const drawn = r.kit.filter(s => s && (s.category === 'Perc' || s.category === 'Other')) as Sample[];
+    assert.ok(drawn.length >= 4);
+    assert.ok(drawn.every(s => !usedBefore.has(s.id)), 'no used percussion while fresh Other samples remain');
+  }
+});
+
+await test('recordKit starts a new round for Perc and Other together, not each alone', () => {
+  const perc = numbered('shaker', 'Perc', 2);
+  const other = numbered('thing', 'Other', 2);
+  const library = [...perc, ...other];
+  const kit = [...perc, other[0]];
+  const history = recordKit(new Set(), kit, library, { skipNonDrums: false });
+  assert.ok(perc.every(s => history.has(s.id)), 'Perc is used up but Other still has a fresh sample: no reset yet');
+  const reset = recordKit(history, [other[1]], library, { skipNonDrums: false });
+  assert.equal(reset.size, 0, 'the whole group was used: new round');
+});
+
+await test('rerolling a closed hat swaps in its partner from another open pad of the shown kit', async () => {
+  const closed = [makeSample('alphaHat.wav', 'CHH'), makeSample('bravoHat.wav', 'CHH'), ...numbered('Hat', 'CHH', 3)];
+  const open = [makeSample('alphaHatOpn.wav', 'OHH'), makeSample('bravoHatOpn.wav', 'OHH'), ...numbered('Hat Open', 'OHH', 2)];
+  const library = [...numbered('kick', 'Kick', 16), ...numbered('snare', 'Snare', 16), ...closed, ...open];
+  const layout = chooseLayout(library);
+  const kit: (Sample | null)[] = new Array(PAD_COUNT).fill(null);
+  const kicks = library.filter(s => s.category === 'Kick');
+  const snares = library.filter(s => s.category === 'Snare');
+  let k = 0, s = 0;
+  for (let i = 0; i < PAD_COUNT; i++) kit[i] = layout.roles[i] === 'Kick' ? kicks[k++] : snares[s++];
+  Object.assign(kit, { 2: closed[1], 3: open[1], 6: closed[2], 7: open[0], 10: closed[3], 11: open[2], 14: closed[4], 15: open[3] });
+  const usedBefore = new Set(kit.map(x => x!.id));
+  const r = await rerollSinglePad(library, kit, 2, { usedBefore }, layout);
+  assert.equal(r.kit[2]!.name, 'alphaHat.wav');
+  assert.equal(r.kit[3]!.name, 'alphaHatOpn.wav', 'the partner moved over from pad 7');
+});
+
+await test('a bare Open or Closed folder under or over a hat folder sets the hat qualifier', () => {
+  const cat = (name: string, dir: string) => classifySample(name, dir).category;
+  assert.equal(cat('Hat 01.wav', '/Pack/Hats/Open'), 'OHH');
+  assert.equal(cat('01.wav', '/Pack/Hi-Hats/Open'), 'OHH');
+  assert.equal(cat('Hat 01.wav', '/Pack/Open/Hats'), 'OHH');
+  assert.equal(cat('Hat 01.wav', '/Pack/Hats/Closed'), 'CHH');
+  assert.equal(cat('Hat 01.wav', '/Pack/Open'), 'Hat', 'no hat folder: nothing to qualify');
+  assert.equal(cat('Hat 01.wav', '/Pack/Hats/C'), 'Hat', 'one letter is not a word');
+  assert.equal(cat('closed hat.wav', '/Pack/Hats/Open'), 'CHH', 'an explicit name still wins');
+});
+
+await test('an open word beats a bare c or cl in a hat name', () => {
+  const cat = (name: string) => classifySample(name, '').category;
+  for (const name of ['Open Hat C.wav', 'Open Hat C#3.wav', 'Hat Open Cl.wav', 'OpenHat_C.wav']) assert.equal(cat(name), 'OHH', name);
+  assert.equal(cat('Hat C.wav'), 'CHH');
+  assert.equal(cat('Closed Hat C.wav'), 'CHH');
+  assert.equal(cat('Hat Open Closed.wav'), 'CHH', 'a real closed word still counts');
+});
+
+await test('ordinary words that contain a drum word are not drums', () => {
+  for (const name of [
+    'Override Riser', 'Stride Bass', 'Hayride Lead', 'Blockbuster Impact', 'Roadblock FX', 'Woodstock Vocal',
+    'Driftwood Pad', 'Wooden Chord', 'Snapshot', 'Clapton Guitar', 'Trims', 'Brims Pad', 'Chinatown Pluck', 'Percent Vox'
+  ]) assert.equal(classifySample(name, '').category, 'Other', name);
+  assert.equal(classifySample('Woodblock.wav', '').category, 'Perc');
+  assert.equal(classifySample('Rimshot.wav', '').category, 'Snare');
+});
+
+await test('later loose files get a group of their own instead of being skipped', () => {
+  const loaded = [{ name: 'Dropped Files' }];
+  assert.equal(uniqueLooseName([], 'Dropped Files'), 'Dropped Files');
+  assert.equal(uniqueLooseName(loaded, 'Dropped Files'), 'Dropped Files 2');
+  assert.equal(uniqueLooseName([...loaded, { name: 'dropped files 2' }], 'Dropped Files'), 'Dropped Files 3');
+  assert.ok(isLooseGroupName('Dropped Files', 'Dropped Files') && isLooseGroupName('Dropped Files 12', 'Dropped Files'));
+  assert.ok(!isLooseGroupName('Dropped Files Pack', 'Dropped Files'));
 });
 
 if (failures > 0) {
