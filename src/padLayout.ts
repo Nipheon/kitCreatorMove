@@ -122,7 +122,7 @@ export const NO_SAMPLES_GRID_ID = 'none';
  * Choking is unaffected: `chokeGroupsFor` reads the sample's real category, and crashes
  * never choke, whichever pad they sit on.
  */
-function pooledCategory(category: Category): Category {
+export function pooledCategory(category: Category): Category {
   if (category === 'Hat') return 'CHH';
   if (category === 'Crash') return 'Perc';
   return category;

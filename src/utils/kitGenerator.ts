@@ -49,6 +49,18 @@ function shuffle<T>(items: T[]): void {
   }
 }
 
+/**
+ * Shuffles a pool so the samples in `usedBefore` sit at the front. Pools are drawn from the end,
+ * so everything not heard in an earlier kit is taken first; each half stays uniformly shuffled.
+ */
+function shufflePool(pool: Sample[], usedBefore?: ReadonlySet<string>): void {
+  shuffle(pool);
+  if (!usedBefore || usedBefore.size === 0) return;
+  const used = pool.filter(s => usedBefore.has(s.id));
+  const fresh = pool.filter(s => !usedBefore.has(s.id));
+  pool.splice(0, pool.length, ...used, ...fresh);
+}
+
 export interface KitOptions {
   /** Leave loops out of the pools. On by default — a bar of music is not a drum hit. */
   skipLoops?: boolean;
@@ -70,6 +82,11 @@ export interface KitOptions {
    * wherever it would be drawn, a Perc-category sample used as a substitute included.
    */
   disabledKinds?: ReadonlySet<SampleKind>;
+  /**
+   * Ids of samples earlier kits already used. Draws take every sample not in this set before
+   * they reach one that is, so a library is worked through before anything repeats.
+   */
+  usedBefore?: ReadonlySet<string>;
 }
 
 export function isUsableSample(
@@ -194,6 +211,19 @@ interface PartnerContext {
   pairs: [number, number][];
   layout: PadLayout;
   isLocked: (pad: number) => boolean;
+  usedBefore?: ReadonlySet<string>;
+}
+
+/**
+ * Puts a sample back into its pool on the side it belongs to: the front half holds samples an
+ * earlier kit used, the back half (drawn first) the fresh ones.
+ */
+function returnToPool(pool: Sample[], sample: Sample, usedBefore?: ReadonlySet<string>): void {
+  const used = (s: Sample) => !!usedBefore?.has(s.id);
+  const boundary = pool.findIndex(s => !used(s));
+  const split = boundary < 0 ? pool.length : boundary;
+  const [from, to] = used(sample) ? [0, split] : [split, pool.length];
+  pool.splice(from + Math.floor(Math.random() * (to - from + 1)), 0, sample);
 }
 
 /** True when the pad on the right already holds a partner of the closed hat on the left. */
@@ -213,17 +243,21 @@ function holdsPartner(ctx: PartnerContext, [left, right]: [number, number]): boo
  * the two pads' contents, so no sample is ever on two pads. Pads of an earlier pair that already
  * hold a partner of their own closed hat are not raided (the lowest pad wins a shared partner). The sample that leaves `right` goes back to its pool.
  * Does nothing (the pad keeps what it has) when no partner is usable.
+ *
+ * A partner an earlier kit already used (`usedBefore`) is not usable: pulling it would play an
+ * open hat twice while others are still unheard, so that pad keeps its fresh draw and the pair
+ * is split for this kit.
  */
 async function applyPartnerRule(ctx: PartnerContext, pair: [number, number]): Promise<void> {
   const [left, right] = pair;
   const ownIndex = ctx.pairs.findIndex(p => p[0] === left);
-  const { kit, pools, used, identity, index, pairs, layout } = ctx;
+  const { kit, pools, used, identity, index, pairs, layout, usedBefore } = ctx;
   const closed = kit[left];
   if (!closed || poolCategoryFor(closed) !== 'CHH' || ctx.isLocked(right)) return;
   const partners = index.get(closed.id);
   if (!partners || partners.length === 0 || holdsPartner(ctx, pair)) return;
 
-  const candidates = [...partners];
+  const candidates = partners.filter(p => !usedBefore?.has(p.id));
   shuffle(candidates);
   const previous = kit[right];
   const previousIdentity = previous ? await identity(previous) : null;
@@ -239,8 +273,7 @@ async function applyPartnerRule(ctx: PartnerContext, pair: [number, number]): Pr
       used.add(id);
       kit[right] = candidate;
       if (previous) {
-        const back = pools[poolCategoryFor(previous)];
-        back.splice(Math.floor(Math.random() * (back.length + 1)), 0, previous);
+        returnToPool(pools[poolCategoryFor(previous)], previous, usedBefore);
       }
       return;
     }
@@ -421,7 +454,7 @@ export async function generateRandomKit(
     if (!lockedIds.has(s.id)) pools[poolCategoryFor(s)].push(s);
   });
 
-  (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
+  (Object.keys(pools) as Category[]).forEach(cat => shufflePool(pools[cat], options.usedBefore));
 
   const total = kit.filter((_, i) => !lockedSamples[i]).length;
   let checked = 0;
@@ -483,7 +516,8 @@ export async function generateRandomKit(
     const index = buildPartnerIndex([...usable, ...lockedSamples.filter((s): s is Sample => !!s && !usable.includes(s))]);
     if (index.size > 0) {
       const ctx: PartnerContext = {
-        kit, pools, used, identity, index, pairs, layout, isLocked: pad => !!lockedSamples[pad]
+        kit, pools, used, identity, index, pairs, layout, isLocked: pad => !!lockedSamples[pad],
+        usedBefore: options.usedBefore
       };
       for (const pair of pairs) await applyPartnerRule(ctx, pair);
     }
@@ -547,7 +581,7 @@ export async function rerollSinglePad(
     if (!usedIds.has(s.id)) pools[poolCategoryFor(s)].push(s);
   });
 
-  (Object.keys(pools) as Category[]).forEach(cat => shuffle(pools[cat]));
+  (Object.keys(pools) as Category[]).forEach(cat => shufflePool(pools[cat], options.usedBefore));
 
   onProgress?.(0, 1);
   let chosenSample: Sample | null = null;
@@ -586,7 +620,7 @@ export async function rerollSinglePad(
     if (index.size > 0) {
       await applyPartnerRule({
         kit: nextKit, pools, used, identity, index, pairs: partnerPads(heldLayout), layout: heldLayout,
-        isLocked: pad => !!lockedPads?.[pad]
+        isLocked: pad => !!lockedPads?.[pad], usedBefore: options.usedBefore
       }, pair);
     }
   }
