@@ -189,7 +189,11 @@ export const Pad: React.FC<PadProps> = ({
       );
     }
     audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(err => console.error('Audio playback error:', err));
+    audioRef.current.play().catch(err => {
+      // An AIFF pad's play() is aborted when its converted WAV loads, and no pause/ended/error follows.
+      setIsPlaying(false);
+      if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
+    });
     setIsPlaying(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditionToken]);

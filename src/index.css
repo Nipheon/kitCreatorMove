@@ -413,3 +413,20 @@
     }
   }
 }
+
+/* Styles the no-JavaScript fallback in index.html, which React replaces on mount. A class
+   rather than style="" attributes, because the CSP's style-src has no 'unsafe-inline'. */
+.prerender-fallback {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+  color: #cfc9f0;
+  background: #1b1733;
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+}
+.prerender-fallback h1 {
+  font-size: 1.5rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

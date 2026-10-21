@@ -189,8 +189,8 @@ export default function App() {
   const spinTimerIds = useRef<number[]>([]);
   const lastStoppedTime = useRef(0);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
-  /** Set when a pointerdown on the Preview button stopped a running preview; the click that follows must not start one again. */
-  const stoppedByPointerdown = useRef(false);
+  /** Set when a pointerdown or Space keydown on the Preview button stopped a running preview; the click that follows must not start one again. */
+  const stoppedByPress = useRef(false);
   /** Pad index -> id of the sample that pad has finished buffering. */
   const readyPads = useRef(new Map<number, string>());
   /**
@@ -380,9 +380,9 @@ export default function App() {
   }, [stopPreview]);
 
   const previewKit = React.useCallback(() => {
-    // The pointerdown already stopped it; a slow click (over the 200 ms grace below) must not restart it.
-    if (stoppedByPointerdown.current) {
-      stoppedByPointerdown.current = false;
+    // The pointerdown or Space keydown already stopped it; a slow click (over the 200 ms grace below) must not restart it.
+    if (stoppedByPress.current) {
+      stoppedByPress.current = false;
       return;
     }
     if (isPreviewing || Date.now() - lastStoppedTime.current < 200) {
@@ -409,12 +409,21 @@ export default function App() {
     const handleGlobalInteraction = (e: Event) => {
       // Quick changes the pace of the running preview; it must not stop it.
       if (e.target instanceof Node && quickLabelRef.current?.contains(e.target)) return;
-      if (e.type === 'pointerdown' && e.target instanceof Node && previewButtonRef.current?.contains(e.target)) {
-        stoppedByPointerdown.current = true;
-        // The click follows pointerup in the same task; whatever is left over (drag off the button, no click) is cleared right after.
-        const clear = () => window.setTimeout(() => { stoppedByPointerdown.current = false; }, 0);
-        window.addEventListener('pointerup', clear, { once: true });
-        window.addEventListener('pointercancel', clear, { once: true });
+      if (e.target instanceof Node && previewButtonRef.current?.contains(e.target)) {
+        if (e.type === 'pointerdown') {
+          stoppedByPress.current = true;
+          // The click follows pointerup in the same task; whatever is left over (drag off the button, no click) is cleared right after.
+          const clear = () => window.setTimeout(() => { stoppedByPress.current = false; }, 0);
+          window.addEventListener('pointerup', clear, { once: true });
+          window.addEventListener('pointercancel', clear, { once: true });
+        } else if (e.type === 'keydown' && (e as KeyboardEvent).key === ' ') {
+          // Space clicks on keyup, after this stop. Enter clicks on keydown and must still toggle off.
+          stoppedByPress.current = true;
+          // Also on blur: a keyup lost to another window would leave the flag set and swallow the next real click.
+          const clearKey = () => window.setTimeout(() => { stoppedByPress.current = false; }, 0);
+          window.addEventListener('keyup', clearKey, { once: true });
+          window.addEventListener('blur', clearKey, { once: true });
+        }
       }
       stopPreview();
     };
@@ -802,7 +811,15 @@ export default function App() {
     if (!Array.from(e.dataTransfer.types ?? []).includes('Files')) return;
     // Two overlapping scans would both capture the same state, and a drop's generation would
     // supersede a pending remove/toggle/export, silently cancelling it. Same as the Pick buttons.
-    if (isLoading || generating.current) return;
+    if (isLoading || generating.current) {
+      const message = isLoading
+        ? 'Another folder is still loading. Drop again when it has finished.'
+        : 'A kit is being built. Drop again in a moment.';
+      setNotice(prev => (prev?.includes(message) ? prev : [prev, message].filter(Boolean).join(' ')));
+      // Only this line goes away by itself; notices that were already showing stay.
+      window.setTimeout(() => setNotice(prev => prev?.replace(message, '').replace(/\s{2,}/g, ' ').trim() || null), 6000);
+      return;
+    }
     if (e.dataTransfer.items) processFiles(e.dataTransfer.items);
   };
 
@@ -1181,7 +1198,7 @@ export default function App() {
               the folder list wanted, while implying the drop had to land inside it. */}
           <PickSources onPick={processFiles} disabled={isLoading || isGenerating} />
           <div className='pad-folder-list mb-6 lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto -mr-2 pr-2'>
-            <SourceFolderRows folders={sourceFolders} disabled={isGenerating} onToggle={toggleFolders} onRemove={removeFolders} />
+            <SourceFolderRows folders={sourceFolders} disabled={isGenerating || isLoading} onToggle={toggleFolders} onRemove={removeFolders} />
             {/* Mounted always, filled while a scan runs: a live region that appears together with its text is not reliably announced. */}
             <div role='status' className='sr-only'>
               {scanning.map(row => describeScanProgress(row.folder, row.files).announce).join('. ')}
