@@ -6,8 +6,7 @@ coverage/
 *.log
 .env*
 
-# Local-only agent instructions. Names the work account and its address, so it must
-# never be committed here again.
+# Local-only agent instructions: private to this machine, never commit them here.
 CLAUDE.md
 
 # local-only: real pack names and owner-library evidence

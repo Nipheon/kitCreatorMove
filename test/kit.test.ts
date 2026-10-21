@@ -37,6 +37,8 @@ import {
 import {
   categorizeSample, classifySample, isAudioFile, VOCABULARY, looksLikeLoop, looksNonDrum, looksLikeSongName, looksLikeRoleFolder
 } from '../src/utils/fileReader';
+import { recordKit, uniqueKitCount } from '../src/utils/freshness';
+import { BATCH_MAX } from '../src/utils/storedSettings';
 import {
   countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
 } from '../src/utils/kitGenerator';
@@ -3591,6 +3593,135 @@ await test('variety: locked pads count towards the cap and are never overwritten
     if (countKind(kit, 'shaker') === 2) capped++;
   }
   assert.ok(capped >= 95, `the two locked shakers are the only ones in ${capped}/100`);
+});
+
+// --- fresh samples first -------------------------------------------------------------------
+
+const numbered = (prefix: string, category: Category, count: number) =>
+  Array.from({ length: count }, (_, i) => makeSample(`${prefix} ${String(i + 1).padStart(2, '0')}.wav`, category));
+
+const loFiLibrary = [...numbered('hat', 'CHH', 10), ...numbered('kick', 'Kick', 12), ...numbered('snare', 'Snare', 19)];
+
+/** Generates `count` kits the way repeated Generate clicks do: each draws against what the earlier ones used. */
+const sessionKits = async (samples: Sample[], count: number) => {
+  let history: ReadonlySet<string> = new Set();
+  const kits: (Sample | null)[][] = [];
+  for (let i = 0; i < count; i++) {
+    const r = await generateRandomKit(samples, [], { usedBefore: history });
+    kits.push(r.kit);
+    history = recordKit(history, r.kit, samples, {});
+  }
+  return kits;
+};
+
+const namesOf = (kits: (Sample | null)[][], category: Category) =>
+  kits.flatMap(kit => kit.filter(s => s?.category === category).map(s => s!.id));
+
+await test('fresh first: 12 kicks give three kits with unique kicks before the fourth reuses one', async () => {
+  for (let run = 0; run < 10; run++) {
+    const kits = await sessionKits(loFiLibrary, 4);
+    const kicks = namesOf(kits.slice(0, 3), 'Kick');
+    assert.equal(kicks.length, 12);
+    assert.equal(new Set(kicks).size, 12, 'kicks of kits 1-3 are all different');
+    assert.equal(new Set(namesOf(kits.slice(0, 2), 'Snare')).size, 16, 'snares of kits 1-2 are all different');
+    assert.equal(new Set(namesOf(kits.slice(0, 2), 'CHH')).size, 8, 'hats of kits 1-2 are all different');
+    assert.equal(namesOf(kits.slice(3), 'Kick').length, 4, 'kit 4 still has its kicks');
+  }
+});
+
+await test('fresh first: without a history the draw is as before', async () => {
+  const r = await generateRandomKit(loFiLibrary, [], { usedBefore: new Set() });
+  assert.ok(r.kit.every(s => s !== null));
+});
+
+await test('recordKit starts a new round for a category once all of it was used, and only that one', async () => {
+  const library = [...numbered('hat', 'CHH', 40), ...numbered('kick', 'Kick', 12), ...numbered('snare', 'Snare', 40)];
+  const kits = await sessionKits(library, 3);
+  let history: ReadonlySet<string> = new Set();
+  for (const kit of kits) history = recordKit(history, kit, library, {});
+  assert.ok(library.filter(s => s.category === 'Kick').every(s => !history.has(s.id)), 'kicks reset');
+  assert.ok(library.filter(s => s.category === 'Snare').some(s => history.has(s.id)), 'snares keep their history');
+});
+
+await test('uniqueKitCount: most plentiful category decides, locks and the cap apply', () => {
+  const layout = chooseLayout(loFiLibrary);
+  const none = new Array(PAD_COUNT).fill(null);
+  assert.equal(uniqueKitCount(loFiLibrary, layout, none), 3);
+  assert.equal(uniqueKitCount([...loFiLibrary, makeSample('kick 13.wav', 'Kick')], layout, none), 3);
+  const lockedKick = [...none];
+  lockedKick[0] = loFiLibrary.find(s => s.category === 'Kick')!;
+  assert.equal(uniqueKitCount(loFiLibrary, layout, lockedKick), 3, '11 kicks over 3 unlocked pads');
+  const many = [...numbered('kick', 'Kick', 100), ...numbered('snare', 'Snare', 3), ...numbered('hat', 'CHH', 3)];
+  assert.equal(uniqueKitCount(many, chooseLayout(many), none), BATCH_MAX);
+  assert.equal(uniqueKitCount([], chooseLayout([]), none), 1);
+  assert.equal(uniqueKitCount(numbered('kick', 'Kick', 2), chooseLayout(numbered('kick', 'Kick', 2)), none), 1);
+});
+
+await test('buildBatch: kits draw unused samples first, the on-screen kit counts as kit 1', async () => {
+  for (let run = 0; run < 5; run++) {
+    const first = await generateRandomKit(loFiLibrary, [], {});
+    const out = await buildBatch({
+      kit: first.kit, layout: first.layout, exportName: 'MOV-Flip', exportedNames: new Set(), samples: loFiLibrary,
+      kitOptions: {}, batchSize: uniqueKitCount(loFiLibrary, first.layout, new Array(PAD_COUNT).fill(null)),
+      prefix: 'MOV', lockedPads: new Array(PAD_COUNT).fill(false)
+    });
+    assert.equal(out.length, 3);
+    const kicks = namesOf(out.map(k => k.kit), 'Kick');
+    assert.equal(new Set(kicks).size, 12, 'every kick appears in exactly one kit of the batch');
+  }
+});
+
+await test('reroll draws a sample no earlier kit used while one is left', async () => {
+  const kicks = numbered('kick', 'Kick', 6);
+  const library = [...kicks, ...numbered('snare', 'Snare', 8), ...numbered('hat', 'CHH', 4)];
+  const first = await generateRandomKit(library, [], {});
+  const onKit = new Set(first.kit.filter(s => s?.category === 'Kick').map(s => s!.id));
+  const others = kicks.filter(s => !onKit.has(s.id));
+  assert.equal(others.length, 2);
+  const usedBefore = new Set([...onKit, others[0].id]);
+  const padIndex = first.kit.findIndex(s => s?.category === 'Kick');
+  for (let run = 0; run < 10; run++) {
+    const r = await rerollSinglePad(library, first.kit, padIndex, { usedBefore }, first.layout);
+    assert.equal(r.kit[padIndex]!.id, others[1].id);
+  }
+});
+
+const PARTNER_WORDS = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'oscar', 'papa', 'quebec'];
+const partnerLibrary = (closed: number, open: number) => [
+  ...numbered('kick', 'Kick', 16),
+  ...numbered('snare', 'Snare', 16),
+  ...PARTNER_WORDS.slice(0, closed).map(w => makeSample(`${w}Hat.wav`, 'CHH')),
+  ...PARTNER_WORDS.slice(0, open).map(w => makeSample(`${w}HatOpn.wav`, 'OHH'))
+];
+
+const pairedPads = (kit: (Sample | null)[], layout: Parameters<typeof partnerPads>[0]) =>
+  partnerPads(layout).filter(([left, right]) => {
+    const closed = kit[left];
+    const open = kit[right];
+    return !!closed && !!open && hatStem(closed.name) === hatStem(open.name);
+  }).length;
+
+await test('hat pairs: 16 closed and 10 open hats, every open hat partnered, none is left out', async () => {
+  for (let run = 0; run < 10; run++) {
+    const library = partnerLibrary(16, 10);
+    const kits = await sessionKits(library, 4);
+    assert.equal(new Set(namesOf(kits, 'CHH')).size, 16, 'every closed hat used within four kits');
+    assert.equal(new Set(namesOf(kits.slice(0, 3), 'OHH')).size, 10, 'every open hat used within three kits');
+    const layout = chooseLayout(library);
+    assert.equal(pairedPads(kits[0], layout), partnerPads(layout).filter(([left]) => PARTNER_WORDS.indexOf(hatStem(kits[0][left]!.name)!) < 10).length);
+  }
+});
+
+await test('hat pairs: 10 closed and 16 open hats, every closed hat partnered, none is left out', async () => {
+  for (let run = 0; run < 10; run++) {
+    const library = partnerLibrary(10, 16);
+    const kits = await sessionKits(library, 4);
+    const layout = chooseLayout(library);
+    assert.equal(pairedPads(kits[0], layout), partnerPads(layout).length, 'kit 1 fully paired');
+    assert.equal(pairedPads(kits[1], layout), partnerPads(layout).length, 'kit 2 fully paired');
+    assert.equal(new Set(namesOf(kits, 'OHH')).size, 16, 'every open hat used within four kits, partnered or not');
+    assert.equal(new Set(namesOf(kits.slice(0, 3), 'CHH')).size, 10, 'every closed hat used within three kits');
+  }
 });
 
 if (failures > 0) {

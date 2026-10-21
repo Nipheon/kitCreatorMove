@@ -1,5 +1,6 @@
 import { NO_SAMPLES_GRID_ID, PadLayout } from '../padLayout';
 import { Sample, SourceFolder } from '../types';
+import { recordKit } from './freshness';
 import { generateRandomKit, KitOptions } from './kitGenerator';
 
 /** Short, slightly cryptic words. Three or four letters so names stay compact. */
@@ -153,7 +154,11 @@ export interface BatchInput {
   onKit?: (done: number, total: number) => void;
 }
 
-/** Kits 2..n are generated one after another: they share the identity cache, and each sees the same locks. */
+/**
+ * Kits 2..n are generated one after another: they share the identity cache, and each sees the same locks.
+ * Each draws samples the earlier kits of this batch have not used before it reuses one; the on-screen
+ * kit counts as kit 1.
+ */
 export async function buildBatch({
   kit, layout, exportName, exportedNames, samples, kitOptions, batchSize, prefix, lockedPads,
   generate = generateRandomKit,
@@ -174,10 +179,12 @@ export async function buildBatch({
   taken.add(first);
   takenKeys.add(fileKey(first));
   kits.push({ kit: [...kit], name: first });
+  let history = recordKit(new Set(), kit, samples, kitOptions);
 
   for (let i = 1; i < batchSize; i++) {
     onKit?.(i, batchSize);
-    const next = await generate(samples, lockedFrom(lockedPads, kit), kitOptions, held);
+    const next = await generate(samples, lockedFrom(lockedPads, kit), { ...kitOptions, usedBefore: history }, held);
+    history = recordKit(history, next.kit, samples, kitOptions);
     // Every kit in a batch is built from the same library, so they all share a grid
     // and the id is the same for each — which is the point: a batch is swappable.
     let name = '';

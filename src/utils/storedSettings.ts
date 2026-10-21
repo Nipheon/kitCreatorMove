@@ -2,7 +2,7 @@
 export const QUICK_PREVIEW_KEY = 'kitCreator.quickPreview';
 export const BATCH_SIZE_KEY = 'kitCreator.batchSize';
 
-export const BATCH_MIN = 2;
+export const BATCH_MIN = 1;
 export const BATCH_MAX = 10;
 export const BATCH_DEFAULT = 3;
 

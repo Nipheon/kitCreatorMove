@@ -1077,7 +1077,7 @@ await test('stored settings round-trip, and bad or unavailable storage falls bac
   saveBatchSize(7, store);
   assert.equal(loadQuickPreview(store), true);
   assert.equal(loadBatchSize(store), 7);
-  for (const bad of ['1', '11', '3.5', 'abc', '', '-4', '1e1']) {
+  for (const bad of ['0', '11', '3.5', 'abc', '', '-4', '1e1']) {
     map.set(BATCH_SIZE_KEY, bad);
     assert.equal(loadBatchSize(store), BATCH_DEFAULT, `"${bad}" is not a valid amount`);
   }
