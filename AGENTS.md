@@ -855,10 +855,15 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   Costs a second decoded copy per pad.
 - **An element joins the graph only while the context is running** (`createMediaElementSource` is permanent for an element, and a suspended context would silence it).
   Before the first gesture, or without Web Audio, it plays directly and `fadeOut` is the old hard cut, so a blocked context can never make a pad silent.
-  The graph is wired on a voice's first `play()` after the context runs.
+  The graph is wired on a voice's first `play()` after the context runs, **and again at `fadeOut`** if the voice started earlier: the first sound of a session is often a pad hotkey, whose keydown
+  also creates the context, so that first voice starts directly. Without the second wiring its fade was the old hard cut (found 2026-10-22 with a real 808 pack: `pause` with no `ramp`; fixed, pinned by a test).
 - **The shared context (`audioKeepAlive.ts`) now stays running while a voice sounds** (`holdPlayback`, released at ended / end of fade) even if the page is not focused:
   audio routed through a suspended context is silent, and a preview that is running when focus leaves must finish. When the last voice stops, the focus rule suspends it again, so the
   headphones are still released in the background (the PR #59 ruling holds). Pinned by tests with a fake context; the focus/hold behaviour was also checked in Chromium and Firefox by overriding `document.hasFocus`.
+- **Measuring clicks:** a `ScriptProcessor` tap on the destination in Playwright shows per-sample steps (a hard cut is a step of ~the signal's amplitude; a 440 Hz tone at 0.24 has a natural step of 0.014).
+  It drops blocks when the main thread is busy (a 24-bit file loading) and in Chromium shows a step every 256 samples, so only trust it where the same run has no step without a switch; the per-voice
+  trace (record each gain node with `e.playbackTime`) is the reliable form. With a real pack of 24-bit stereo 808s (peak 0.966, 6 s; details in AGENTS.private.md) the old voice fell smoothly to 0 in 25 ms and the new one started clean
+  about 25 ms later (file load), leaving a short silence, not a click. One file in that pack ends at +0.37 (cut off), which clicks at its natural end whatever the engine does.
 - **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): a pad's sound reaches the output through the graph (peak 0.24 on an analyser), retrigger and browser switching schedule exactly one 0 ramp
   of 20 ms, Preview Kit still starts all 16 pads, the context stays `running` during a blurred preview and is `suspended` after it. **Not verified:** by ear (the click itself), on real headphones
   or a phone (iOS Safari: media-element sources are not tried there), first-gesture latency. Do not "simplify" back to `audio.volume` steps: timers give 4-5 steps at best and iOS ignores `volume`.

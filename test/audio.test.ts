@@ -120,6 +120,20 @@ await test('a second fadeOut during a fade does not restart the ramp', async () 
   assert.equal(t.timers.length, 1);
 });
 
+await test('a voice that started before the context ran joins the graph at fadeOut and still fades', async () => {
+  const t = setup('suspended');
+  const { audio, voice } = t.voice();
+  await voice.play();
+  assert.equal(t.gains.length, 0, 'started directly');
+  t.context.state = 'running';
+  voice.fadeOut();
+  assert.equal(t.gains.length, 1);
+  assert.ok(t.gains[0].calls.some(c => c.startsWith('ramp 0')));
+  assert.equal(audio.paused, false, 'not cut');
+  t.timers[0].run();
+  assert.equal(audio.paused, true);
+});
+
 await test('fadeOut on an idle voice does nothing', () => {
   const t = setup();
   const { audio, voice } = t.voice();

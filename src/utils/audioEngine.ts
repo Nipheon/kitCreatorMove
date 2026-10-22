@@ -101,6 +101,8 @@ export class Voice {
     if (!this.playing || this.fading) return;
     const token = ++this.token;
     this.fading = true;
+    // A voice that started before the context was running plays directly; join the graph now so it can fade.
+    this.wire();
     const context = this.deps.context();
     if (this.gain && context && context.state === 'running') {
       const now = context.currentTime;
