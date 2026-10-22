@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { categoryAccent, padLabel } from '../padLayout';
 import { Sample } from '../types';
 import { defaultKind, KIND_LABELS } from '../utils/kinds';
+import { fadeOutAll, triggerFrom, Voice } from '../utils/audioEngine';
 import { auditionUrl, needsAuditionConversion, sampleUrl } from '../utils/sampleUrl';
 
 interface ChokeDetail {
@@ -79,22 +80,32 @@ export const Pad: React.FC<PadProps> = ({
   auditionToken = 0, isSpinning = false, isBusy = false
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  /**
+   * Two voices per pad, both buffered: a retrigger plays the idle one while the other fades out
+   * (`utils/audioEngine.ts`), so the same pad can overlap itself for 20 ms instead of clicking.
+   */
+  const voicesRef = useRef<Voice[]>([]);
 
   useEffect(() => {
     if (!sample) {
-      audioRef.current = null;
+      voicesRef.current = [];
       return;
     }
 
     // An AIFF has no src until its WAV is made (below); everything else plays the file itself.
     const converting = needsAuditionConversion(sample);
-    const audio = new Audio(converting ? undefined : sampleUrl(sample));
-    audio.preload = 'auto';
+    const makeAudio = () => {
+      const audio = new Audio(converting ? undefined : sampleUrl(sample));
+      audio.preload = 'auto';
+      return audio;
+    };
+    const audios = [makeAudio(), makeAudio()];
+    const [audio] = audios;
+    const voices = audios.map(a => new Voice(a));
     let cancelled = false;
 
-    const handleEnded = () => setIsPlaying(false);
-    const handlePause = () => setIsPlaying(false);
+    const refreshPlaying = () => setIsPlaying(voices.some(v => v.playing));
+    voices.forEach(v => v.onChange(refreshPlaying));
     const handleError = (e: Event) => {
       console.error('Audio error:', e);
       setIsPlaying(false);
@@ -102,7 +113,7 @@ export const Pad: React.FC<PadProps> = ({
     };
     /**
      * Preview scheduling waits on this. A pad that never buffers simply never reports,
-     * and App's ceiling timer starts the sequence anyway.
+     * and App's ceiling timer starts the sequence anyway. The first voice reports for the pad.
      */
     const sampleId = sample.id;
     const announceReady = () => {
@@ -111,48 +122,38 @@ export const Pad: React.FC<PadProps> = ({
       );
     };
 
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('error', handleError);
+    audios.forEach(a => a.addEventListener('error', handleError));
     audio.addEventListener('canplaythrough', announceReady);
 
-    audioRef.current = audio;
+    voicesRef.current = voices;
     if (converting) {
       void auditionUrl(sample).then(url => {
         if (cancelled) return;
         if (url) {
-          audio.src = url;
-          audio.load();
+          audios.forEach(a => { a.src = url; a.load(); });
         } else {
           announceReady(); // not convertible: report at once instead of waiting for App's ceiling timer
         }
       });
     } else {
-      audio.load();
+      audios.forEach(a => a.load());
       // A blob already decoded for an earlier kit can be ready before canplaythrough fires.
       if (audio.readyState >= 3) announceReady();
     }
 
     return () => {
       cancelled = true;
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('error', handleError);
+      audios.forEach(a => a.removeEventListener('error', handleError));
       audio.removeEventListener('canplaythrough', announceReady);
-      audio.pause();
-      audioRef.current = null;
+      // A sounding voice fades out instead of being cut when its sample is replaced.
+      voices.forEach(v => v.dispose());
+      voicesRef.current = [];
       setIsPlaying(false);
     };
   }, [sample, chokeGroup, index]);
 
   useEffect(() => {
-    const onStopAll = () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-      setIsPlaying(false);
-    };
+    const onStopAll = () => fadeOutAll(voicesRef.current);
     window.addEventListener('stop-all-audio', onStopAll);
     return () => window.removeEventListener('stop-all-audio', onStopAll);
   }, []);
@@ -160,11 +161,7 @@ export const Pad: React.FC<PadProps> = ({
   useEffect(() => {
     const onChoke = (e: Event) => {
       const { group, sourceIndex } = (e as CustomEvent<ChokeDetail>).detail;
-      if (chokeGroup && group === chokeGroup && sourceIndex !== index && audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-        setIsPlaying(false);
-      }
+      if (chokeGroup && group === chokeGroup && sourceIndex !== index) fadeOutAll(voicesRef.current);
     };
     window.addEventListener('choke', onChoke);
     return () => window.removeEventListener('choke', onChoke);
@@ -181,41 +178,35 @@ export const Pad: React.FC<PadProps> = ({
    * sample is loaded before we play it.
    */
   useEffect(() => {
-    if (!auditionToken || !audioRef.current) return;
+    if (!auditionToken || voicesRef.current.length === 0) return;
 
     if (chokeGroup) {
       window.dispatchEvent(
         new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
       );
     }
-    audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(err => {
-      // An AIFF pad's play() is aborted when its converted WAV loads, and no pause/ended/error follows.
-      setIsPlaying(false);
+    // An AIFF pad's play() is aborted when its converted WAV loads; the voice marks itself stopped.
+    triggerFrom(voicesRef.current).play().catch(err => {
       if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
     });
-    setIsPlaying(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auditionToken]);
 
   const handlePlay = React.useCallback(async () => {
-    if (!audioRef.current) return;
+    if (voicesRef.current.length === 0) return;
 
     if (chokeGroup) {
       window.dispatchEvent(
         new CustomEvent<ChokeDetail>('choke', { detail: { group: chokeGroup, sourceIndex: index } })
       );
     }
-    const audio = audioRef.current;
-    audio.currentTime = 0;
-    setIsPlaying(true);
+    const voice = triggerFrom(voicesRef.current);
     try {
-      await audio.play();
-      await firstAudibleProgress(audio);
+      await voice.play();
+      await firstAudibleProgress(voice.audio);
       window.dispatchEvent(new CustomEvent<number>('pad-started', { detail: index }));
     } catch (error) {
       console.error('Audio playback error:', error);
-      setIsPlaying(false);
     }
   }, [chokeGroup, index]);
 

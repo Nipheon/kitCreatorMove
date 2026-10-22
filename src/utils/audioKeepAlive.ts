@@ -8,6 +8,8 @@
  */
 let context: AudioContext | null = null;
 let installed = false;
+/** Voices of `audioEngine` currently sounding: while any does, the context keeps running even when the page is in the background. */
+let playbackHolds = 0;
 
 function pageIsActive(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
@@ -15,7 +17,7 @@ function pageIsActive(): boolean {
 
 function sync(): Promise<void> {
   if (!context) return Promise.resolve();
-  const action = pageIsActive() ? context.resume() : context.suspend();
+  const action = pageIsActive() || playbackHolds > 0 ? context.resume() : context.suspend();
   return action.catch(() => {});
 }
 
@@ -48,4 +50,27 @@ export async function startAudioKeepAlive(): Promise<boolean> {
   }
   await sync();
   return context?.state === 'running';
+}
+
+/** The shared context, or null until the first gesture has started it (and where Web Audio is missing). */
+export function getAudioContext(): AudioContext | null {
+  return context;
+}
+
+/**
+ * A sounding voice calls this and calls the returned release when it stops. Audio routed
+ * through the context is silent while the context is suspended, so a preview that is
+ * running when the page loses focus must keep it running; the last release hands it back
+ * to the focus rule, which frees the headphones.
+ */
+export function holdPlayback(): () => void {
+  playbackHolds++;
+  void sync();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    playbackHolds--;
+    void sync();
+  };
 }
