@@ -13,15 +13,19 @@ function pageIsActive(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
 }
 
-function sync() {
-  if (!context) return;
+function sync(): Promise<void> {
+  if (!context) return Promise.resolve();
   const action = pageIsActive() ? context.resume() : context.suspend();
-  action.catch(() => {});
+  return action.catch(() => {});
 }
 
-/** Call from a user gesture: the autoplay policy keeps the context suspended until then. */
-export function startAudioKeepAlive() {
-  if (typeof AudioContext === 'undefined') return;
+/**
+ * Call from any user interaction. The autoplay policy keeps the context suspended until a
+ * real gesture (a click or a key; a drop, Shift or Escape do not count), so this resolves
+ * true only once the stream runs and the caller keeps retrying until then.
+ */
+export async function startAudioKeepAlive(): Promise<boolean> {
+  if (typeof AudioContext === 'undefined') return true;
 
   if (!context) {
     try {
@@ -32,15 +36,16 @@ export function startAudioKeepAlive() {
       source.start();
     } catch {
       context = null;
-      return;
+      return true;
     }
   }
 
   if (!installed) {
     installed = true;
-    document.addEventListener('visibilitychange', sync);
-    window.addEventListener('focus', sync);
-    window.addEventListener('blur', sync);
+    document.addEventListener('visibilitychange', () => void sync());
+    window.addEventListener('focus', () => void sync());
+    window.addEventListener('blur', () => void sync());
   }
-  sync();
+  await sync();
+  return context?.state === 'running';
 }

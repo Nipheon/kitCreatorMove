@@ -404,19 +404,16 @@ export default function App() {
     }
   };
 
-  // Keeps the audio output (and Bluetooth headphones) awake once the user has interacted; see audioKeepAlive.
+  // Keeps the audio output (and Bluetooth headphones) awake; see audioKeepAlive. Retries on every
+  // interaction until the browser accepts it: a drop or a bare Shift press does not unlock audio.
   useEffect(() => {
+    const events = ['pointerdown', 'keydown', 'drop', 'focus'] as const;
+    const stop = () => events.forEach(name => window.removeEventListener(name, start, true));
     const start = () => {
-      window.removeEventListener('pointerdown', start, true);
-      window.removeEventListener('keydown', start, true);
-      startAudioKeepAlive();
+      void startAudioKeepAlive().then(running => { if (running) stop(); });
     };
-    window.addEventListener('pointerdown', start, true);
-    window.addEventListener('keydown', start, true);
-    return () => {
-      window.removeEventListener('pointerdown', start, true);
-      window.removeEventListener('keydown', start, true);
-    };
+    events.forEach(name => window.addEventListener(name, start, true));
+    return stop;
   }, []);
 
   useEffect(() => {
