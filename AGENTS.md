@@ -16,8 +16,8 @@ Everything lives at the repository root, next to `package.json`:
 index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  README.md  LICENSE  AGENTS.md  .gitignore
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
-src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
+src/components/{Pad,PickSources,SampleBrowser,SourceFolderRows,Toast}.tsx
+src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,browserGroups,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
 test/{kit,io,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
 ```
 
@@ -49,8 +49,8 @@ path with more than three segments means you are in the wrong place.
   of the task. `npm test` runs `test/kit.test.ts`, then `test/io.test.ts` (drop handling in `fileReader` and `audioTrimmer`, against
   a fake `OfflineAudioContext` and fake `FileSystemEntry` objects). Both are Node-only via `tsx`.
 - **Dev seed:** `npm run dev` then `http://localhost:3000/?seed` (`?seed=20` fakes twenty folders) fills the grid from
-  `src/devSeed.ts`: 47 invented filenames of the shapes real packs use, categorised through the same pipeline as a drop, with a few ms of silence as
-  audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
+  `src/devSeed.ts`: 58 invented filenames of the shapes real packs use (including closed/open hat pairs and a loop for the sample browser), categorised through the same pipeline as a drop, with a short generated WAV as
+  audio (hats 250 ms, kicks 600 ms, loop 3 s, every fifth one with a 300 ms silent lead-in, so the browser's progress bar differs per tile). Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
 - **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only (page views, referrer, country, browser, device type, load timings); never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
@@ -710,6 +710,12 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   it.
 - **Font sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text. The pad tile is the documented exception
   (Lock/Shuffle `text-pad-action` 12px, hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
+  The sample browser is the other one: tiles, row labels and footer are 13px, section heads 15px, title 17px (owner asked for +1px over `text-xs`/`text-sm`/`text-base`, 2026-10-22, tiles were too small to read); tiles are 8rem wide so names truncate no more than at 12px.
+- **Left panel takes the space the square grid leaves** (owner, 2026-10-22): `main` is `lg:[container-type:size]`; the stage's flex-basis is
+  `calc(100cqh - 4.5rem)` (the grid's height plus its side padding, so the grid is not shrunk) and the left `aside` is `lg:flex-[3_1_20rem] lg:min-w-80 lg:max-w-[36rem]`,
+  so it grows into the leftover up to 36rem and the stage gets the rest beyond that. Min is 20rem, not the old 18rem: "USABLE SAMPLES", the browser pencil and the count wrapped at 18rem.
+  Measured (Chromium and Firefox): 1480x844 left 421px, side gap 40px (was ~140); 1920x1080 left 574px; at 1100 and 1024 wide the grid is 32px smaller than before (min panel width).
+  The right panel is unchanged (`lg:w-80`).
 - **Sidebar:** only the folder list shrinks (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`); heading, text line and count block
   are siblings of the `aside`. Failed: scrolling the whole `aside`; wrapping heading+list in `flex-1 min-h-0` (a shrinkable flex
   child overlaps siblings, it does not clip); capping the list height. The `aside` is `lg:overflow-y-auto` (it was `lg:overflow-hidden`, which clipped
@@ -817,6 +823,26 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   breakdown card with their eyes is hidden then; a switched-off type row with no samples keeps an enabled eye.
 - **Known gap, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
   `pointer-events-none` layer.
+
+## Sample browser (`SampleBrowser.tsx`, `browserGroups.ts`)
+
+- **Opened by the pencil next to "Usable Samples"**; shows the samples of visible folders only (`samples` in `App`). Full-screen dialog (`useDialogKeys`),
+  `helpOpenRef` includes it so the pad hotkeys (X is one of them) stay off while it is open. Sections: Kick, Snare, Clap, Hats, Perc, Other, by
+  **pool** category (`poolCategoryFor`), so crashes are under Perc and generic hats under Hats, as in the breakdown card. Rows are kinds in
+  `KIND_ORDER`; names sort with a numeric, case-insensitive collator. Pinned by tests.
+- **Hat pairs** come from `buildPartnerIndex` run on copies with `isExcluded` and `isDuplicate` cleared, so a pair you disabled stays on screen to be re-enabled.
+  A paired hat is shown only in the Pairs row, never again under Closed or Open: one sample is one cell, which the cursor walk relies on. Pinned by a test.
+- **Keys:** cursor keys move and play, Space plays again, X toggles disable. Left/right walk the flat cell list; up/down pick the nearest tile in the
+  adjacent visual row by measured position. **No `content-visibility` on sections**: skipped sections give unreliable rects and break up/down.
+  Tiles are `div role=option` with `aria-activedescendant` on the dialog, **not buttons**: `useDialogKeys` Tab-cycles over every `button`, so thousands of
+  buttons would be thousands of Tab stops.
+- **Play progress** is the tile's background (`.sample-tile` in `index.css`, `--progress`): a `requestAnimationFrame` loop in `play()` sets the CSS variable
+  straight on the playing tile (no React state, so thousands of tiles are not re-rendered per frame); at the end it clears at once (owner ruling 2026-10-22: clear it immediately; a lingering full bar read as a highlight, and a 250 ms hold was not wanted);
+  a new play resets the old tile at once. Shows loops and samples with silence at the start. Confirmed by hand in Chromium and Firefox (about 39% at 1.2 s of a 3 s seed loop; the owner likes the bar).
+- **Disable = `Sample.isExcluded` flipped in place** (`toggleSampleExcluded`), same flag the pad Exclude uses (which only sets it). The kit is not rerolled per keypress; on close
+  (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
+  Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.
+- **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): open, arrows play, Space replays, X toggles, usable count updates, Escape returns focus to the pencil, refill on close. Not tested: real library of thousands (layout cost), AIFF samples in the browser, pairs row visually (logic only).
 
 ## Verified and unverified
 
