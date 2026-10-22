@@ -1,7 +1,8 @@
-import { ChevronDown, ChevronRight, FolderUp, Loader2, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
+import { ChevronDown, ChevronRight, FolderUp, Loader2, Pencil, RefreshCw, Eye, EyeOff, HelpCircle, X, Play, Square } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pad } from './components/Pad';
 import { PickSources } from './components/PickSources';
+import { SampleBrowser } from './components/SampleBrowser';
 import { SourceFolderRows } from './components/SourceFolderRows';
 import { Toast } from './components/Toast';
 import {
@@ -174,6 +175,9 @@ export default function App() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const helpDialogRef = useRef<HTMLDivElement>(null);
+  const [isBrowserOpen, setIsBrowserOpen] = useState(false);
+  const browserButtonRef = useRef<HTMLButtonElement>(null);
+  const browserDialogRef = useRef<HTMLDivElement>(null);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
   const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -490,12 +494,15 @@ export default function App() {
   isExportingRef.current = isExporting;
   useDialogKeys(isHelpOpen, helpButtonRef, helpDialogRef, () => setIsHelpOpen(false));
   useDialogKeys(isBatchOpen, batchButtonRef, batchDialogRef, () => setIsBatchOpen(false), () => !isExportingRef.current && !generating.current);
+  // Registered once per open, so it reaches the newest closeBrowser (and its folders) through a ref.
+  const closeBrowserRef = useRef<() => void>(() => {});
+  useDialogKeys(isBrowserOpen, browserButtonRef, browserDialogRef, () => closeBrowserRef.current());
 
   // The key handler below is registered once, so it reaches the newest randomizeKit and
   // help state through these refs rather than closing over stale values.
   const randomizeRef = useRef<() => void>(() => {});
   const helpOpenRef = useRef(false);
-  helpOpenRef.current = isHelpOpen || isBatchOpen;
+  helpOpenRef.current = isHelpOpen || isBatchOpen || isBrowserOpen;
   const spaceHandled = useRef(false);
 
   useEffect(() => {
@@ -923,6 +930,34 @@ export default function App() {
     }
   };
 
+  /** The browser's disable button: flips one sample's exclusion at once; the kit catches up when the browser closes. */
+  const toggleSampleExcluded = (sampleId: string) => {
+    setSourceFolders(prev => prev.map(f => (
+      f.samples.some(s => s.id === sampleId)
+        ? { ...f, samples: f.samples.map(s => (s.id === sampleId ? { ...s, isExcluded: !s.isExcluded } : s)) }
+        : f
+    )));
+  };
+
+  /** Closing the browser: pads still holding a sample disabled in it are refilled, and their locks dropped. */
+  const closeBrowser = async () => {
+    if (generating.current) return;
+    const excluded = new Set(sourceFolders.flatMap(f => f.samples).filter(s => s.isExcluded).map(s => s.id));
+    const stale = kit.some(sample => sample && excluded.has(sample.id));
+    setIsBrowserOpen(false);
+    if (!stale) return;
+    const remaining = enabledSamples(sourceFolders);
+    const survivors = kit.map(sample => (sample && excluded.has(sample.id) ? null : sample));
+    const heldLayout = heldLayoutFor();
+    const next: KitResult | null = remaining.length > 0
+      ? await runGeneration(report => generateRandomKit(remaining, survivors, freshOptions(kitOptions), heldLayout, { onProgress: report }))
+      : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] };
+    if (!next) return;
+    setLockedPads(prev => prev.map((locked, idx) => (kit[idx] && excluded.has(kit[idx]!.id) ? false : locked)));
+    setKitResult(next);
+  };
+  closeBrowserRef.current = closeBrowser;
+
   const randomizeKit = async () => {
     if (generating.current) return;
     stopPreview();
@@ -1245,7 +1280,20 @@ export default function App() {
             <div className='p-4 bg-surface-card rounded-lg border border-border-dark space-y-3'>
               <div>
                 <div className='flex justify-between text-sm mb-2 text-text-muted uppercase font-medium'>
-                  <span>Usable Samples</span>
+                  <span className='flex items-center gap-2'>
+                    Usable Samples
+                    <button
+                      ref={browserButtonRef}
+                      type='button'
+                      onClick={() => setIsBrowserOpen(true)}
+                      disabled={samples.length === 0}
+                      className='text-text-subtle hover:text-text-bright transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+                      title='Browse samples and disable the ones you do not want in kits'
+                      aria-label='Edit usable samples'
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  </span>
                   <span>{usableCount.toLocaleString()} / {samples.length.toLocaleString()}</span>
                 </div>
                 <div className='w-full bg-border-main h-1.5 rounded-full overflow-hidden'>
@@ -1601,6 +1649,17 @@ export default function App() {
         </aside>
       </main>
 
+      {isBrowserOpen && (
+        <SampleBrowser
+          dialogRef={browserDialogRef}
+          samples={samples}
+          kitOptions={kitOptions}
+          usableCount={usableCount}
+          onToggleExcluded={toggleSampleExcluded}
+          onClose={() => void closeBrowser()}
+        />
+      )}
+
       {isBatchOpen && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-overlay-strong backdrop-blur-md p-4 overflow-y-auto'>
           <div
@@ -1726,6 +1785,7 @@ export default function App() {
                   <li><strong className='text-text-bright'>Supported Formats:</strong> Accepts uncompressed <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.wav</code> and <code className='text-text-bright font-mono text-sm bg-surface-code px-1.5 py-0.5 rounded'>.aiff</code> audio files.</li>
                   <li><strong className='text-text-bright'>Duplicate Protection:</strong> A folder whose name is already in your list is skipped, even if it comes from a different pack, and a notice names what was skipped.</li>
                   <li><strong className='text-text-bright'>Collections:</strong> A folder that holds several separate packs (Kit 1, Kit 2, ...) is listed as a parent with its sub-packs underneath. Tick the parent to use all of them, or tick only the sub-packs you want to mix. The parent's eye looks half-filled when only some are on; clicking it then turns all on. The cross on the parent removes the whole collection, on a sub-pack just that one. A folder made of Kicks, Snares, FX and similar folders is one pack and is not split.</li>
+                  <li><strong className='text-text-bright'>Sample Browser:</strong> The pencil next to Usable Samples opens every loaded sample by type and kind, hat pairs first. Click a sample or use the cursor keys to hear it, Space plays it again, and X (or the small ban icon) leaves it out of kit generation; press X again to bring it back. Close the browser (Esc) and any pad holding a sample you disabled gets a new one.</li>
                   <li><strong className='text-text-bright'>Hide a Folder:</strong> The eye icon next to a loaded folder takes it out of the pool without unloading it. The kit re-rolls immediately without those samples, the folder dims in the list, and the eye brings it straight back — handy for auditioning one pack against another. Locked pads keep what they are holding even if its folder is hidden.</li>
                   <li><strong className='text-text-bright'>Remove a Folder:</strong> The cross unloads it for good. Hiding is the reversible one.</li>
                 </ul>

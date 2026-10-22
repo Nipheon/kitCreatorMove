@@ -16,8 +16,8 @@ Everything lives at the repository root, next to `package.json`:
 index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  README.md  LICENSE  AGENTS.md  .gitignore
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
-src/components/{Pad,PickSources,SourceFolderRows,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
+src/components/{Pad,PickSources,SampleBrowser,SourceFolderRows,Toast}.tsx
+src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,browserGroups,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
 test/{kit,io,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
 ```
 
@@ -817,6 +817,23 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   breakdown card with their eyes is hidden then; a switched-off type row with no samples keeps an enabled eye.
 - **Known gap, not fixed:** the `title` tooltips on the hotkey and choke badges no longer show because those badges sit in the
   `pointer-events-none` layer.
+
+## Sample browser (`SampleBrowser.tsx`, `browserGroups.ts`)
+
+- **Opened by the pencil next to "Usable Samples"**; shows the samples of visible folders only (`samples` in `App`). Full-screen dialog (`useDialogKeys`),
+  `helpOpenRef` includes it so the pad hotkeys (X is one of them) stay off while it is open. Sections: Kick, Snare, Clap, Hats, Perc, Other, by
+  **pool** category (`poolCategoryFor`), so crashes are under Perc and generic hats under Hats, as in the breakdown card. Rows are kinds in
+  `KIND_ORDER`; names sort with a numeric, case-insensitive collator. Pinned by tests.
+- **Hat pairs** come from `buildPartnerIndex` run on copies with `isExcluded` and `isDuplicate` cleared, so a pair you disabled stays on screen to be re-enabled.
+  A paired hat is shown only in the Pairs row, never again under Closed or Open: one sample is one cell, which the cursor walk relies on. Pinned by a test.
+- **Keys:** cursor keys move and play, Space plays again, X toggles disable. Left/right walk the flat cell list; up/down pick the nearest tile in the
+  adjacent visual row by measured position. **No `content-visibility` on sections**: skipped sections give unreliable rects and break up/down.
+  Tiles are `div role=option` with `aria-activedescendant` on the dialog, **not buttons**: `useDialogKeys` Tab-cycles over every `button`, so thousands of
+  buttons would be thousands of Tab stops.
+- **Disable = `Sample.isExcluded` flipped in place** (`toggleSampleExcluded`), same flag the pad Exclude uses (which only sets it). The kit is not rerolled per keypress; on close
+  (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
+  Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.
+- **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): open, arrows play, Space replays, X toggles, usable count updates, Escape returns focus to the pencil, refill on close. Not tested: real library of thousands (layout cost), AIFF samples in the browser, pairs row visually (logic only).
 
 ## Verified and unverified
 

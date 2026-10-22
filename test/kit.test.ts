@@ -48,6 +48,7 @@ import {
   uniqueKitName
 } from '../src/utils/kitNaming';
 import { buildPartnerIndex, hatStem, partnerPads } from '../src/utils/hatPartner';
+import { browserCells, buildBrowserSections } from '../src/utils/browserGroups';
 import { isLooseGroupName, mergeScannedFolders, uniqueLooseName } from '../src/utils/folderMerge';
 import { FULL_HASH_MAX_BYTES, fileSignature, identityOf, sampleIdentity } from '../src/utils/sampleSignature';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from '../src/utils/progressVisibility';
@@ -3855,6 +3856,34 @@ await test('fresh first: a fresh sample beats the variety cap', async () => {
     const { kit } = await generateRandomKit([...fresh, ...old], [], {}, undefined, { identityOf: idByName });
     assert.ok(countKind(kit, 'tom') >= 2 && countKind(kit, 'conga') >= 2, 'without a history the cap still pulls in the other kinds');
   }
+});
+
+await test('browser: sections follow the breakdown order, rows follow kind order, names sort naturally', () => {
+  const kick10 = makeSample('Kick 10.wav', 'Kick');
+  const kick2 = makeSample('kick 2.wav', 'Kick');
+  const sub = { ...makeSample('Sub.wav', 'Kick'), kind: '808' as const };
+  const snare = makeSample('Snare.wav', 'Snare');
+  const crash = makeSample('Crash.wav', 'Crash');
+  const sections = buildBrowserSections([crash, snare, kick10, sub, kick2]);
+  assert.deepEqual(sections.map(s => s.key), ['kick', 'snare', 'perc'], 'crashes sit in the percussion pool, like the breakdown');
+  assert.deepEqual(sections[0].rows.map(r => r.key), ['kick', '808']);
+  assert.deepEqual(sections[0].rows[0].samples.map(s => s.name), ['kick 2.wav', 'Kick 10.wav'], 'numeric, case-insensitive');
+  assert.deepEqual(browserCells(sections).map(s => s.name), ['kick 2.wav', 'Kick 10.wav', 'Sub.wav', 'Snare.wav', 'Crash.wav']);
+});
+
+await test('browser: hat pairs lead the hats section, paired hats are not repeated, excluded pairs stay visible', () => {
+  const closed = makeSample('BlockPatrol-Hat.wav', 'Hat');
+  const open = makeSample('BlockPatrol-HatOpn.wav', 'OHH');
+  const lonely = makeSample('Lonely-Hat.wav', 'Hat');
+  const looseOpen = makeSample('Wash-Open.wav', 'OHH');
+  const hats = buildBrowserSections([lonely, looseOpen, { ...open, isExcluded: true }, closed]).find(s => s.key === 'hats')!;
+  assert.deepEqual(hats.rows.map(r => r.key), ['pairs', 'hat', 'open']);
+  assert.deepEqual(hats.rows[0].samples.map(s => s.id), [closed.id, open.id], 'closed first, then its open partner');
+  assert.deepEqual(hats.rows[0].groups, [2]);
+  assert.deepEqual(hats.rows[1].samples.map(s => s.id), [lonely.id]);
+  assert.deepEqual(hats.rows[2].samples.map(s => s.id), [looseOpen.id]);
+  const ids = browserCells([hats]).map(s => s.id);
+  assert.equal(new Set(ids).size, ids.length, 'every sample is exactly one cell');
 });
 
 if (failures > 0) {
