@@ -831,8 +831,8 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   Tiles are `div role=option` with `aria-activedescendant` on the dialog, **not buttons**: `useDialogKeys` Tab-cycles over every `button`, so thousands of
   buttons would be thousands of Tab stops.
 - **Play progress** is the tile's background (`.sample-tile` in `index.css`, `--progress`): a `requestAnimationFrame` loop in `play()` sets the CSS variable
-  straight on the playing tile (no React state, so thousands of tiles are not re-rendered per frame); it stays at 100% after the sample ends and resets when
-  another sample plays. Shows loops and samples with silence at the start. Confirmed by hand in Chromium and Firefox (about 39% at 1.2 s of a 3 s seed loop).
+  straight on the playing tile (no React state, so thousands of tiles are not re-rendered per frame); at the end it shows 100% for `PROGRESS_CLEAR_MS` (250 ms) and clears (owner ruling 2026-10-22: clear it, a lingering full bar read as a highlight);
+  a new play resets the old tile at once. Shows loops and samples with silence at the start. Confirmed by hand in Chromium and Firefox (about 39% at 1.2 s of a 3 s seed loop; the owner likes the bar).
 - **Disable = `Sample.isExcluded` flipped in place** (`toggleSampleExcluded`), same flag the pad Exclude uses (which only sets it). The kit is not rerolled per keypress; on close
   (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
   Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.

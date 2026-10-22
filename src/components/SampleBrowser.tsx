@@ -10,6 +10,9 @@ const SECTION_ACCENT: Record<string, Category> = {
   kick: 'Kick', snare: 'Snare', clap: 'Clap', hats: 'CHH', perc: 'Perc', other: 'Other'
 };
 
+/** How long a finished sample's bar stays full before it clears. */
+const PROGRESS_CLEAR_MS = 250;
+
 const AUDIO_EXTENSION = /\.(wav|wave|aif|aiff|aifc|flac|mp3|ogg|m4a)$/i;
 
 /** Why a sample that is not disabled by hand is still left out of kits, or null when it is usable. */
@@ -71,14 +74,17 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
       audio.play().catch(err => {
         if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
       });
-      // The bar fills with the share of the sample already played; it stays full once the sample ends.
+      // The bar fills with the share of the sample already played; it is cleared a moment after the sample ends.
       const tick = () => {
         if (token !== playToken.current) return;
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
           setProgress(sample.id, Math.min(100, (audio.currentTime / audio.duration) * 100));
         }
-        if (audio.ended) setProgress(sample.id, 100);
-        else requestAnimationFrame(tick);
+        if (audio.ended) {
+          // Full for a moment, then cleared.
+          setProgress(sample.id, 100);
+          setTimeout(() => { if (token === playToken.current) setProgress(sample.id, 0); }, PROGRESS_CLEAR_MS);
+        } else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
@@ -164,8 +170,8 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
         className='bg-surface-modal border border-border-main rounded-2xl w-full flex flex-col shadow-2xl overflow-hidden outline-none'
       >
         <div className='flex items-center justify-between gap-4 px-4 py-3 border-b border-border-dark bg-surface-modal-header shrink-0'>
-          <h2 id='sample-browser-title' className='text-base font-bold uppercase tracking-widest text-text-bright'>Sample Browser</h2>
-          <span className='ml-auto text-sm text-text-muted uppercase font-medium'>
+          <h2 id='sample-browser-title' className='text-[17px] font-bold uppercase tracking-widest text-text-bright'>Sample Browser</h2>
+          <span className='ml-auto text-[15px] text-text-muted uppercase font-medium'>
             {usableCount.toLocaleString()} / {samples.length.toLocaleString()} usable
           </span>
           <button
@@ -180,7 +186,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
 
         <div role='listbox' aria-label='Samples' className='flex-1 overflow-y-auto px-4 py-3 space-y-4'>
           {sections.length === 0 && (
-            <div className='text-sm text-text-subtle text-center mt-8'>No samples loaded</div>
+            <div className='text-[15px] text-text-subtle text-center mt-8'>No samples loaded</div>
           )}
           {sections.map(section => (
             <section
@@ -189,7 +195,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
               className='space-y-1.5'
               aria-label={section.label}
             >
-              <h3 className='category-ink text-sm uppercase tracking-wider font-bold border-b border-border-dark pb-0.5'>
+              <h3 className='category-ink text-[15px] uppercase tracking-wider font-bold border-b border-border-dark pb-0.5'>
                 {section.label}
               </h3>
               {section.rows.map(row => {
@@ -200,7 +206,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
                   : [row.samples];
                 return (
                   <div key={row.key} className='flex gap-2 items-start'>
-                    <div className='w-16 shrink-0 pt-0.5 text-xs text-text-subtle uppercase font-medium'>{row.label}</div>
+                    <div className='w-16 shrink-0 pt-0.5 text-[13px] text-text-subtle uppercase font-medium'>{row.label}</div>
                     <div className='flex flex-wrap gap-1 min-w-0'>
                       {runs.map((run, runIndex) => (
                         <div
@@ -224,7 +230,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
                                 aria-disabled={disabled}
                                 title={`${sample.name}${disabled ? ' (disabled)' : reason ? ` (left out: ${reason})` : ''}`}
                                 onClick={() => select(sample)}
-                                className={`sample-tile group flex items-center w-30 h-6 rounded border text-xs cursor-pointer select-none ${
+                                className={`sample-tile group flex items-center w-32 h-6 rounded border text-[13px] cursor-pointer select-none ${
                                   selected
                                     ? 'border-accent-yellow bg-surface-hover text-text-bright'
                                     : 'border-border-dark bg-surface-pad text-text-light hover:bg-surface-hover'
@@ -254,7 +260,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
           ))}
         </div>
 
-        <div className='shrink-0 px-4 py-2 border-t border-border-dark bg-surface-modal-header text-xs text-text-subtle flex flex-wrap gap-x-4 gap-y-1'>
+        <div className='shrink-0 px-4 py-2 border-t border-border-dark bg-surface-modal-header text-[13px] text-text-subtle flex flex-wrap gap-x-4 gap-y-1'>
           <span>←↑↓→ move and play</span>
           <span>Space play again</span>
           <span>X disable / enable</span>
