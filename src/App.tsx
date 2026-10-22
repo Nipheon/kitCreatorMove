@@ -1228,8 +1228,8 @@ export default function App() {
         </div>
       </header>
 
-      <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden'>
-        <aside className='w-full lg:w-72 bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col shrink-0 lg:overflow-y-auto'>
+      <main className='flex flex-col lg:flex-row flex-1 overflow-y-auto lg:overflow-hidden lg:[container-type:size]'>
+        <aside className='w-full lg:w-auto lg:flex-[3_1_20rem] lg:min-w-80 lg:max-w-[36rem] bg-surface-panel border-b lg:border-b-0 lg:border-r border-border-dark p-6 flex flex-col lg:shrink lg:overflow-y-auto'>
           {/* Heading, drop zone, list and the count block are siblings of the sidebar on
               purpose, so the list is the only one that gives up room: it takes what is
               left and scrolls, and twenty folders can never push the sample count or the
@@ -1409,7 +1409,7 @@ export default function App() {
           </div>
         </aside>
 
-        <section className='w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 lg:flex-1 lg:min-h-0'>
+        <section className='w-full bg-surface-darkest flex flex-col items-center justify-center gap-6 p-4 sm:p-6 lg:w-auto lg:flex-[1_1_calc(100cqh-4.5rem)] lg:min-h-0 lg:min-w-0'>
           {/* The grid sizes itself to the smaller of the stage's two dimensions, so it is
               never cut off on a short window and keeps growing on a large one. The old
               fixed 700px square did both wrongly.

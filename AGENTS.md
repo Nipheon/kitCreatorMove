@@ -710,6 +710,12 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   it.
 - **Font sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text. The pad tile is the documented exception
   (Lock/Shuffle `text-pad-action` 12px, hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
+  The sample browser is the other one: tiles, row labels and footer are 13px, section heads 15px, title 17px (owner asked for +1px over `text-xs`/`text-sm`/`text-base`, 2026-10-22, tiles were too small to read); tiles are 8rem wide so names truncate no more than at 12px.
+- **Left panel takes the space the square grid leaves** (owner, 2026-10-22): `main` is `lg:[container-type:size]`; the stage's flex-basis is
+  `calc(100cqh - 4.5rem)` (the grid's height plus its side padding, so the grid is not shrunk) and the left `aside` is `lg:flex-[3_1_20rem] lg:min-w-80 lg:max-w-[36rem]`,
+  so it grows into the leftover up to 36rem and the stage gets the rest beyond that. Min is 20rem, not the old 18rem: "USABLE SAMPLES", the browser pencil and the count wrapped at 18rem.
+  Measured (Chromium and Firefox): 1480x844 left 421px, side gap 40px (was ~140); 1920x1080 left 574px; at 1100 and 1024 wide the grid is 32px smaller than before (min panel width).
+  The right panel is unchanged (`lg:w-80`).
 - **Sidebar:** only the folder list shrinks (`lg:flex-1 lg:min-h-[3.25rem] lg:overflow-y-auto`); heading, text line and count block
   are siblings of the `aside`. Failed: scrolling the whole `aside`; wrapping heading+list in `flex-1 min-h-0` (a shrinkable flex
   child overlaps siblings, it does not clip); capping the list height. The `aside` is `lg:overflow-y-auto` (it was `lg:overflow-hidden`, which clipped
