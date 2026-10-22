@@ -562,6 +562,29 @@ export async function generateRandomKit(
  * not regenerate the kit, so recomputing the layout here could swap the grid under the
  * other 15 pads; candidate pools still follow the current options.
  */
+/**
+ * Puts a hand-picked sample on a pad. Nothing is checked: the sample may be disabled, of any
+ * category, from any folder. A sample already on another pad swaps places with the pad's own
+ * (so one sample never sits on two pads, which the export cannot name twice). The warning
+ * counts are recomputed the way a shuffle does.
+ */
+export function placeSample(
+  current: KitResult,
+  samples: Sample[],
+  index: number,
+  sample: Sample,
+  options: KitOptions = {}
+): KitResult {
+  const kit = [...current.kit];
+  const previous = kit[index] ?? null;
+  const elsewhere = kit.findIndex((s, i) => i !== index && s?.id === sample.id);
+  if (elsewhere >= 0) kit[elsewhere] = previous;
+  kit[index] = sample;
+  const usable = samples.filter(s => isUsableSample(s, options));
+  const { lockedDuplicates: _stale, ...rest } = current;
+  return { ...rest, kit, ...summarisePads(kit, current.layout, availableRoles(usable)) };
+}
+
 export async function rerollSinglePad(
   samples: Sample[],
   currentKit: (Sample | null)[],

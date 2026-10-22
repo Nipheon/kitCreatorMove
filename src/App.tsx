@@ -19,7 +19,7 @@ import { isLooseGroupName, mergeScannedFolders, skippedFoldersNotice, uniqueLoos
 import { planRemove, planToggle } from './utils/folderGroups';
 import { expandCollections } from './utils/packSplit';
 import { recordKit, uniqueKitCount } from './utils/freshness';
-import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitOptions, KitResult, rerollSinglePad } from './utils/kitGenerator';
+import { emptyKit, emptyPadsNotice, generateRandomKit, isUsableSample, KindCount, kindCountsByRow, KitOptions, KitResult, placeSample, rerollSinglePad } from './utils/kitGenerator';
 import { SampleKind } from './utils/kinds';
 import { BATCH_MAX, BATCH_MIN, loadBatchSize, loadQuickPreview, saveBatchSize, saveQuickPreview } from './utils/storedSettings';
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
@@ -176,7 +176,9 @@ export default function App() {
   const helpButtonRef = useRef<HTMLButtonElement>(null);
   const helpDialogRef = useRef<HTMLDivElement>(null);
   const [isBrowserOpen, setIsBrowserOpen] = useState(false);
-  const browserButtonRef = useRef<HTMLButtonElement>(null);
+  const browserOpenerRef = useRef<HTMLButtonElement | null>(null);
+  /** The pad the browser was opened for, or null when it was opened from Usable Samples. */
+  const [browserPad, setBrowserPad] = useState<number | null>(null);
   const browserDialogRef = useRef<HTMLDivElement>(null);
   // Which pad to audition, and a counter so repeated shuffles of the same pad each fire.
   const [audition, setAudition] = useState<{ index: number; token: number }>({ index: -1, token: 0 });
@@ -495,8 +497,8 @@ export default function App() {
   useDialogKeys(isHelpOpen, helpButtonRef, helpDialogRef, () => setIsHelpOpen(false));
   useDialogKeys(isBatchOpen, batchButtonRef, batchDialogRef, () => setIsBatchOpen(false), () => !isExportingRef.current && !generating.current);
   // Registered once per open, so it reaches the newest closeBrowser (and its folders) through a ref.
-  const closeBrowserRef = useRef<() => void>(() => {});
-  useDialogKeys(isBrowserOpen, browserButtonRef, browserDialogRef, () => closeBrowserRef.current());
+  const closeBrowserRef = useRef<(pick?: Sample) => void>(() => {});
+  useDialogKeys(isBrowserOpen, browserOpenerRef, browserDialogRef, () => closeBrowserRef.current());
 
   // The key handler below is registered once, so it reaches the newest randomizeKit and
   // help state through these refs rather than closing over stale values.
@@ -930,8 +932,16 @@ export default function App() {
     }
   };
 
+  /**
+   * Samples switched off since the browser opened. Only these are taken off the kit when it closes:
+   * a disabled sample the user put on a pad by hand earlier must stay there.
+   */
+  const disabledThisSession = useRef(new Set<string>());
+
   /** The browser's disable button: flips one sample's exclusion at once; the kit catches up when the browser closes. */
   const toggleSampleExcluded = (sampleId: string) => {
+    const wasExcluded = sourceFolders.flatMap(f => f.samples).find(s => s.id === sampleId)?.isExcluded ?? false;
+    if (wasExcluded) disabledThisSession.current.delete(sampleId); else disabledThisSession.current.add(sampleId);
     setSourceFolders(prev => prev.map(f => (
       f.samples.some(s => s.id === sampleId)
         ? { ...f, samples: f.samples.map(s => (s.id === sampleId ? { ...s, isExcluded: !s.isExcluded } : s)) }
@@ -939,21 +949,40 @@ export default function App() {
     )));
   };
 
-  /** Closing the browser: pads still holding a sample disabled in it are refilled, and their locks dropped. */
-  const closeBrowser = async () => {
+  /** Opens the browser for the whole pool (`padIndex` undefined) or to choose one pad's sample. */
+  const openBrowser = (opener: HTMLButtonElement, padIndex: number | null = null) => {
+    browserOpenerRef.current = opener;
+    disabledThisSession.current = new Set();
+    setBrowserPad(padIndex);
+    setIsBrowserOpen(true);
+  };
+
+  /**
+   * Closing the browser. A sample chosen for a pad goes on it first, disabled or not. Then pads still
+   * holding a sample disabled during this visit are refilled, and their locks dropped.
+   */
+  const closeBrowser = async (pick?: Sample) => {
     if (generating.current) return;
-    const excluded = new Set(sourceFolders.flatMap(f => f.samples).filter(s => s.isExcluded).map(s => s.id));
-    const stale = kit.some(sample => sample && excluded.has(sample.id));
+    const placed = pick && browserPad !== null ? placeSample(kitResult, samples, browserPad, pick, kitOptions) : kitResult;
+    const excluded = new Set(
+      sourceFolders.flatMap(f => f.samples).filter(s => s.isExcluded && disabledThisSession.current.has(s.id)).map(s => s.id)
+    );
+    if (pick) excluded.delete(pick.id);
+    const stale = placed.kit.some(sample => sample && excluded.has(sample.id));
     setIsBrowserOpen(false);
-    if (!stale) return;
+    setBrowserPad(null);
+    if (!stale) {
+      if (placed !== kitResult) setKitResult(placed);
+      return;
+    }
     const remaining = enabledSamples(sourceFolders);
-    const survivors = kit.map(sample => (sample && excluded.has(sample.id) ? null : sample));
-    const heldLayout = heldLayoutFor();
+    const survivors = placed.kit.map(sample => (sample && excluded.has(sample.id) ? null : sample));
+    const held = heldLayout(placed.kit, placed.layout);
     const next: KitResult | null = remaining.length > 0
-      ? await runGeneration(report => generateRandomKit(remaining, survivors, freshOptions(kitOptions), heldLayout, { onProgress: report }))
+      ? await runGeneration(report => generateRandomKit(remaining, survivors, freshOptions(kitOptions), held, { onProgress: report }))
       : { kit: survivors, layout: chooseLayout(remaining), substituted: [], empty: [], unavailableRoles: [] };
     if (!next) return;
-    setLockedPads(prev => prev.map((locked, idx) => (kit[idx] && excluded.has(kit[idx]!.id) ? false : locked)));
+    setLockedPads(prev => prev.map((locked, idx) => (placed.kit[idx] && excluded.has(placed.kit[idx]!.id) ? false : locked)));
     setKitResult(next);
   };
   closeBrowserRef.current = closeBrowser;
@@ -1283,9 +1312,8 @@ export default function App() {
                   <span className='flex items-center gap-2'>
                     Usable Samples
                     <button
-                      ref={browserButtonRef}
                       type='button'
-                      onClick={() => setIsBrowserOpen(true)}
+                      onClick={(e) => openBrowser(e.currentTarget)}
                       disabled={samples.length === 0}
                       className='text-text-subtle hover:text-text-bright transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
                       title='Browse samples and disable the ones you do not want in kits'
@@ -1433,6 +1461,7 @@ export default function App() {
                   isBusy={isGenerating}
                   onToggleLock={() => toggleLock(index)}
                   onExclude={handleExcludeSample}
+                  onEdit={(padIndex, opener) => openBrowser(opener, padIndex)}
                   onReroll={rerollPad}
                   auditionToken={audition.index === index ? audition.token : 0}
                   isSpinning={spinningPads[index]}
@@ -1657,6 +1686,11 @@ export default function App() {
           usableCount={usableCount}
           onToggleExcluded={toggleSampleExcluded}
           onClose={() => void closeBrowser()}
+          pad={browserPad === null ? undefined : {
+            index: browserPad,
+            sampleId: kit[browserPad]?.id ?? null,
+            onPick: sample => void closeBrowser(sample)
+          }}
         />
       )}
 
