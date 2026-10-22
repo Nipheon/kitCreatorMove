@@ -17,8 +17,8 @@ index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts  READ
 public/    icon.png icon-32.png icon-180.png og-image.png robots.txt sitemap.xml
 src/       App.tsx main.tsx types.ts padLayout.ts  devSeed.ts (dev-only, /?seed)  index.css (@theme)  vite-env.d.ts
 src/components/{Pad,PickSources,SampleBrowser,SourceFolderRows,Toast}.tsx
-src/utils/{ablPresetTemplate,adpcm,aiff,audioTrimmer,browserGroups,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
-test/{kit,io,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
+src/utils/{ablPresetTemplate,adpcm,aiff,audioEngine,audioKeepAlive,audioTrimmer,browserGroups,exporter,fileReader,folderGroups,folderMerge,hatPartner,kinds,kitGenerator,kitNaming,packSplit,progressVisibility,sampleSignature,sampleUrl,scanProgress,storedSettings,wavStripper}.ts
+test/{kit,io,audio,packs}.test.ts   (test/private/ is git-ignored and local only: `npm run test:private`)
 ```
 
 `package-lock.json` is the only lockfile (npm only; the AI Studio leftovers `bun.lock`, `metadata.json`, `.env.example` and
@@ -46,7 +46,7 @@ path with more than three segments means you are in the wrong place.
 - **Before reporting success** run `npx tsc --noEmit` (clean under strict), `npm test` and `npm run build`. State which file paths
   you wrote and what the tests returned. Say what you changed here, or that you checked and no update was needed.
 - **`test/kit.test.ts` is the contract.** If a test fails, fix the code. Edit the test only when the behaviour change is the point
-  of the task. `npm test` runs `test/kit.test.ts`, then `test/io.test.ts` (drop handling in `fileReader` and `audioTrimmer`, against
+  of the task. `npm test` runs `test/kit.test.ts`, then `test/io.test.ts`, `test/audio.test.ts` (the fading voices, against fake element, context and timers) and `test/packs.test.ts`; `test/io.test.ts` (drop handling in `fileReader` and `audioTrimmer`, against
   a fake `OfflineAudioContext` and fake `FileSystemEntry` objects). Both are Node-only via `tsx`.
 - **Dev seed:** `npm run dev` then `http://localhost:3000/?seed` (`?seed=20` fakes twenty folders) fills the grid from
   `src/devSeed.ts`: 58 invented filenames of the shapes real packs use (including closed/open hat pairs and a loop for the sample browser), categorised through the same pipeline as a drop, with a short generated WAV as
@@ -616,7 +616,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   plays when it changes), deliberately **not keyed on `sample`**: the old `shouldPlayOnNextSample` ref never disarmed when a shuffle
   landed on the same sample, and the next generate played every armed pad. **The audition effect must be declared below the effect
   that builds the audio element** (effects run in declaration order).
-- **Each pad pre-buffers** (`audio.preload = 'auto'`, `audio.load()` in `useEffect([sample])`). Generate shows a brief "Rolling"
+- **Each pad pre-buffers** (two voices, see Audio engine; `audio.preload = 'auto'`, `audio.load()` in `useEffect([sample])`). Generate shows a brief "Rolling"
   spinner (`Loader2`, up to 100ms per pad), skipped when Auto Preview is on.
 - **Preview Kit** (right of Generate Random Kit) plays pads in index order, 750ms apart (`PREVIEW_GAP_MS`; 350ms, `PREVIEW_QUICK_GAP_MS`, when the **Quick** checkbox is ticked: always shown next to **Auto** (the Auto Preview checkbox, shortened to "Auto" with `aria-label='Auto Preview'`; Quick has `aria-label='Quick preview'`), applies to manual Preview Kit and auto preview alike, and is read live through `quickPreviewRef` so toggling mid-preview takes effect on the next gap, and the Quick label is exempt from the stop-on-any-click/key handler (`quickLabelRef`) so it never stops the preview, and with Quick on each step dispatches `stop-all-audio` before `play-pad` so a pad cuts off the previous sound instead of stacking on it (normal 750ms preview still lets sounds ring out); 350ms is tuned by ear; an empty pad still waits its 1000ms fallback first), stopped by any click, key press, a second
   press of the button or a new generate. **Auto Preview** (checkbox) starts it on each generate. **Symptom that drove the timing
@@ -843,6 +843,30 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
   Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.
 - **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): open, arrows play, Space replays, X toggles, usable count updates, Escape returns focus to the pencil, refill on close. Not tested: real library of thousands (layout cost), AIFF samples in the browser, pairs row visually (logic only).
+
+## Audio engine (`audioEngine.ts`, `audioKeepAlive.ts`)
+
+- **Nothing that is sounding is cut any more: it fades out over 20 ms** (`FADE_OUT_S`, owner request 2026-10-22; the hard `pause()` chopped the waveform and clicked).
+  That covers a retrigger of the same pad, a choke, stop-all (Preview stop, Quick preview), a pad's sample being replaced (shuffle, exclude, new kit, folder removal),
+  and the sample browser (switching sample, closing). One `Voice` per `<audio>` element: element -> `GainNode` -> destination, ramp with `linearRampToValueAtTime`,
+  `pause()` and rewind only after the ramp (timer = ramp + 10 ms; a `play()` meanwhile bumps a token so the pending pause does nothing).
+- **Two voices per pad, both buffered** (`Pad.tsx`; `pad-ready` still comes from the first only): `triggerFrom` plays the idle one and fades the others, so a retrigger overlaps
+  for 20 ms. With both busy it restarts the oldest (a hard restart; only for a third trigger inside 20 ms). The sample browser keeps two voices the same way.
+  Costs a second decoded copy per pad.
+- **An element joins the graph only while the context is running** (`createMediaElementSource` is permanent for an element, and a suspended context would silence it).
+  Before the first gesture, or without Web Audio, it plays directly and `fadeOut` is the old hard cut, so a blocked context can never make a pad silent.
+  The graph is wired on a voice's first `play()` after the context runs, **and again at `fadeOut`** if the voice started earlier: the first sound of a session is often a pad hotkey, whose keydown
+  also creates the context, so that first voice starts directly. Without the second wiring its fade was the old hard cut (found 2026-10-22 with a real 808 pack: `pause` with no `ramp`; fixed, pinned by a test).
+- **The shared context (`audioKeepAlive.ts`) now stays running while a voice sounds** (`holdPlayback`, released at ended / end of fade) even if the page is not focused:
+  audio routed through a suspended context is silent, and a preview that is running when focus leaves must finish. When the last voice stops, the focus rule suspends it again, so the
+  headphones are still released in the background (the PR #59 ruling holds). Pinned by tests with a fake context; the focus/hold behaviour was also checked in Chromium and Firefox by overriding `document.hasFocus`.
+- **Measuring clicks:** a `ScriptProcessor` tap on the destination in Playwright shows per-sample steps (a hard cut is a step of ~the signal's amplitude; a 440 Hz tone at 0.24 has a natural step of 0.014).
+  It drops blocks when the main thread is busy (a 24-bit file loading) and in Chromium shows a step every 256 samples, so only trust it where the same run has no step without a switch; the per-voice
+  trace (record each gain node with `e.playbackTime`) is the reliable form. With a real pack of 24-bit stereo 808s (peak 0.966, 6 s; details in AGENTS.private.md) the old voice fell smoothly to 0 in 25 ms and the new one started clean
+  about 25 ms later (file load), leaving a short silence, not a click. One file in that pack ends at +0.37 (cut off), which clicks at its natural end whatever the engine does.
+- **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): a pad's sound reaches the output through the graph (peak 0.24 on an analyser), retrigger and browser switching schedule exactly one 0 ramp
+  of 20 ms, Preview Kit still starts all 16 pads, the context stays `running` during a blurred preview and is `suspended` after it. **Not verified:** by ear (the click itself), on real headphones
+  or a phone (iOS Safari: media-element sources are not tried there), first-gesture latency. Do not "simplify" back to `audio.volume` steps: timers give 4-5 steps at best and iOS ignores `volume`.
 
 ## Verified and unverified
 

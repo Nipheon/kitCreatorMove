@@ -2,6 +2,7 @@ import { Ban, X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { categoryAccent, poolCategoryFor } from '../padLayout';
 import { Category, Sample } from '../types';
+import { fadeOutAll, triggerFrom, Voice } from '../utils/audioEngine';
 import { browserCells, buildBrowserSections } from '../utils/browserGroups';
 import { KitOptions } from '../utils/kitGenerator';
 import { auditionUrl } from '../utils/sampleUrl';
@@ -43,7 +44,8 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const tileRefs = useRef(new Map<string, HTMLElement>());
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Two voices: a new sample plays on the idle one while the previous fades out over 20 ms. */
+  const voicesRef = useRef<Voice[] | null>(null);
   const playToken = useRef(0);
   /** The tile showing play progress (a CSS variable set straight on the element: no re-render of thousands of tiles per frame). */
   const progressId = useRef<string | null>(null);
@@ -60,15 +62,16 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
 
   const play = (sample: Sample) => {
     const token = ++playToken.current;
-    const audio = (audioRef.current ??= new Audio());
-    audio.pause();
+    const voices = (voicesRef.current ??= [new Voice(new Audio()), new Voice(new Audio())]);
     setProgress(progressId.current, 0);
     progressId.current = sample.id;
+    fadeOutAll(voices); // the previous sample starts fading now, not when the new file has loaded
     void auditionUrl(sample).then(url => {
       if (token !== playToken.current || !url) return;
+      const voice = triggerFrom(voices);
+      const { audio } = voice;
       audio.src = url;
-      audio.currentTime = 0;
-      audio.play().catch(err => {
+      voice.play().catch(err => {
         if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
       });
       // The bar fills with the share of the sample already played; it is cleared the moment the sample ends.
@@ -94,10 +97,11 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
   const selectRef = useRef(select);
   selectRef.current = select;
 
-  // Silence on close.
+  // Closing fades out what is playing, then lets the voices go.
   useEffect(() => () => {
     playToken.current++;
-    audioRef.current?.pause();
+    voicesRef.current?.forEach(v => v.dispose());
+    voicesRef.current = null;
   }, []);
 
   useEffect(() => {
