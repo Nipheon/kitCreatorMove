@@ -40,7 +40,7 @@ import {
 import { recordKit, uniqueKitCount } from '../src/utils/freshness';
 import { BATCH_MAX } from '../src/utils/storedSettings';
 import {
-  countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, rerollSinglePad
+  countKitsWithEmptyPads, emptyPadsNotice, generateRandomKit, isUsableSample, kindCountsByRow, placeSample, rerollSinglePad
 } from '../src/utils/kitGenerator';
 import {
   buildBatch, DEFAULT_PREFIX, heldLayout, KIT_SUFFIXES, kitNameFor, MULTI_FOLDER_PREFIX,
@@ -3884,6 +3884,39 @@ await test('browser: hat pairs lead the hats section, paired hats are not repeat
   assert.deepEqual(hats.rows[2].samples.map(s => s.id), [looseOpen.id]);
   const ids = browserCells([hats]).map(s => s.id);
   assert.equal(new Set(ids).size, ids.length, 'every sample is exactly one cell');
+});
+
+await test('placeSample: puts any sample on the pad, disabled or not, and recomputes the warning counts', async () => {
+  const mk = (n: number, category: Category) => Array.from({ length: n }, (_, i) => makeSample(`${category}${i}.wav`, category));
+  const samples = [...mk(4, 'Kick'), ...mk(4, 'Snare'), ...mk(4, 'Clap'), ...mk(4, 'CHH'), ...mk(4, 'OHH'), ...mk(4, 'Perc')];
+  const result = await generateRandomKit(samples, [], {}, undefined, { identityOf: async s => s.name });
+  const outsider = { ...mk(1, 'Kick')[0], id: 'outsider', name: 'Outsider.wav', isExcluded: true };
+  const target = result.kit.findIndex(s => s && s.category === 'Snare');
+  const placed = placeSample(result, [...samples, outsider], target, outsider);
+  assert.equal(placed.kit[target]?.id, 'outsider', 'a disabled sample of another category goes on the pad');
+  assert.equal(placed.kit.filter(s => s?.id === 'outsider').length, 1);
+  assert.deepEqual(result.kit.map((s, i) => (i === target ? null : s?.id)), placed.kit.map((s, i) => (i === target ? null : s?.id)), 'other pads untouched');
+  assert.ok(placed.substituted.includes(target), 'a kick on a snare pad counts as a substitute');
+  assert.equal(result.kit[target] === placed.kit[target], false);
+});
+
+await test('placeSample: a sample already on another pad swaps places; an empty pad gets filled', async () => {
+  const samples = ['Kick', 'Snare', 'Clap', 'CHH'].flatMap(c => [makeSample(`${c}1.wav`, c as Category), makeSample(`${c}2.wav`, c as Category)]);
+  const result = await generateRandomKit(samples, [], {}, undefined, { identityOf: async s => s.name });
+  const filled = result.kit.map((s, i) => (s ? i : -1)).filter(i => i >= 0);
+  const [a, b] = filled;
+  const swapped = placeSample(result, samples, a, result.kit[b]!);
+  assert.equal(swapped.kit[a]?.id, result.kit[b]?.id);
+  assert.equal(swapped.kit[b]?.id, result.kit[a]?.id, 'the other pad takes the old sample');
+  const emptyPad = result.kit.findIndex(s => s === null);
+  if (emptyPad >= 0) {
+    const spare = samples.find(s => !result.kit.some(k => k?.id === s.id));
+    if (spare) {
+      const filledUp = placeSample(result, samples, emptyPad, spare);
+      assert.equal(filledUp.kit[emptyPad]?.id, spare.id);
+      assert.ok(!filledUp.empty.includes(emptyPad));
+    }
+  }
 });
 
 if (failures > 0) {

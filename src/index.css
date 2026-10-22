@@ -102,7 +102,6 @@
   --color-cat-other: #8E97D8;
 
   /* Font sizes */
-  --text-pad-action: 0.75rem; /* 12px - 2px smaller than text-sm (14px) for Lock and Shuffle buttons */
 }
 
 :root {
@@ -296,10 +295,8 @@
 }
 
 /*
- * Pads shrink with the stage now, and below roughly 130px the Lock and Shuffle captions
- * ran into each other — "LOCKSHUFFL" — because the bottom bar splits the tile in half
- * whatever the tile is worth. Under that width the icons carry the meaning on their own;
- * both buttons keep their aria-label and title, so nothing is lost to a screen reader.
+ * Pads shrink with the stage now. The bottom bar is three icon-only buttons (Edit, Shuffle, Lock),
+ * each with an aria-label and title, so it needs no caption rules at any pad size.
  */
 @supports (container-type: inline-size) {
   .pad-tile {
@@ -370,10 +367,6 @@
   }
 
   @container (max-width: 104px) {
-    .pad-action-label {
-      display: none;
-    }
-
     /* The badge sits in a header row that also holds the pad number, the hotkey and the
        play indicator, and below this width the full "Choke 1" stops fitting — it pushed
        the indicator out through the right edge. Drop the word, keep the number: the

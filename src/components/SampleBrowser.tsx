@@ -31,6 +31,11 @@ interface Props {
   usableCount: number;
   onToggleExcluded: (sampleId: string) => void;
   onClose: () => void;
+  /**
+   * Set when the browser was opened from a pad: Enter or a double-click then puts the selected
+   * sample on that pad (disabled or not) and closes. Without it the browser only edits what is usable.
+   */
+  pad?: { index: number; sampleId: string | null; onPick: (sample: Sample) => void };
 }
 
 /**
@@ -38,7 +43,7 @@ interface Props {
  * into) kit generation. Cursor keys move and play, Space replays, X disables. The dialog owns
  * the keyboard: App's pad hotkeys are off while it is open.
  */
-export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onToggleExcluded, onClose }: Props) {
+export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onToggleExcluded, onClose, pad }: Props) {
   const sections = useMemo(() => buildBrowserSections(samples), [samples]);
   const cells = useMemo(() => browserCells(sections), [sections]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -59,6 +64,8 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
   selectedRef.current = selectedId;
   const toggleRef = useRef(onToggleExcluded);
   toggleRef.current = onToggleExcluded;
+  const pickRef = useRef(pad?.onPick);
+  pickRef.current = pad?.onPick;
 
   const play = (sample: Sample) => {
     const token = ++playToken.current;
@@ -96,6 +103,14 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
   };
   const selectRef = useRef(select);
   selectRef.current = select;
+
+  // Opened from a pad: start on that pad's sample (silently), scrolled into view.
+  useEffect(() => {
+    if (!pad?.sampleId) return;
+    const current = cellsRef.current.find(s => s.id === pad.sampleId);
+    if (current) selectRef.current(current, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Closing fades out what is playing, then lets the voices go.
   useEffect(() => () => {
@@ -137,6 +152,11 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
         if (!e.repeat && current >= 0) playRef.current(list[current]);
         return;
       }
+      if (e.key === 'Enter' && pickRef.current && !(e.target instanceof HTMLElement && e.target.closest('button'))) {
+        e.preventDefault();
+        if (!e.repeat && current >= 0) pickRef.current(list[current]);
+        return;
+      }
       if (e.key === 'x' || e.key === 'X') {
         e.preventDefault();
         if (!e.repeat && current >= 0) toggleRef.current(list[current].id);
@@ -168,7 +188,9 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
         className='bg-surface-modal border border-border-main rounded-2xl w-full flex flex-col shadow-2xl overflow-hidden outline-none'
       >
         <div className='flex items-center justify-between gap-4 px-4 py-3 border-b border-border-dark bg-surface-modal-header shrink-0'>
-          <h2 id='sample-browser-title' className='text-[17px] font-bold uppercase tracking-widest text-text-bright'>Sample Browser</h2>
+          <h2 id='sample-browser-title' className='text-[17px] font-bold uppercase tracking-widest text-text-bright'>
+            {pad ? `Pad ${pad.index + 1}: choose a sample` : 'Sample Browser'}
+          </h2>
           <span className='ml-auto text-[15px] text-text-muted uppercase font-medium'>
             {usableCount.toLocaleString()} / {samples.length.toLocaleString()} usable
           </span>
@@ -228,16 +250,20 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
                                 aria-disabled={disabled}
                                 title={`${sample.name}${disabled ? ' (disabled)' : reason ? ` (left out: ${reason})` : ''}`}
                                 onClick={() => select(sample)}
+                                onDoubleClick={() => pad?.onPick(sample)}
                                 className={`sample-tile group flex items-center w-32 h-6 rounded border text-[13px] cursor-pointer select-none ${
                                   selected
                                     ? 'border-accent-yellow bg-surface-hover text-text-bright'
-                                    : 'border-border-dark bg-surface-pad text-text-light hover:bg-surface-hover'
+                                    : sample.id === pad?.sampleId
+                                      ? 'border-accent-teal bg-surface-pad text-text-light hover:bg-surface-hover'
+                                      : 'border-border-dark bg-surface-pad text-text-light hover:bg-surface-hover'
                                 } ${disabled ? 'opacity-45 line-through' : reason ? 'opacity-60 border-dashed' : ''}`}
                               >
                                 <span className='truncate flex-1 min-w-0 pl-1.5'>{label}</span>
                                 <span
                                   role='presentation'
                                   onClick={(e) => { e.stopPropagation(); onToggleExcluded(sample.id); }}
+                                  onDoubleClick={(e) => e.stopPropagation()}
                                   title={disabled ? 'Use this sample again (X)' : 'Leave this sample out of every kit (X)'}
                                   className={`shrink-0 px-1 h-full flex items-center ${
                                     disabled ? 'text-danger-text' : 'text-text-dim group-hover:text-text-subtle hover:text-danger-text'
@@ -262,6 +288,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
           <span>←↑↓→ move and play</span>
           <span>Space play again</span>
           <span>X disable / enable</span>
+          {pad && <span>Enter or double-click: put on pad {pad.index + 1}</span>}
           <span>Esc close</span>
           <span className='sm:ml-auto'>Struck through: disabled · dashed: left out by a filter or duplicate</span>
         </div>

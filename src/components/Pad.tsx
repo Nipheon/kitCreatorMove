@@ -1,4 +1,4 @@
-import { Ban, Lock, RefreshCw, Unlock, Loader2 } from 'lucide-react';
+import { Ban, Lock, Pencil, RefreshCw, Unlock, Loader2 } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { categoryAccent, padLabel } from '../padLayout';
 import { Sample } from '../types';
@@ -63,6 +63,8 @@ interface PadProps {
   isLocked: boolean;
   onToggleLock: () => void;
   onExclude?: (id: string, index: number) => void;
+  /** Opens the sample browser to pick this pad's sample; `opener` gets the focus back when it closes. */
+  onEdit?: (index: number, opener: HTMLButtonElement) => void;
   onReroll?: (index: number) => void;
   /**
    * Bumped by App when this pad's Shuffle is pressed. A changing value means "play
@@ -76,7 +78,7 @@ interface PadProps {
 }
 
 export const Pad: React.FC<PadProps> = ({
-  index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onReroll,
+  index, sample, expectedCategory, chokeGroup, isLocked, onToggleLock, onExclude, onEdit, onReroll,
   auditionToken = 0, isSpinning = false, isBusy = false
 }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -317,33 +319,28 @@ export const Pad: React.FC<PadProps> = ({
         </div>
       </div>
 
-      {/* Split Bottom Bar: 50% Lock + 50% Shuffle */}
+      {/* Bottom bar, icons only, a third each: Edit, Shuffle, Lock. Names live in aria-label and title. */}
       <div className='pad-actions absolute bottom-0 left-0 right-0 h-8 sm:h-8.5 flex items-stretch border-t border-border-bar bg-surface-header z-10'>
         <button
           type='button'
-          disabled={!sample || isBusy}
-          onClick={onToggleLock}
-          aria-pressed={isLocked}
-          aria-label={`Lock pad ${index + 1}`}
-          className={`w-1/2 flex items-center justify-center gap-1.5 transition-colors ${
-            !sample
+          disabled={!onEdit || isBusy}
+          onClick={(e) => onEdit?.(index, e.currentTarget)}
+          className={`w-1/3 flex items-center justify-center transition-colors ${
+            !onEdit || isBusy
               ? 'text-border-main cursor-not-allowed'
-              : isLocked
-                ? 'pad-lock-active font-semibold cursor-pointer'
-                : 'text-text-subtle hover:text-text-light hover:bg-surface-hover cursor-pointer'
+              : 'pad-shuffle text-text-medium hover:bg-surface-hover cursor-pointer'
           }`}
+          title='Choose a sample for this pad'
+          aria-label={`Edit pad ${index + 1}`}
         >
-          {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
-          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
-            {isLocked ? 'Locked' : 'Lock'}
-          </span>
+          <Pencil size={14} />
         </button>
 
         <button
           type='button'
           disabled={!sample || isLocked || !onReroll || isBusy}
           onClick={() => onReroll?.(index)}
-          className={`w-1/2 border-l border-border-bar flex items-center justify-center gap-1.5 transition-colors ${
+          className={`w-1/3 border-l border-border-bar flex items-center justify-center transition-colors ${
             !sample || isLocked || !onReroll || isBusy
               ? 'text-border-main cursor-not-allowed'
               : 'pad-shuffle text-text-medium hover:bg-surface-hover cursor-pointer'
@@ -352,9 +349,24 @@ export const Pad: React.FC<PadProps> = ({
           aria-label={`Shuffle sample on pad ${index + 1}`}
         >
           <RefreshCw size={14} />
-          <span className='pad-action-label text-pad-action uppercase tracking-wider font-semibold'>
-            Shuffle
-          </span>
+        </button>
+
+        <button
+          type='button'
+          disabled={!sample || isBusy}
+          onClick={onToggleLock}
+          aria-pressed={isLocked}
+          title={isLocked ? 'Unlock this pad' : 'Lock this pad: shuffle and new kits keep its sample'}
+          aria-label={`Lock pad ${index + 1}`}
+          className={`w-1/3 border-l border-border-bar flex items-center justify-center transition-colors ${
+            !sample
+              ? 'text-border-main cursor-not-allowed'
+              : isLocked
+                ? 'pad-lock-active cursor-pointer'
+                : 'text-text-subtle hover:text-text-light hover:bg-surface-hover cursor-pointer'
+          }`}
+        >
+          {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
         </button>
       </div>
     </div>

@@ -660,7 +660,7 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 ## UI and design system
 
 - **Tokens, not literals.** All theme colours (surfaces, borders, text, warnings, danger, scrims, category hues) and font sizes
-  (e.g. `text-pad-action`, 12px) live in `index.css` `@theme`. No raw `text-white`, `bg-black/60` or `text-red-400`; use
+  live in `index.css` `@theme`. No raw `text-white`, `bg-black/60` or `text-red-400`; use
   `text-inverse`, `overlay-*`, `danger-*`. A new UI colour is a new token with a stated job. Reintroducing a hard-coded colour is how a palette change breaks in
   a place nobody looks.
 - **Palette:** mid-dark indigo (`--color-surface-darkest` `#23212E`, panel `#2E2C3F`, card `#36344A`, pad `#3C3850`, hover
@@ -702,14 +702,14 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   `aspect-square`.
 - **Pad type scales with the pad** (`.pad-tile` container queries; `cqi` is relative to the content box, so a 125px pad queries
   ~99px and a 215px pad ~181px; the 14px ceiling is reached from about a 165px pad up, so large pads read as before): `clamp(0.75rem, 10.5cqi, 0.875rem)`, **12px floor, 14px ceiling; do not lower the floor** (9-10px fit and was unreadable).
-  Hotkey and choke chips floor at 10px; under 130px the header row is 11px with no letter-spacing; captions hide under 104px and the
+  Hotkey and choke chips floor at 10px; under 130px the header row is 11px with no letter-spacing; the
   category line under 88px (hiding is the last resort). **The choke badge keeps its word down to 88px** (hiding it, or number-only,
   lost choke info at ~125px pads): header row 11px, tighter gaps, play indicator hidden (a playing pad already has border, glow and
   scale). Under 88px the action bar, its reserved space and tile padding shrink together, or the name clips into the bar. Measure
   contents against the padding box, not the border box (16px of padding hid an 11px overflow); `.pad-actions` is full-bleed, exclude
   it.
 - **Font sizes:** `text-sm` (14px) is the floor for panel, sidebar and modal text. The pad tile is the documented exception
-  (Lock/Shuffle `text-pad-action` 12px, hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
+  (hotkey `text-xs`, choke `text-[10px] sm:text-xs`); at `text-sm` they push the name out.
   The sample browser is the other one: tiles, row labels and footer are 13px, section heads 15px, title 17px (owner asked for +1px over `text-xs`/`text-sm`/`text-base`, 2026-10-22, tiles were too small to read); tiles are 8rem wide so names truncate no more than at 12px.
 - **Left panel takes the space the square grid leaves** (owner, 2026-10-22): `main` is `lg:[container-type:size]`; the stage's flex-basis is
   `calc(100cqh - 4.5rem)` (the grid's height plus its side padding, so the grid is not shrunk) and the left `aside` is `lg:flex-[3_1_20rem] lg:min-w-80 lg:max-w-[36rem]`,
@@ -842,6 +842,12 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
 - **Disable = `Sample.isExcluded` flipped in place** (`toggleSampleExcluded`), same flag the pad Exclude uses (which only sets it). The kit is not rerolled per keypress; on close
   (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
   Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.
+- **Choosing a pad's sample (`pad` prop, `placeSample` in `kitGenerator.ts`):** each pad's bottom bar is three icon-only buttons, a third each, in the order **Edit, Shuffle, Lock**
+  (owner, 2026-10-22; the captions and `.pad-action-label` / `--text-pad-action` are gone, names live in `aria-label` and `title`). Edit opens the browser for that pad: it starts on the
+  pad's own sample (silently), the pad's sample has a teal border, **Enter or a double-click puts the selected sample on the pad, disabled or not**, and closes. The pick is not checked
+  against category, folder or exclusion; a sample already on another pad swaps places with the pad's own (an export cannot name one sample twice), and the warning counts are recomputed as
+  a shuffle does. The pad is **not** locked by the pick (my choice, not a ruling). Closing refills only samples disabled *during this visit* (`disabledThisSession`), so a disabled sample
+  placed by hand stays; the picked pad is never refilled. Enter does nothing when the browser was opened from Usable Samples. Pinned by two `placeSample` tests; the rest by hand.
 - **Confirmed by hand** (Playwright, Chromium and Firefox, dev seed): open, arrows play, Space replays, X toggles, usable count updates, Escape returns focus to the pencil, refill on close. Not tested: real library of thousands (layout cost), AIFF samples in the browser, pairs row visually (logic only).
 
 ## Audio engine (`audioEngine.ts`, `audioKeepAlive.ts`)
