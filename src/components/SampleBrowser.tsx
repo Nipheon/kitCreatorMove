@@ -10,9 +10,6 @@ const SECTION_ACCENT: Record<string, Category> = {
   kick: 'Kick', snare: 'Snare', clap: 'Clap', hats: 'CHH', perc: 'Perc', other: 'Other'
 };
 
-/** How long a finished sample's bar stays full before it clears. */
-const PROGRESS_CLEAR_MS = 250;
-
 const AUDIO_EXTENSION = /\.(wav|wave|aif|aiff|aifc|flac|mp3|ogg|m4a)$/i;
 
 /** Why a sample that is not disabled by hand is still left out of kits, or null when it is usable. */
@@ -74,17 +71,14 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
       audio.play().catch(err => {
         if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
       });
-      // The bar fills with the share of the sample already played; it is cleared a moment after the sample ends.
+      // The bar fills with the share of the sample already played; it is cleared the moment the sample ends.
       const tick = () => {
         if (token !== playToken.current) return;
         if (Number.isFinite(audio.duration) && audio.duration > 0) {
           setProgress(sample.id, Math.min(100, (audio.currentTime / audio.duration) * 100));
         }
-        if (audio.ended) {
-          // Full for a moment, then cleared.
-          setProgress(sample.id, 100);
-          setTimeout(() => { if (token === playToken.current) setProgress(sample.id, 0); }, PROGRESS_CLEAR_MS);
-        } else requestAnimationFrame(tick);
+        if (audio.ended) setProgress(sample.id, 0);
+        else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
