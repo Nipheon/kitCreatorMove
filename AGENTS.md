@@ -49,8 +49,8 @@ path with more than three segments means you are in the wrong place.
   of the task. `npm test` runs `test/kit.test.ts`, then `test/io.test.ts` (drop handling in `fileReader` and `audioTrimmer`, against
   a fake `OfflineAudioContext` and fake `FileSystemEntry` objects). Both are Node-only via `tsx`.
 - **Dev seed:** `npm run dev` then `http://localhost:3000/?seed` (`?seed=20` fakes twenty folders) fills the grid from
-  `src/devSeed.ts`: 47 invented filenames of the shapes real packs use, categorised through the same pipeline as a drop, with a few ms of silence as
-  audio. Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
+  `src/devSeed.ts`: 58 invented filenames of the shapes real packs use (including closed/open hat pairs and a loop for the sample browser), categorised through the same pipeline as a drop, with a short generated WAV as
+  audio (hats 250 ms, kicks 600 ms, loop 3 s, every fifth one with a 300 ms silent lead-in, so the browser's progress bar differs per tile). Both guards are load-bearing: `import.meta.env.DEV` lets the bundler drop the seed from production (verified by grepping
   `dist/`), the query param keeps an ordinary dev session empty. **Judge layout changes with the seed on**: the choke badge only
   renders on hat pads, so a header row that overflowed at 125px looked fine on an empty grid.
 - **Analytics:** Cloudflare Web Analytics (beacon in `index.html`) and Vercel Web Analytics (`<Analytics />` from `@vercel/analytics/react` in `src/main.tsx`) are the only telemetry. They count visits only (page views, referrer, country, browser, device type, load timings); never send sample, kit or file data to them, and keep the Privacy help, the `index.html` fallback text and the README in step. Do not add a third provider.
@@ -830,6 +830,9 @@ corpus of ~120k files. Every rule exists because a simpler version broke on real
   adjacent visual row by measured position. **No `content-visibility` on sections**: skipped sections give unreliable rects and break up/down.
   Tiles are `div role=option` with `aria-activedescendant` on the dialog, **not buttons**: `useDialogKeys` Tab-cycles over every `button`, so thousands of
   buttons would be thousands of Tab stops.
+- **Play progress** is the tile's background (`.sample-tile` in `index.css`, `--progress`): a `requestAnimationFrame` loop in `play()` sets the CSS variable
+  straight on the playing tile (no React state, so thousands of tiles are not re-rendered per frame); it stays at 100% after the sample ends and resets when
+  another sample plays. Shows loops and samples with silence at the start. Confirmed by hand in Chromium and Firefox (about 39% at 1.2 s of a 3 s seed loop).
 - **Disable = `Sample.isExcluded` flipped in place** (`toggleSampleExcluded`), same flag the pad Exclude uses (which only sets it). The kit is not rerolled per keypress; on close
   (`closeBrowser`, reached through `closeBrowserRef` because `useDialogKeys` captures its close once per open) pads holding a sample disabled meanwhile are refilled and their locks dropped.
   Re-enabling never touches the kit. That close behaviour is a choice, not an owner ruling. Disabled state is session-only like all sample state: nothing new in localStorage.

@@ -9,7 +9,44 @@
 import { Sample, SourceFolder } from './types';
 import { classifySample, looksLikeLoop, looksNonDrum } from './utils/fileReader';
 
-const SILENT_WAV = 'data:audio/wav;base64,UklGRjQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAA';
+/**
+ * A small mono 8-bit WAV: `leadMs` of silence, then a quiet 440 Hz blip, silence to `totalMs`. Different
+ * lengths and late starts let the browser's progress bar show something; made once per shape.
+ */
+const wavCache = new Map<string, string>();
+function seedWav(totalMs: number, leadMs: number): string {
+  const key = `${totalMs}/${leadMs}`;
+  const cached = wavCache.get(key);
+  if (cached) return cached;
+  const rate = 8000;
+  const frames = Math.round((rate * totalMs) / 1000);
+  const bytes = new Uint8Array(44 + frames);
+  const view = new DataView(bytes.buffer);
+  const text = (at: number, s: string) => [...s].forEach((c, i) => { bytes[at + i] = c.charCodeAt(0); });
+  text(0, 'RIFF'); view.setUint32(4, 36 + frames, true); text(8, 'WAVE'); text(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate, true); view.setUint16(32, 1, true); view.setUint16(34, 8, true);
+  text(36, 'data'); view.setUint32(40, frames, true);
+  const start = Math.round((rate * leadMs) / 1000);
+  const blip = Math.min(frames - start, Math.round(rate * 0.08));
+  for (let i = 0; i < frames; i++) {
+    const inBlip = i >= start && i < start + blip;
+    bytes[44 + i] = 128 + (inBlip ? Math.round(30 * Math.sin((2 * Math.PI * 440 * (i - start)) / rate)) : 0);
+  }
+  let binary = '';
+  bytes.forEach(b => { binary += String.fromCharCode(b); });
+  const url = `data:audio/wav;base64,${btoa(binary)}`;
+  wavCache.set(key, url);
+  return url;
+}
+
+/** Length and late start by sound, so the progress bar differs per tile: hats short, kicks medium, loops long, every fifth one starts late. */
+function seedAudio(name: string, index: number, isLoop: boolean): string {
+  const lead = index % 5 === 0 ? 300 : 0;
+  if (isLoop) return seedWav(3000, 0);
+  const total = /hat|ch|oh|open|clos/i.test(name) ? 250 : /kick/i.test(name) ? 600 : 450;
+  return seedWav(total + lead, lead);
+}
 
 /** Invented filenames in the naming mix of a typical pack. */
 const NAMES: string[] = [
@@ -59,7 +96,19 @@ const NAMES: string[] = [
   "snare_tallboy2.wav",
   "snare_tallboy3.wav",
   "snare_tallboy4.wav",
-  "snare_tallboy5.wav"
+  "snare_tallboy5.wav",
+  // Closed/open hat pairs by file name (see utils/hatPartner.ts), a lone hat and a loop for the sample browser.
+  "BlockPatrol-Hat.wav",
+  "BlockPatrol-HatOpn.wav",
+  "ZonedOut-Hat.wav",
+  "ZonedOut-Hat2.wav",
+  "ZonedOut-HatOpn.wav",
+  "Dusty Vinyl Closed Hat.wav",
+  "Dusty Vinyl Open Hat.wav",
+  "Neon_Drive_CH.wav",
+  "Neon_Drive_OH.wav",
+  "Lonely-Hat.wav",
+  "XQ Drum Loop 90bpm.wav"
 ];
 
 /**
@@ -75,14 +124,15 @@ export function devSeedFolder(index = 0): SourceFolder {
   const dir = '/dev kit';
   const samples: Sample[] = NAMES.map((name, i) => {
     const { category, kind } = classifySample(name, dir);
+    const isLoop = looksLikeLoop(name, dir, category);
     return {
       id: `seed-${index}-${i}`,
       file: new File([name], name, { type: 'audio/wav' }),
       name,
       category,
       kind,
-      url: SILENT_WAV,
-      isLoop: looksLikeLoop(name, dir, category),
+      url: seedAudio(name, i, isLoop),
+      isLoop,
       isNonDrum: looksNonDrum(category, name, dir)
     };
   });

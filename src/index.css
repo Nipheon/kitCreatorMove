@@ -430,3 +430,15 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/*
+ * Sample browser tile: the background fills left to right with how much of the sample has
+ * played (`--progress`, set from SampleBrowser), so loops and samples that start late stand out.
+ */
+.sample-tile {
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--color-accent-teal) 45%, transparent) var(--progress, 0%),
+    transparent var(--progress, 0%)
+  );
+}

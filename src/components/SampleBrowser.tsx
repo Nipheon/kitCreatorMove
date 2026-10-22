@@ -45,6 +45,10 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playToken = useRef(0);
+  /** The tile showing play progress (a CSS variable set straight on the element: no re-render of thousands of tiles per frame). */
+  const progressId = useRef<string | null>(null);
+  const setProgress = (id: string | null, percent: number) =>
+    id && tileRefs.current.get(id)?.style.setProperty('--progress', `${percent}%`);
 
   // Read through refs by the one keydown listener, so it never closes over stale state.
   const cellsRef = useRef(cells);
@@ -58,6 +62,8 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
     const token = ++playToken.current;
     const audio = (audioRef.current ??= new Audio());
     audio.pause();
+    setProgress(progressId.current, 0);
+    progressId.current = sample.id;
     void auditionUrl(sample).then(url => {
       if (token !== playToken.current || !url) return;
       audio.src = url;
@@ -65,6 +71,16 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
       audio.play().catch(err => {
         if (err?.name !== 'AbortError') console.error('Audio playback error:', err);
       });
+      // The bar fills with the share of the sample already played; it stays full once the sample ends.
+      const tick = () => {
+        if (token !== playToken.current) return;
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          setProgress(sample.id, Math.min(100, (audio.currentTime / audio.duration) * 100));
+        }
+        if (audio.ended) setProgress(sample.id, 100);
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
     });
   };
   const playRef = useRef(play);
@@ -208,7 +224,7 @@ export function SampleBrowser({ dialogRef, samples, kitOptions, usableCount, onT
                                 aria-disabled={disabled}
                                 title={`${sample.name}${disabled ? ' (disabled)' : reason ? ` (left out: ${reason})` : ''}`}
                                 onClick={() => select(sample)}
-                                className={`group flex items-center w-30 h-6 rounded border text-xs cursor-pointer select-none ${
+                                className={`sample-tile group flex items-center w-30 h-6 rounded border text-xs cursor-pointer select-none ${
                                   selected
                                     ? 'border-accent-yellow bg-surface-hover text-text-bright'
                                     : 'border-border-dark bg-surface-pad text-text-light hover:bg-surface-hover'
