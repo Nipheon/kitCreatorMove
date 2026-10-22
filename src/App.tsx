@@ -24,6 +24,7 @@ import { BATCH_MAX, BATCH_MIN, loadBatchSize, loadQuickPreview, saveBatchSize, s
 import { PROGRESS_DELAY_MS, shouldShowProgress } from './utils/progressVisibility';
 import { describeScanProgress, SCAN_UI_INTERVAL_MS, throttle } from './utils/scanProgress';
 import { revokeSampleUrl } from './utils/sampleUrl';
+import { startAudioKeepAlive } from './utils/audioKeepAlive';
 import {
   buildBatch as buildBatchFor, DEFAULT_PREFIX, generateKitName, heldLayout, kitNameFor,
   lockedFrom as lockedFromPads, PREFIX_LENGTH, prefixForFolders, uniqueKitName
@@ -402,6 +403,18 @@ export default function App() {
       startPreview(kitResult.kit);
     }
   };
+
+  // Keeps the audio output (and Bluetooth headphones) awake; see audioKeepAlive. Retries on every
+  // interaction until the browser accepts it: a drop or a bare Shift press does not unlock audio.
+  useEffect(() => {
+    const events = ['pointerdown', 'keydown', 'drop', 'focus'] as const;
+    const stop = () => events.forEach(name => window.removeEventListener(name, start, true));
+    const start = () => {
+      void startAudioKeepAlive().then(running => { if (running) stop(); });
+    };
+    events.forEach(name => window.addEventListener(name, start, true));
+    return stop;
+  }, []);
 
   useEffect(() => {
     if (!isPreviewing) return;
